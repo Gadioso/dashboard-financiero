@@ -5,14 +5,12 @@ import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
-import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';
+import { financieroAgent } from './agents/financiero-agent';
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent },
-  scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
+  workflows: {},
+  agents: { financieroAgent },
+  scorers: {},
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({
