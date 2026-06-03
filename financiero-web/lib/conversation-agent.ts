@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
 import {
   calcularGastadoPorBolsa,
@@ -317,6 +318,113 @@ async function confirmarEliminarGasto(supabase: SupabaseClient, idPrefix: string
   ].join('\n');
 }
 
+async function obtenerContextoConversacional(supabase: SupabaseClient, texto: string) {
+  const { year, monthIndex } = detectarMesConsulta(texto);
+  const month = String(monthIndex + 1).padStart(2, '0');
+  const mesKey = `${year}-${month}`;
+  const inicioMes = new Date(Date.UTC(year, monthIndex, 1)).toISOString();
+  const finMes = new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString();
+  const inicioPromedio = new Date(Date.UTC(year, monthIndex - 2, 1)).toISOString();
+
+  const [{ data: ingresos, error: errorIngresos }, { data: gastos, error: errorGastos }, { data: ingresosPromedio, error: errorIngresosPromedio }, { data: gastosRecientes, error: errorRecientes }] =
+    await Promise.all([
+      supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
+      supabase.from('gastos').select('monto, categoria').gte('fecha', inicioMes).lt('fecha', finMes),
+      supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioPromedio).lt('fecha', finMes),
+      supabase
+        .from('gastos')
+        .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+        .gte('fecha', inicioMes)
+        .lt('fecha', finMes)
+        .order('fecha', { ascending: false })
+        .limit(8),
+    ]);
+
+  if (errorIngresos) throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
+  if (errorGastos) throw new Error(`No pude consultar gastos: ${errorGastos.message}`);
+  if (errorIngresosPromedio) throw new Error(`No pude consultar promedio de ingresos: ${errorIngresosPromedio.message}`);
+  if (errorRecientes) throw new Error(`No pude consultar gastos recientes: ${errorRecientes.message}`);
+
+  const ingresosMes = calcularIngresosMes((ingresos || []) as Ingreso[]);
+  const promedioIngresos3Meses = calcularPromedioIngresosUltimos3Meses({
+    ingresos: (ingresosPromedio || []) as Ingreso[],
+    mesActivo: mesKey,
+  });
+  const presupuestoMes = calcularPresupuestoTresTercios(ingresosMes);
+  const presupuestoPromedio = calcularPresupuestoTresTercios(promedioIngresos3Meses);
+  const gastado = calcularGastadoPorBolsa(gastos || []);
+  const restante = calcularRestantesPorBolsa({ presupuesto: presupuestoMes, gastado });
+
+  return {
+    periodo: `${month}/${year}`,
+    ingresosMes,
+    promedioIngresos3Meses,
+    presupuestoMes,
+    presupuestoSugeridoPorPromedio3Meses: presupuestoPromedio,
+    gastado,
+    restante,
+    gastosRecientes: ((gastosRecientes || []) as Gasto[]).map((gasto) => ({
+      id: idCorto(gasto.id),
+      fecha: formatearFecha(gasto.fecha),
+      concepto: gasto.concepto,
+      monto: Number(gasto.monto || 0),
+      bolsa: nombreBolsa(String(gasto.categoria)),
+      subcategoria: gasto.subcategoria || null,
+      origen: gasto.origen,
+    })),
+  };
+}
+
+async function responderConversacionAbierta({
+  texto,
+  apiKey,
+  supabase,
+}: {
+  texto: string;
+  apiKey: string;
+  supabase: SupabaseClient;
+}) {
+  if (!apiKey) {
+    return [
+      'Puedo conversar mejor cuando esté configurada GOOGLE_API_KEY o GEMINI_API_KEY.',
+      'Mientras tanto sí puedo operar con comandos: "cómo voy este mes", "últimos gastos", "gastos de placeres de junio" o "pagué 250 de gasolina".',
+    ].join('\n');
+  }
+
+  const contexto = await obtenerContextoConversacional(supabase, texto);
+  const ai = new GoogleGenerativeAI(apiKey);
+  const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const prompt = `
+Eres el agente financiero conversacional de Diego Gayoso.
+
+Propósito:
+- Ayudar a operar su dashboard de libertad financiera con la regla 33/33/33.
+- Responder de forma conversacional, concreta y útil.
+- Usar solo el contexto financiero provisto; no inventes datos.
+- Si falta información, dilo y sugiere el siguiente comando útil.
+- No prometas rendimientos ni des asesoría financiera regulada.
+- Si el usuario quiere registrar, listar, borrar o confirmar borrado, explícale el comando exacto. No afirmes que ejecutaste una acción si no se ejecutó.
+
+Reglas de clasificación:
+- Vida: costo necesario y herramientas de trabajo como Telcel, OpenAI, Codex, Fiverr, Opus.
+- Placeres: ocio, restaurantes, cafés, salidas, viajes, entretenimiento.
+- Futuro: inversiones, GBM, CETES, emergencia, seguros y ahorro patrimonial.
+- Cada ingreso mensual se divide en Vida, Placeres y Futuro en partes iguales.
+
+Contexto financiero:
+${JSON.stringify(contexto, null, 2)}
+
+Usuario: "${texto}"
+
+Responde en español mexicano, máximo 7 líneas, con números concretos cuando existan.
+`;
+
+  const response = await model.generateContent(prompt);
+  const message = response.response.text().trim();
+
+  return message || 'Estoy aquí. Puedo revisar tus bolsas, gastos, ingresos o ayudarte a registrar un movimiento.';
+}
+
 export async function responderConversacionFinanciera({
   texto,
   apiKey,
@@ -364,7 +472,10 @@ export async function responderConversacionFinanciera({
 
   return {
     action: 'reply',
-    message:
-      'Te entiendo. Si quieres registrar algo, dime el monto y el concepto. Ejemplo: "pagué 180 de tacos". También puedes preguntarme "cómo voy este mes".',
+    message: await responderConversacionAbierta({
+      texto: intent.text,
+      apiKey,
+      supabase,
+    }),
   };
 }
