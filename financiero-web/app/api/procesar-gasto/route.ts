@@ -7,14 +7,21 @@ import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 // 1. Inicializar Supabase con tus credenciales de servicio para poder insertar
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://goralfhisudzilfortuk.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+function getSupabase() {
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 // 2. Inicializar el motor de Google Gemini
 // Recuerda que debes tener tu variable GEMINI_API_KEY en tu archivo .env.local
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 export async function POST(request: Request) {
   try {
-    if (!supabaseServiceKey) {
+    const supabase = getSupabase();
+
+    if (!supabase) {
       return NextResponse.json({ success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY.' }, { status: 500 });
     }
 

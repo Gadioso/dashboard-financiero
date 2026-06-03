@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -30,7 +31,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://goralfhisud
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 declare global {
-  var dashboardSupabaseClient: ReturnType<typeof createClient> | undefined;
+  var dashboardSupabaseClient: SupabaseClient | undefined;
 }
 
 type PresupuestoMensualRow = {
@@ -55,17 +56,21 @@ type SantanderStatus = {
 
 const mesActualKey = mesKeyDesdeFecha(new Date());
 
-const supabase =
-  globalThis.dashboardSupabaseClient ||
-  createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      storageKey: 'dashboard-financiero-anon',
-    },
-  });
+const getSupabase = () => {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
 
-globalThis.dashboardSupabaseClient = supabase;
+  if (!globalThis.dashboardSupabaseClient) {
+    globalThis.dashboardSupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        storageKey: 'dashboard-financiero-anon',
+      },
+    });
+  }
+
+  return globalThis.dashboardSupabaseClient;
+};
 
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
@@ -85,6 +90,13 @@ export default function DashboardFinanciero() {
 
       if (!supabaseAnonKey) {
         setMensajeStatus('Falta configurar NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.');
+        return;
+      }
+
+      const supabase = getSupabase();
+
+      if (!supabase) {
+        setMensajeStatus('Falta configurar Supabase para cargar el dashboard.');
         return;
       }
 
@@ -200,7 +212,9 @@ export default function DashboardFinanciero() {
   }, []);
 
   useEffect(() => {
-    if (!supabaseAnonKey) return;
+    const supabase = getSupabase();
+
+    if (!supabase) return;
 
     const intervalId = window.setInterval(() => {
       void fetchData();

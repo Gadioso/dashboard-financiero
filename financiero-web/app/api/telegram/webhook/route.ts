@@ -10,7 +10,11 @@ const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase() {
+  if (!supabaseUrl || !supabaseKey) return null;
+
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 type TelegramMessage = {
   chat?: {
@@ -46,7 +50,9 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!supabaseKey) {
+    const supabase = getSupabase();
+
+    if (!supabase) {
       return NextResponse.json(
         { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY.' },
         { status: 500 }

@@ -3,7 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://goralfhisudzilfortuk.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+function getSupabase() {
+  if (!supabaseUrl || !supabaseKey) return null;
+
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 type RouteContext = {
   params: Promise<{
@@ -13,7 +18,9 @@ type RouteContext = {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    if (!supabaseKey) {
+    const supabase = getSupabase();
+
+    if (!supabase) {
       return NextResponse.json(
         { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY.' },
         { status: 500 }
