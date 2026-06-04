@@ -125,6 +125,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ignored: true });
     }
 
+    if (/^\/?mi[_\s-]?id$/i.test(texto)) {
+      const message = chatId
+        ? `Tu chat_id de Telegram es: ${chatId}\nPásamelo para configurar TELEGRAM_NOTIFY_CHAT_ID y mandar ahí las alertas Santander.`
+        : 'No pude detectar tu chat_id en este mensaje.';
+
+      await responderTelegram(chatId, message);
+      return NextResponse.json({ success: true, ignored: true, message });
+    }
+
     const memoria = await leerMemoriaChat(supabase, chatId);
     const respuesta = await responderConversacionFinanciera({
       texto,
