@@ -52,6 +52,17 @@ const mesesPorNombre: Record<string, number> = {
   diciembre: 11,
 };
 
+function parecePreguntaONotaSinRegistro(normalizado: string) {
+  return /\b(?:de\s+d[oó]nde|d[oó]nde|por\s+qu[eé]|porque|sacas?|sale|sali[oó]|esos?|esas?|eso|explica|aclara|no\s+entiendo|sin\s+sentido)\b/.test(normalizado);
+}
+
+function limpiarFormatoTelegram(texto: string) {
+  return texto
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^\s*[*•]\s+/gm, '- ')
+    .trim();
+}
+
 function detectarIntent(texto: string): Intent {
   const normalizado = texto.trim().toLowerCase();
 
@@ -79,6 +90,10 @@ function detectarIntent(texto: string): Intent {
 
   if (/\b(c[oó]mo voy|resumen|balance|estatus|estado|cu[aá]nto llevo|cu[aá]nto he gastado|cu[aá]nto gast[eé]|cu[aá]nto me queda|cu[aá]nto queda|presupuesto|bolsas?|invertir|inversi[oó]n|futuro|placeres|vida)\b/.test(normalizado)) {
     return { type: 'summary', text: texto };
+  }
+
+  if (parecePreguntaONotaSinRegistro(normalizado)) {
+    return { type: 'conversation', text: texto };
   }
 
   if (/\d/.test(normalizado)) {
@@ -477,8 +492,10 @@ Propósito:
 - Responder de forma conversacional, concreta y útil.
 - Usar solo el contexto financiero provisto; no inventes datos.
 - Si falta información, dilo y sugiere el siguiente comando útil.
+- No uses Markdown: no asteriscos, no negritas. Usa guiones simples si necesitas listar.
 - No prometas rendimientos ni des asesoría financiera regulada.
 - Si el usuario quiere registrar, listar, borrar o confirmar borrado, explícale el comando exacto. No afirmes que ejecutaste una acción si no se ejecutó.
+- Si el usuario pregunta de dónde sale una cifra, explica que solo puedes justificar cifras del periodo consultado y pide el mes si la pregunta no lo incluye.
 
 Reglas de clasificación:
 - Vida: costo necesario y herramientas de trabajo como Telcel, OpenAI, Codex, Fiverr, Opus.
@@ -495,7 +512,7 @@ Responde en español mexicano, máximo 7 líneas, con números concretos cuando 
 `;
 
   const response = await model.generateContent(prompt);
-  const message = response.response.text().trim();
+  const message = limpiarFormatoTelegram(response.response.text());
 
   return message || 'Estoy aquí. Puedo revisar tus bolsas, gastos, ingresos o ayudarte a registrar un movimiento.';
 }
