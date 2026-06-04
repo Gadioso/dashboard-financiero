@@ -17,6 +17,7 @@ import {
 
 type Intent =
   | { type: 'help' }
+  | { type: 'category-total'; text: string }
   | { type: 'summary'; text: string }
   | { type: 'list'; text: string }
   | { type: 'delete-request'; text: string }
@@ -68,6 +69,10 @@ function detectarIntent(texto: string): Intent {
     return { type: 'delete-request', text: texto };
   }
 
+  if (/\b(?:cu[aá]nto\s+)?(?:he\s+)?gast(?:e|é|ado|aste)?\b/.test(normalizado) && detectarFiltroCategoria(normalizado)) {
+    return { type: 'category-total', text: texto };
+  }
+
   if (/\b(?:[uú]ltimos?(?:\s+\d{1,2})?\s+(?:gastos?|movimientos?)|ver\s+gastos?|mu[eé]strame\s+gastos?|lista\s+gastos?|gastos?\s+de\s+(?:vida|placeres|futuro|inversi[oó]n)|movimientos?\s+de)\b/.test(normalizado)) {
     return { type: 'list', text: texto };
   }
@@ -86,11 +91,49 @@ function detectarIntent(texto: string): Intent {
 function detectarFiltroCategoria(texto: string) {
   const normalizado = texto.toLowerCase();
 
-  if (/\b(placer|placeres|salidas?|restaurantes?|caf[eé]s?|ocio)\b/.test(normalizado)) return 'Placeres';
+  if (normalizado.includes('placer') || /\b(salidas?|restaurantes?|caf[eé]s?|ocio)\b/.test(normalizado)) return 'Placeres';
   if (/\b(vida|costo de vida|herramientas?|telcel|servicios?|super|s[uú]per)\b/.test(normalizado)) return 'Vida';
   if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?)\b/.test(normalizado)) return 'Seguros';
 
   return null;
+}
+
+async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) {
+  const rango = rangoMesDesdeTexto(texto);
+  const categoria = detectarFiltroCategoria(texto);
+
+  if (!categoria) {
+    return 'Dime qué bolsa quieres revisar: Vida, Placeres o Futuro.';
+  }
+
+  const { data, error } = await supabase
+    .from('gastos')
+    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+    .gte('fecha', rango.inicio)
+    .lt('fecha', rango.fin)
+    .eq('categoria', categoria);
+
+  if (error) {
+    throw new Error(`No pude consultar gastos de ${nombreBolsa(categoria)}: ${error.message}`);
+  }
+
+  const gastos = (data || []) as Gasto[];
+  const total = gastos.reduce((sum, gasto) => sum + Number(gasto.monto || 0), 0);
+
+  if (!gastos.length) {
+    return `En ${rango.etiqueta} no encontré gastos de ${nombreBolsa(categoria)}.`;
+  }
+
+  const topGastos = gastos
+    .sort((a, b) => Number(b.monto || 0) - Number(a.monto || 0))
+    .slice(0, 5)
+    .map((gasto) => `- ${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto}`);
+
+  return [
+    `En ${rango.etiqueta} gastaste $${formatearMonto(total)} en ${nombreBolsa(categoria)}.`,
+    `Movimientos: ${gastos.length}.`,
+    ...topGastos,
+  ].join('\n');
 }
 
 function limpiarBusquedaEliminacion(texto: string) {
@@ -473,6 +516,10 @@ export async function responderConversacionFinanciera({
 
   if (intent.type === 'help') {
     return { action: 'reply', message: ayuda };
+  }
+
+  if (intent.type === 'category-total') {
+    return { action: 'reply', message: await totalGastosPorCategoria(supabase, intent.text) };
   }
 
   if (intent.type === 'summary') {

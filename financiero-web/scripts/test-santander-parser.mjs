@@ -57,6 +57,16 @@ SUPERTOKEN ACTIVADO
 Estimado cliente, se ha realizado con éxito la activación del SuperToken en tu Banca Digital.`,
     expected: null,
   },
+  {
+    name: 'Informational footer is not income',
+    raw: `Santander México
+Transferencia recibida
+Abono por $2,300,000.00 MXN.
+Puedes consultar tus movimientos de forma gratuita las veces que quieras:
+• Desde tu celular con SuperMóvil
+• Desde tu cuenta`,
+    expected: null,
+  },
 ];
 
 const results = cases.map((testCase) => {

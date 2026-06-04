@@ -16,6 +16,10 @@ function limpiarConcepto(valor: string | undefined) {
     .trim();
 }
 
+function esTextoInformativoSantander(concepto: string) {
+  return /\b(puedes consultar tus movimientos|desde tu celular|superm[oó]vil|consulta tus movimientos|servicio de alertas)\b/i.test(concepto);
+}
+
 function extraerMonto(texto: string) {
   const montoMatch = texto.match(/\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/);
 
@@ -100,6 +104,10 @@ export function parsearCorreoSantander(raw: string): ClasificacionMovimiento | n
 
   const concepto = extraerConcepto(texto);
   const fechaMovimiento = extraerFechaMovimiento(texto);
+
+  if (esTextoInformativoSantander(concepto) || (concepto === 'Movimiento Santander' && esTextoInformativoSantander(texto))) {
+    return null;
+  }
 
   if (esIngreso) {
     return {
