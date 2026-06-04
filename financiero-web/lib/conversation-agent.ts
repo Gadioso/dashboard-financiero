@@ -7,7 +7,6 @@ import {
   calcularPresupuestoTresTercios,
   calcularPromedioIngresosUltimos3Meses,
   calcularRestantesPorBolsa,
-  formatearEntero,
   formatearFecha,
   formatearMonto,
   nombreBolsa,
@@ -248,6 +247,28 @@ function describirGasto(gasto: Gasto) {
   return `${idCorto(gasto.id)} · ${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto} · ${nombreBolsa(String(gasto.categoria))}${gasto.subcategoria ? ` / ${gasto.subcategoria}` : ''}`;
 }
 
+function ordenarPorFechaDesc<T extends { fecha: string }>(movimientos: T[]) {
+  return [...movimientos].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+}
+
+function agruparGastosPorBolsa(gastos: Gasto[]) {
+  return ['Vida', 'Placeres', 'Futuro'].map((bolsa) => {
+    const movimientos = gastos.filter((gasto) => nombreBolsa(String(gasto.categoria)) === bolsa);
+
+    return {
+      bolsa,
+      total: movimientos.reduce((sum, gasto) => sum + Number(gasto.monto || 0), 0),
+      movimientos: ordenarPorFechaDesc(movimientos).slice(0, 12).map((gasto) => ({
+        fecha: formatearFecha(gasto.fecha),
+        concepto: gasto.concepto,
+        monto: Number(gasto.monto || 0),
+        subcategoria: gasto.subcategoria || null,
+        origen: gasto.origen,
+      })),
+    };
+  });
+}
+
 function etiquetaMes(fecha: string | Date) {
   const date = new Date(fecha);
   return `${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
@@ -272,80 +293,6 @@ function detectarMesConsulta(texto: string) {
   const monthIndex = mesEncontrado ? mesEncontrado[1] : ahora.getUTCMonth();
 
   return { year, monthIndex };
-}
-
-async function obtenerResumen(supabase: SupabaseClient, texto: string) {
-  const { year, monthIndex } = detectarMesConsulta(texto);
-  const month = String(monthIndex + 1).padStart(2, '0');
-  const fechaPresupuesto = `${year}-${month}-01`;
-  const mesKey = `${year}-${month}`;
-  const primerDiaMesISO = new Date(Date.UTC(year, monthIndex, 1)).toISOString();
-  const primerDiaSiguienteMesISO = new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString();
-  const primerDiaVentanaPromedioISO = new Date(Date.UTC(year, monthIndex - 2, 1)).toISOString();
-
-  const [
-    { data: presupuesto },
-    { data: ingresos, error: errorIngresos },
-    { data: gastos, error: errorGastos },
-    { data: ingresosPromedio, error: errorIngresosPromedio },
-    { data: ultimoIngreso, error: errorUltimoIngreso },
-  ] = await Promise.all([
-    supabase
-      .from('presupuestos_mensuales')
-      .select('techo_vida, techo_placeres, techo_futuro, fase_ahorro')
-      .eq('mes_anio', fechaPresupuesto)
-      .maybeSingle(),
-    supabase.from('ingresos').select('monto, fecha').gte('fecha', primerDiaMesISO).lt('fecha', primerDiaSiguienteMesISO),
-    supabase.from('gastos').select('monto, categoria').gte('fecha', primerDiaMesISO).lt('fecha', primerDiaSiguienteMesISO),
-    supabase.from('ingresos').select('monto, fecha').gte('fecha', primerDiaVentanaPromedioISO).lt('fecha', primerDiaSiguienteMesISO),
-    supabase.from('ingresos').select('monto, fecha').lt('fecha', primerDiaSiguienteMesISO).order('fecha', { ascending: false }).limit(1).maybeSingle(),
-  ]);
-
-  if (errorIngresos) {
-    throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
-  }
-
-  if (errorGastos) {
-    throw new Error(`No pude consultar gastos: ${errorGastos.message}`);
-  }
-
-  if (errorIngresosPromedio) {
-    throw new Error(`No pude consultar promedio de ingresos: ${errorIngresosPromedio.message}`);
-  }
-
-  if (errorUltimoIngreso) {
-    throw new Error(`No pude consultar el último ingreso: ${errorUltimoIngreso.message}`);
-  }
-
-  const ingresosMes = calcularIngresosMes((ingresos || []) as Ingreso[]);
-  const promedioIngresos3Meses = calcularPromedioIngresosUltimos3Meses({
-    ingresos: (ingresosPromedio || []) as Ingreso[],
-    mesActivo: mesKey,
-  });
-  const presupuestoPromedio = calcularPresupuestoTresTercios(promedioIngresos3Meses);
-  const presupuestoFinal = presupuesto?.techo_vida
-    ? {
-        Vida: Number(presupuesto.techo_vida),
-        Placeres: Number(presupuesto.techo_placeres || 0),
-        Futuro: Number(presupuesto.techo_futuro || 0),
-      }
-    : calcularPresupuestoTresTercios(ingresosMes);
-  const gastado = calcularGastadoPorBolsa(gastos || []);
-  const restante = calcularRestantesPorBolsa({ presupuesto: presupuestoFinal, gastado });
-  const restantePlaceres = Math.max(presupuestoFinal.Placeres - gastado.Placeres, 0);
-  const porcentajePlaceres = presupuestoFinal.Placeres ? (gastado.Placeres / presupuestoFinal.Placeres) * 100 : 0;
-
-  return [
-    `Vas así en ${month}/${year}:`,
-    ingresosMes === 0 ? `Todavía no hay ingresos registrados para este mes; el presupuesto queda en $0 hasta que registres ingreso.` : null,
-    ingresosMes === 0 && ultimoIngreso?.fecha ? `Último mes con ingresos cargados: ${etiquetaMes(ultimoIngreso.fecha)}.` : null,
-    `Ingresos: $${formatearEntero(ingresosMes)}. Cada bolsa recibe $${formatearEntero(presupuestoFinal.Vida)}.`,
-    `Promedio ingresos últimos 3 meses: $${formatearEntero(promedioIngresos3Meses)}.`,
-    `Con ese promedio: contempla Vida $${formatearEntero(presupuestoPromedio.Vida)} e invierte Futuro $${formatearEntero(presupuestoPromedio.Futuro)} al mes.`,
-    `Vida: gastado $${formatearEntero(gastado.Vida)} / presupuesto $${formatearEntero(presupuestoFinal.Vida)}. Te quedan $${formatearEntero(Math.max(restante.Vida, 0))}.`,
-    `Placeres: gastado $${formatearEntero(gastado.Placeres)} / presupuesto $${formatearEntero(presupuestoFinal.Placeres)} (${porcentajePlaceres.toFixed(1)}%). Te quedan $${formatearEntero(restantePlaceres)}.`,
-    `Futuro: invertido $${formatearEntero(gastado.Futuro)} / meta $${formatearEntero(presupuestoFinal.Futuro)}. Pendiente por invertir: $${formatearEntero(Math.max(restante.Futuro, 0))}.`,
-  ].filter(Boolean).join('\n');
 }
 
 async function listarGastos(supabase: SupabaseClient, texto: string) {
@@ -489,8 +436,8 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     { data: ultimoIngreso, error: errorUltimoIngreso },
   ] =
     await Promise.all([
-      supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
-      supabase.from('gastos').select('monto, categoria').gte('fecha', inicioMes).lt('fecha', finMes),
+      supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
+      supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
       supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioPromedio).lt('fecha', finMes),
       supabase
         .from('gastos')
@@ -515,12 +462,20 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
   });
   const presupuestoMes = calcularPresupuestoTresTercios(ingresosMes);
   const presupuestoPromedio = calcularPresupuestoTresTercios(promedioIngresos3Meses);
-  const gastado = calcularGastadoPorBolsa(gastos || []);
+  const ingresosMesDetalle = ((ingresos || []) as Ingreso[]);
+  const gastosMesDetalle = ((gastos || []) as Gasto[]);
+  const gastado = calcularGastadoPorBolsa(gastosMesDetalle);
   const restante = calcularRestantesPorBolsa({ presupuesto: presupuestoMes, gastado });
 
   return {
     periodo: `${month}/${year}`,
     ingresosMes,
+    ingresosDetalle: ordenarPorFechaDesc(ingresosMesDetalle).map((ingreso) => ({
+      fecha: formatearFecha(ingreso.fecha),
+      concepto: ingreso.concepto || 'Ingreso',
+      monto: Number(ingreso.monto || 0),
+      tipo: ingreso.tipo || null,
+    })),
     notaDatos: ingresosMes === 0
       ? {
           mesConsultadoSinIngresos: true,
@@ -533,6 +488,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     presupuestoSugeridoPorPromedio3Meses: presupuestoPromedio,
     gastado,
     restante,
+    gastosPorBolsa: agruparGastosPorBolsa(gastosMesDetalle),
     gastosRecientes: ((gastosRecientes || []) as Gasto[]).map((gasto) => ({
       id: idCorto(gasto.id),
       fecha: formatearFecha(gasto.fecha),
@@ -570,10 +526,13 @@ Propósito:
 - Responder de forma conversacional, concreta y útil.
 - Usar solo el contexto financiero provisto; no inventes datos.
 - Si falta información, dilo y sugiere el siguiente comando útil.
+- Entender follow-ups naturales como "y mayo?", "pero completo", "de dónde sale eso", "qué opinas", "está bien o mal".
 - No uses Markdown: no asteriscos, no negritas. Usa guiones simples si necesitas listar.
 - No prometas rendimientos ni des asesoría financiera regulada.
 - Si el usuario quiere registrar, listar, borrar o confirmar borrado, explícale el comando exacto. No afirmes que ejecutaste una acción si no se ejecutó.
-- Si el usuario pregunta de dónde sale una cifra, explica que solo puedes justificar cifras del periodo consultado y pide el mes si la pregunta no lo incluye.
+- Si el usuario pregunta de dónde sale una cifra, usa ingresosDetalle, gastosPorBolsa o gastosRecientes para enseñar el desglose exacto.
+- Si el usuario pide opinión, no repitas todo el dashboard: da diagnóstico, riesgo principal y siguiente acción.
+- Si el usuario pregunta cuánto queda, calcula con presupuestoMes/restante y sé directo.
 
 Reglas de clasificación:
 - Vida: costo necesario y herramientas de trabajo como Telcel, OpenAI, Codex, Fiverr, Opus.
@@ -586,7 +545,7 @@ ${JSON.stringify(contexto, null, 2)}
 
 Usuario: "${texto}"
 
-Responde en español mexicano, máximo 7 líneas, con números concretos cuando existan.
+Responde en español mexicano, máximo 8 líneas, con números concretos y explicando tu razonamiento cuando el usuario pregunte por una cifra.
 `;
 
   const message = limpiarFormatoTelegram(await generateGeminiText(apiKey, prompt));
@@ -617,7 +576,14 @@ export async function responderConversacionFinanciera({
   }
 
   if (intent.type === 'summary') {
-    return { action: 'reply', message: await obtenerResumen(supabase, intent.text) };
+    return {
+      action: 'reply',
+      message: await responderConversacionAbierta({
+        texto: intent.text,
+        apiKey,
+        supabase,
+      }),
+    };
   }
 
   if (intent.type === 'list') {
