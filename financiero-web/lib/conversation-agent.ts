@@ -110,6 +110,11 @@ function describirGasto(gasto: Gasto) {
   return `${idCorto(gasto.id)} · ${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto} · ${nombreBolsa(String(gasto.categoria))}${gasto.subcategoria ? ` / ${gasto.subcategoria}` : ''}`;
 }
 
+function etiquetaMes(fecha: string | Date) {
+  const date = new Date(fecha);
+  return `${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
+}
+
 function rangoMesDesdeTexto(texto: string) {
   const { year, monthIndex } = detectarMesConsulta(texto);
 
@@ -140,7 +145,13 @@ async function obtenerResumen(supabase: SupabaseClient, texto: string) {
   const primerDiaSiguienteMesISO = new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString();
   const primerDiaVentanaPromedioISO = new Date(Date.UTC(year, monthIndex - 2, 1)).toISOString();
 
-  const [{ data: presupuesto }, { data: ingresos, error: errorIngresos }, { data: gastos, error: errorGastos }, { data: ingresosPromedio, error: errorIngresosPromedio }] = await Promise.all([
+  const [
+    { data: presupuesto },
+    { data: ingresos, error: errorIngresos },
+    { data: gastos, error: errorGastos },
+    { data: ingresosPromedio, error: errorIngresosPromedio },
+    { data: ultimoIngreso, error: errorUltimoIngreso },
+  ] = await Promise.all([
     supabase
       .from('presupuestos_mensuales')
       .select('techo_vida, techo_placeres, techo_futuro, fase_ahorro')
@@ -149,6 +160,7 @@ async function obtenerResumen(supabase: SupabaseClient, texto: string) {
     supabase.from('ingresos').select('monto, fecha').gte('fecha', primerDiaMesISO).lt('fecha', primerDiaSiguienteMesISO),
     supabase.from('gastos').select('monto, categoria').gte('fecha', primerDiaMesISO).lt('fecha', primerDiaSiguienteMesISO),
     supabase.from('ingresos').select('monto, fecha').gte('fecha', primerDiaVentanaPromedioISO).lt('fecha', primerDiaSiguienteMesISO),
+    supabase.from('ingresos').select('monto, fecha').lt('fecha', primerDiaSiguienteMesISO).order('fecha', { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   if (errorIngresos) {
@@ -161,6 +173,10 @@ async function obtenerResumen(supabase: SupabaseClient, texto: string) {
 
   if (errorIngresosPromedio) {
     throw new Error(`No pude consultar promedio de ingresos: ${errorIngresosPromedio.message}`);
+  }
+
+  if (errorUltimoIngreso) {
+    throw new Error(`No pude consultar el último ingreso: ${errorUltimoIngreso.message}`);
   }
 
   const ingresosMes = calcularIngresosMes((ingresos || []) as Ingreso[]);
@@ -184,6 +200,7 @@ async function obtenerResumen(supabase: SupabaseClient, texto: string) {
   return [
     `Vas así en ${month}/${year}:`,
     ingresosMes === 0 ? `Todavía no hay ingresos registrados para este mes; el presupuesto queda en $0 hasta que registres ingreso.` : null,
+    ingresosMes === 0 && ultimoIngreso?.fecha ? `Último mes con ingresos cargados: ${etiquetaMes(ultimoIngreso.fecha)}.` : null,
     `Ingresos: $${formatearEntero(ingresosMes)}. Cada bolsa recibe $${formatearEntero(presupuestoFinal.Vida)}.`,
     `Promedio ingresos últimos 3 meses: $${formatearEntero(promedioIngresos3Meses)}.`,
     `Con ese promedio: contempla Vida $${formatearEntero(presupuestoPromedio.Vida)} e invierte Futuro $${formatearEntero(presupuestoPromedio.Futuro)} al mes.`,
@@ -326,7 +343,13 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
   const finMes = new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString();
   const inicioPromedio = new Date(Date.UTC(year, monthIndex - 2, 1)).toISOString();
 
-  const [{ data: ingresos, error: errorIngresos }, { data: gastos, error: errorGastos }, { data: ingresosPromedio, error: errorIngresosPromedio }, { data: gastosRecientes, error: errorRecientes }] =
+  const [
+    { data: ingresos, error: errorIngresos },
+    { data: gastos, error: errorGastos },
+    { data: ingresosPromedio, error: errorIngresosPromedio },
+    { data: gastosRecientes, error: errorRecientes },
+    { data: ultimoIngreso, error: errorUltimoIngreso },
+  ] =
     await Promise.all([
       supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
       supabase.from('gastos').select('monto, categoria').gte('fecha', inicioMes).lt('fecha', finMes),
@@ -338,12 +361,14 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
         .lt('fecha', finMes)
         .order('fecha', { ascending: false })
         .limit(8),
+      supabase.from('ingresos').select('monto, fecha').lt('fecha', finMes).order('fecha', { ascending: false }).limit(1).maybeSingle(),
     ]);
 
   if (errorIngresos) throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
   if (errorGastos) throw new Error(`No pude consultar gastos: ${errorGastos.message}`);
   if (errorIngresosPromedio) throw new Error(`No pude consultar promedio de ingresos: ${errorIngresosPromedio.message}`);
   if (errorRecientes) throw new Error(`No pude consultar gastos recientes: ${errorRecientes.message}`);
+  if (errorUltimoIngreso) throw new Error(`No pude consultar el último ingreso: ${errorUltimoIngreso.message}`);
 
   const ingresosMes = calcularIngresosMes((ingresos || []) as Ingreso[]);
   const promedioIngresos3Meses = calcularPromedioIngresosUltimos3Meses({
@@ -358,6 +383,13 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
   return {
     periodo: `${month}/${year}`,
     ingresosMes,
+    notaDatos: ingresosMes === 0
+      ? {
+          mesConsultadoSinIngresos: true,
+          ultimoMesConIngresos: ultimoIngreso?.fecha ? etiquetaMes(ultimoIngreso.fecha) : null,
+          instruccion: 'Aclara que el mes consultado no tiene ingresos cargados; si hay ultimoMesConIngresos, mencionarlo para que Diego sepa que la data historica si existe.',
+        }
+      : null,
     promedioIngresos3Meses,
     presupuestoMes,
     presupuestoSugeridoPorPromedio3Meses: presupuestoPromedio,
