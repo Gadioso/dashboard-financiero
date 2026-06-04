@@ -169,40 +169,51 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
   }
 
   const prompt = `
-Eres el clasificador financiero personal de Diego para su regla 33/33/33.
-
-Tu trabajo: leer una frase natural y extraer un movimiento financiero.
-
-Categorías principales:
-- Vida: gastos obligatorios o necesarios para vivir/operar: renta, servicios, luz, agua, súper básico, despensa, gasolina necesaria, transporte básico, deudas obligatorias, salud necesaria.
-- Placeres: estilo de vida, ocio y consumo discrecional: restaurantes, tacos por gusto, cafés, Starbucks, cine, viajes, conciertos, ropa por gusto, delivery, salidas, bares, entretenimiento.
-- Futuro: inversión, ahorro, fondo de emergencia, seguros, CETES, acciones, crypto, aportaciones patrimoniales, fondo de emergencia, ahorro para proyectos.
-
-Subcategorías sugeridas:
-- Vida: Renta, Servicios, Super, Transporte, Salud, Deudas, Otros Vida.
-- Placeres: Restaurantes, Cafe, Entretenimiento, Viajes, Ropa, Delivery, Otros Placeres.
-- Futuro: Inversion, Emergencia, Seguros, Ahorro, Proyectos, Otros Futuro.
-
-Reglas:
-- Si menciona sueldo, salario, nómina, bono, freelance, comisión, "gané", "me pagaron", "cobré", "recibí" o "ingreso", clasifica como tipo = "ingreso".
-- Si menciona "cetes", "inversión", "invertí", "acciones", "ETF", "crypto", clasifica como Futuro / Inversion.
-- Si menciona "emergencia", "fondo de emergencia", "escudo", clasifica como Futuro / Emergencia.
-- Si menciona "seguro", clasifica como Futuro / Seguros.
-- Si menciona OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Notion, Zoom, Figma, Canva u otras herramientas de trabajo/software, clasifica como Vida / Herramientas Trabajo.
-- Si no hay monto claro, no inventes: usa 0.
-- Si es ingreso, tipo = "ingreso"; si es gasto o aportación de dinero, tipo = "gasto".
-- Responde solo JSON crudo, sin markdown.
-
-Frase: "${texto}"
-
-Formato exacto:
 {
-  "concepto": "concepto limpio",
-  "monto": 125.50,
-  "tipo": "gasto",
-  "categoria": "Vida",
-  "subcategoria": "Transporte",
-  "razon": "breve explicación"
+  "role": "financial_transaction_classifier",
+  "language_policy": {
+    "instructions_language": "English",
+    "output_language": "Spanish",
+    "output_format": "raw_json_only",
+    "no_markdown": true
+  },
+  "objective": "Extract exactly one financial movement from the user's natural-language message for Diego's 33/33/33 financial system.",
+  "categories": {
+    "Vida": {
+      "description": "Required living or operating expenses.",
+      "examples": ["rent", "utilities", "basic groceries", "necessary gas", "basic transport", "health", "debt", "work tools", "software subscriptions"],
+      "subcategories": ["Renta", "Servicios", "Super", "Transporte", "Salud", "Deudas", "Herramientas Trabajo", "Otros Vida"]
+    },
+    "Placeres": {
+      "description": "Lifestyle, leisure, optional or discretionary consumption.",
+      "examples": ["restaurants", "coffee", "Starbucks", "cinema", "travel", "concerts", "delivery", "bars", "entertainment"],
+      "subcategories": ["Restaurantes", "Cafe", "Entretenimiento", "Viajes", "Ropa", "Delivery", "Otros Placeres"]
+    },
+    "Futuro": {
+      "description": "Investing, saving, emergency fund, insurance, patrimonial allocations.",
+      "examples": ["GBM", "CETES", "ETF", "stocks", "emergency fund", "insurance", "savings projects"],
+      "subcategories": ["Inversion", "Emergencia", "Seguros", "Ahorro", "Proyectos", "Otros Futuro"]
+    }
+  },
+  "classification_rules": [
+    "If the message mentions salary, payroll, bonus, freelance, commission, 'gané', 'me pagaron', 'cobré', 'recibí' or income, set tipo='ingreso'.",
+    "If it mentions CETES, GBM, inversión, invertí, stocks, ETF, crypto or patrimonial allocation, classify as Futuro/Inversion.",
+    "If it mentions emergency fund, classify as Futuro/Emergencia.",
+    "If it mentions insurance, classify as Futuro/Seguros.",
+    "OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Notion, Zoom, Figma, Canva and similar work/software tools are Vida/Herramientas Trabajo.",
+    "If there is no clear amount, use 0. Do not invent an amount.",
+    "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
+    "Return only valid raw JSON matching the output_schema."
+  ],
+  "user_message": ${JSON.stringify(texto)},
+  "output_schema": {
+    "concepto": "clean Spanish concept",
+    "monto": 125.5,
+    "tipo": "gasto | ingreso",
+    "categoria": "Vida | Placeres | Futuro",
+    "subcategoria": "Spanish subcategory",
+    "razon": "brief Spanish reason"
+  }
 }
 `;
 
