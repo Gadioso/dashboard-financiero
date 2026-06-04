@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { extraerJson, generateGeminiText } from '@/lib/gemini';
 import {
   type CategoriaFinanciera,
   type ClasificacionMovimiento,
@@ -8,15 +8,6 @@ import {
 
 const categoriasValidas = ['Vida', 'Placeres', 'Futuro'];
 const tiposValidos = ['gasto', 'ingreso'];
-
-function extraerJson(texto: string) {
-  return texto
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
-    .trim();
-}
 
 function validarClasificacion(valor: unknown): ClasificacionMovimiento {
   const data = valor as Partial<ClasificacionMovimiento>;
@@ -177,9 +168,6 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     throw new Error('Falta configurar GOOGLE_API_KEY o GEMINI_API_KEY para clasificar con IA.');
   }
 
-  const ai = new GoogleGenerativeAI(apiKey);
-  const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
   const prompt = `
 Eres el clasificador financiero personal de Diego para su regla 33/33/33.
 
@@ -219,8 +207,7 @@ Formato exacto:
 `;
 
   try {
-    const response = await model.generateContent(prompt);
-    const raw = response.response.text();
+    const raw = await generateGeminiText(apiKey, prompt);
     return validarClasificacion(JSON.parse(extraerJson(raw)));
   } catch (error) {
     const fallback = clasificarPorReglas(texto);

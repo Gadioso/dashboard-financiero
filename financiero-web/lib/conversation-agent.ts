@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
+import { extraerJson, generateGeminiText } from '@/lib/gemini';
 import {
   calcularGastadoPorBolsa,
   calcularIngresosMes,
@@ -26,6 +26,8 @@ type Intent =
   | { type: 'conversation'; text: string };
 
 type MovementResult = Awaited<ReturnType<typeof clasificarMovimientoFinanciero>>;
+
+const intentTypes = ['help', 'category-total', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
 
 const ayuda =
   [
@@ -101,6 +103,84 @@ function detectarIntent(texto: string): Intent {
   }
 
   return { type: 'conversation', text: texto };
+}
+
+function normalizarIntentIA(valor: unknown, textoOriginal: string): Intent | null {
+  const data = valor as { type?: string; idPrefix?: string };
+
+  if (!data?.type || !intentTypes.includes(data.type as Intent['type'])) return null;
+
+  if (data.type === 'delete-confirm') {
+    return data.idPrefix ? { type: 'delete-confirm', idPrefix: data.idPrefix } : null;
+  }
+
+  return { type: data.type as Exclude<Intent['type'], 'help' | 'delete-confirm'>, text: textoOriginal } as Intent;
+}
+
+function esRegistroExplicito(normalizado: string) {
+  return /\b(?:pagu[eé]|pag[ué]é|gast[eé]|gaste|compr[eé]|compre|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|me\s+pagaron|depositaron|registra|registrar|agrega|agregar|a[nñ]ade|añade)\b/.test(normalizado);
+}
+
+function protegerIntentAmbiguo(intent: Intent, texto: string): Intent {
+  const normalizado = texto.toLowerCase();
+
+  if (intent.type === 'movement' && !esRegistroExplicito(normalizado)) {
+    return { type: 'conversation', text: texto };
+  }
+
+  return intent;
+}
+
+async function detectarIntentInteligente(texto: string, apiKey: string): Promise<Intent> {
+  const fallback = protegerIntentAmbiguo(detectarIntent(texto), texto);
+
+  if (!apiKey) return fallback;
+
+  const normalizado = texto.trim().toLowerCase();
+
+  if (!normalizado || normalizado === '/start' || normalizado === 'start') return fallback;
+
+  const prompt = `
+Eres el cerebro de intención del asistente financiero conversacional de Diego.
+
+Tu trabajo es decidir qué quiere hacer el usuario ANTES de tocar la base de datos.
+
+Intenciones permitidas:
+- help: saludo, ayuda o inicio.
+- summary: preguntas de balance, presupuesto, bolsas, cómo va un mes completo, cuánto queda, cuánto invertir, cuánto contemplar.
+- category-total: preguntas sobre cuánto gastó en una bolsa/categoría específica como Placeres, Vida o Futuro.
+- list: pedir últimos gastos, movimientos o una lista de gastos.
+- delete-request: pedir borrar/quitar/eliminar algo, sin confirmación final.
+- delete-confirm: confirmar borrar con un ID corto.
+- movement: registrar un ingreso, gasto o inversión NUEVO.
+- conversation: dudas, explicaciones, opiniones, "de dónde sale", "por qué", aclaraciones o mensajes ambiguos.
+
+Reglas críticas:
+- Si el usuario pregunta "de dónde sale", "por qué", "qué significa", "eso", "esos 92k", "sin sentido" o pide explicación, usa conversation aunque haya números.
+- Solo usa movement si hay un monto Y una intención explícita de registrar/pagar/gastar/comprar/ganar/cobrar/recibir/invertir/aportar/agregar.
+- Si solo menciona un número dentro de una pregunta, NO es movement.
+- "y todo mayo", "en todo este mes de mayo", "pero en todo enero" es summary.
+- "cuánto gasté en placeres en enero" es category-total.
+- Responde solo JSON crudo.
+
+Mensaje: "${texto}"
+
+Formato:
+{
+  "type": "conversation",
+  "idPrefix": ""
+}
+`;
+
+  try {
+    const raw = await generateGeminiText(apiKey, prompt);
+    const parsed = JSON.parse(extraerJson(raw));
+    const intent = normalizarIntentIA(parsed, texto);
+
+    return protegerIntentAmbiguo(intent || fallback, texto);
+  } catch {
+    return fallback;
+  }
 }
 
 function detectarFiltroCategoria(texto: string) {
@@ -482,8 +562,6 @@ async function responderConversacionAbierta({
   }
 
   const contexto = await obtenerContextoConversacional(supabase, texto);
-  const ai = new GoogleGenerativeAI(apiKey);
-  const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const prompt = `
 Eres el agente financiero conversacional de Diego Gayoso.
 
@@ -511,8 +589,7 @@ Usuario: "${texto}"
 Responde en español mexicano, máximo 7 líneas, con números concretos cuando existan.
 `;
 
-  const response = await model.generateContent(prompt);
-  const message = limpiarFormatoTelegram(response.response.text());
+  const message = limpiarFormatoTelegram(await generateGeminiText(apiKey, prompt));
 
   return message || 'Estoy aquí. Puedo revisar tus bolsas, gastos, ingresos o ayudarte a registrar un movimiento.';
 }
@@ -529,7 +606,7 @@ export async function responderConversacionFinanciera({
   | { action: 'reply'; message: string }
   | { action: 'movement'; movement: MovementResult; message: string }
 > {
-  const intent = detectarIntent(texto);
+  const intent = await detectarIntentInteligente(texto, apiKey);
 
   if (intent.type === 'help') {
     return { action: 'reply', message: ayuda };
