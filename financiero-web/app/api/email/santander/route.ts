@@ -2,12 +2,14 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
-import { categoriaParaGastos } from '@/lib/financial-core';
+import { categoriaParaGastos, formatearFecha, formatearMonto, nombreBolsa } from '@/lib/financial-core';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const emailIngestSecret = process.env.EMAIL_INGEST_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
+const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
+const telegramNotifyChatId = process.env.TELEGRAM_NOTIFY_CHAT_ID || '';
 
 function getSupabase() {
   if (!supabaseUrl || !supabaseKey) return null;
@@ -20,6 +22,68 @@ function rangoDiaUTC(fecha: Date) {
   const fin = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate() + 1));
 
   return { inicio: inicio.toISOString(), fin: fin.toISOString() };
+}
+
+function idCorto(id: string | number) {
+  return String(id).slice(0, 8);
+}
+
+async function obtenerChatNotificacion(supabase: SupabaseClient) {
+  if (telegramNotifyChatId) return telegramNotifyChatId;
+
+  const { data, error } = await supabase
+    .from('telegram_memoria')
+    .select('chat_id')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+
+  return (data as { chat_id?: string } | null)?.chat_id || null;
+}
+
+async function notificarGastoSantander({
+  supabase,
+  gasto,
+}: {
+  supabase: SupabaseClient;
+  gasto: {
+    id: string | number;
+    concepto: string;
+    monto: number | string;
+    categoria: string;
+    subcategoria?: string | null;
+    fecha: string;
+  };
+}) {
+  if (!telegramBotToken) return;
+
+  const chatId = await obtenerChatNotificacion(supabase);
+
+  if (!chatId) return;
+
+  const id = idCorto(gasto.id);
+  const categoria = `${nombreBolsa(gasto.categoria)}${gasto.subcategoria ? ` / ${gasto.subcategoria}` : ''}`;
+  const message = [
+    'Santander registrado.',
+    `${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto}`,
+    `Lo clasifiqué como: ${categoria}.`,
+    `ID: ${id}`,
+    'Si está mal, responde:',
+    `cambiar ${id} a vida`,
+    `cambiar ${id} a placeres`,
+    `cambiar ${id} a futuro`,
+  ].join('\n');
+
+  await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: message,
+    }),
+  });
 }
 
 async function buscarIngresoDuplicado({
@@ -266,6 +330,11 @@ export async function POST(request: Request) {
     if (result.error) {
       return NextResponse.json({ success: false, error: result.error.message }, { status: 500 });
     }
+
+    await notificarGastoSantander({
+      supabase,
+      gasto: result.data,
+    });
 
     return NextResponse.json({ success: true, data: result.data, parsed });
   } catch (error: unknown) {

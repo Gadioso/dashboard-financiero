@@ -17,6 +17,7 @@ import {
 type Intent =
   | { type: 'help' }
   | { type: 'category-total'; text: string }
+  | { type: 'update-category'; idPrefix: string; category: string }
   | { type: 'summary'; text: string }
   | { type: 'list'; text: string }
   | { type: 'delete-request'; text: string }
@@ -31,7 +32,7 @@ type MensajeMemoria = {
   createdAt: string;
 };
 
-const intentTypes = ['help', 'category-total', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
+const intentTypes = ['help', 'category-total', 'update-category', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
 
 const ayuda =
   [
@@ -76,6 +77,12 @@ function detectarIntent(texto: string): Intent {
     return { type: 'help' };
   }
 
+  const actualizarCategoriaMatch = normalizado.match(/\b(?:cambia|cambiar|corrige|corregir|clasifica|clasificar|pon|poner)\s+(?:el\s+)?(?:gasto\s+)?([a-z0-9-]{1,})\s+(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversi[oó]n|inversion|ahorro|emergencia)\b/i);
+
+  if (actualizarCategoriaMatch?.[1] && actualizarCategoriaMatch?.[2]) {
+    return { type: 'update-category', idPrefix: actualizarCategoriaMatch[1], category: actualizarCategoriaMatch[2] };
+  }
+
   const confirmarEliminarMatch = normalizado.match(/\b(?:confirmar|confirma|confirmo|s[ií])\s+(?:eliminar|borrar)\s+(?:gasto\s+)?([a-z0-9-]{1,})\b/i);
 
   if (confirmarEliminarMatch?.[1]) {
@@ -110,12 +117,16 @@ function detectarIntent(texto: string): Intent {
 }
 
 function normalizarIntentIA(valor: unknown, textoOriginal: string): Intent | null {
-  const data = valor as { type?: string; idPrefix?: string };
+  const data = valor as { type?: string; idPrefix?: string; category?: string };
 
   if (!data?.type || !intentTypes.includes(data.type as Intent['type'])) return null;
 
   if (data.type === 'delete-confirm') {
     return data.idPrefix ? { type: 'delete-confirm', idPrefix: data.idPrefix } : null;
+  }
+
+  if (data.type === 'update-category') {
+    return data.idPrefix && data.category ? { type: 'update-category', idPrefix: data.idPrefix, category: data.category } : null;
   }
 
   return { type: data.type as Exclude<Intent['type'], 'help' | 'delete-confirm'>, text: textoOriginal } as Intent;
@@ -157,6 +168,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "help": "Greeting, help, start or onboarding.",
     "summary": "Balance, budget, monthly/range overview, how am I doing, how much remains, how much to invest, how much to reserve.",
     "category-total": "How much was spent in one specific bucket/category such as Placeres, Vida or Futuro.",
+    "update-category": "User wants to correct/reclassify an existing expense to Vida, Placeres or Futuro.",
     "list": "Request to list latest expenses, movements or expenses by category/month.",
     "delete-request": "User asks to delete/remove something, but has not confirmed with an ID.",
     "delete-confirm": "User confirms deletion with a short ID prefix.",
@@ -170,12 +182,14 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "'y todo mayo', 'en todo este mes de mayo', 'pero en todo enero' are summary.",
     "'de enero a mayo', 'enero para acá', 'todo el año', 'desde enero' are summary.",
     "'cuánto gasté en placeres en enero' is category-total.",
+    "'cambiar abc12345 a vida', 'corrige abc12345 como placeres', 'pon abc12345 en futuro' are update-category.",
     "Return only valid raw JSON matching output_schema."
   ],
   "user_message": ${JSON.stringify(texto)},
   "output_schema": {
     "type": "help | summary | category-total | list | delete-request | delete-confirm | movement | conversation",
-    "idPrefix": "short deletion id when type is delete-confirm, otherwise empty string"
+    "idPrefix": "short expense id when type is delete-confirm or update-category, otherwise empty string",
+    "category": "Vida | Placeres | Futuro when type is update-category, otherwise empty string"
   }
 }
 `;
@@ -199,6 +213,77 @@ function detectarFiltroCategoria(texto: string) {
   if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?)\b/.test(normalizado)) return 'Seguros';
 
   return null;
+}
+
+function normalizarCategoriaCorreccion(texto: string) {
+  const normalizado = texto.toLowerCase();
+
+  if (normalizado.includes('placer')) {
+    return { categoria: 'Placeres', subcategoria: 'Correccion Telegram' };
+  }
+
+  if (normalizado.includes('futuro') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia')) {
+    return { categoria: 'Seguros', subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
+  }
+
+  if (normalizado.includes('vida') || normalizado.includes('costo')) {
+    return { categoria: 'Vida', subcategoria: 'Correccion Telegram' };
+  }
+
+  return null;
+}
+
+async function actualizarCategoriaGasto(supabase: SupabaseClient, idPrefix: string, categoriaTexto: string) {
+  const categoria = normalizarCategoriaCorreccion(categoriaTexto);
+
+  if (!categoria) {
+    return 'No entendí la categoría. Usa: vida, placeres o futuro.';
+  }
+
+  const { data, error } = await supabase
+    .from('gastos')
+    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+    .order('fecha', { ascending: false })
+    .limit(300);
+
+  if (error) {
+    throw new Error(`No pude buscar el gasto para corregir: ${error.message}`);
+  }
+
+  const matches = ((data || []) as Gasto[]).filter((gasto) => String(gasto.id).toLowerCase().startsWith(idPrefix.toLowerCase()));
+
+  if (!matches.length) {
+    return `No encontré ningún gasto con ID corto "${idPrefix}". Revisa el ID del mensaje de Santander o escribe "últimos gastos".`;
+  }
+
+  if (matches.length > 1) {
+    return [
+      `Ese ID corto coincide con ${matches.length} gastos. Usa más caracteres del ID:`,
+      ...matches.slice(0, 5).map((gasto) => `- ${describirGasto(gasto)}`),
+    ].join('\n');
+  }
+
+  const gasto = matches[0];
+  const { data: actualizado, error: updateError } = await supabase
+    .from('gastos')
+    .update({
+      categoria: categoria.categoria,
+      subcategoria: categoria.subcategoria,
+    })
+    .eq('id', gasto.id)
+    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+    .single();
+
+  if (updateError) {
+    throw new Error(`No pude corregir el gasto: ${updateError.message}`);
+  }
+
+  return [
+    'Listo, corregí la categoría.',
+    `Antes: ${nombreBolsa(String(gasto.categoria))}${gasto.subcategoria ? ` / ${gasto.subcategoria}` : ''}.`,
+    `Ahora: ${nombreBolsa(String(actualizado.categoria))}${actualizado.subcategoria ? ` / ${actualizado.subcategoria}` : ''}.`,
+    describirGasto(actualizado as Gasto),
+  ].join('\n');
 }
 
 async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) {
@@ -666,6 +751,10 @@ export async function responderConversacionFinanciera({
 
   if (intent.type === 'category-total') {
     return { action: 'reply', message: await totalGastosPorCategoria(supabase, intent.text) };
+  }
+
+  if (intent.type === 'update-category') {
+    return { action: 'reply', message: await actualizarCategoriaGasto(supabase, intent.idPrefix, intent.category) };
   }
 
   if (intent.type === 'summary') {

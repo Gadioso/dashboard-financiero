@@ -12,6 +12,7 @@ Objetivo: que `diegayoso1999@gmail.com` detecte correos de Santander y mande sol
 - Dedupe básico en Gmail: etiqueta `Finanzas/Procesado-Santander`
 - Dedupe backend: evita insertar dos veces el mismo día + concepto + monto
 - Validación backend: ignora payloads sin señal Santander aunque traigan formato de movimiento
+- Notificación Telegram: cuando inserta un gasto nuevo de Santander, avisa la categoría detectada y da comandos para corregirla.
 
 ## Auditoría local
 
@@ -63,9 +64,36 @@ Google Apps Script no puede llamar `http://127.0.0.1:3002`. Necesita una URL pú
 
 ```env
 EMAIL_INGEST_SECRET=un-secret-largo-y-aleatorio
+TELEGRAM_BOT_TOKEN=token-del-bot
+TELEGRAM_NOTIFY_CHAT_ID=chat-id-opcional-para-alertas
 ```
 
 El endpoint también usa como fallback `TELEGRAM_WEBHOOK_SECRET`, pero la configuración recomendada es tener `EMAIL_INGEST_SECRET` dedicado en `.env.local` y en producción. Ese mismo valor se pega en Apps Script como `EMAIL_INGEST_SECRET`.
+
+`TELEGRAM_NOTIFY_CHAT_ID` es opcional si ya existe la tabla `telegram_memoria`; en ese caso el endpoint intenta avisar al último chat activo. Para producción estable, configura `TELEGRAM_NOTIFY_CHAT_ID`.
+
+## Corrección por Telegram
+
+Cuando entre un gasto nuevo por Santander, el bot manda algo así:
+
+```txt
+Santander registrado.
+04 jun 2026 · $271.00 · STARBUCKS PATIO PATRIA
+Lo clasifiqué como: Placeres / Cafe.
+ID: abc12345
+Si está mal, responde:
+cambiar abc12345 a vida
+cambiar abc12345 a placeres
+cambiar abc12345 a futuro
+```
+
+Comandos soportados:
+
+```txt
+cambiar abc12345 a vida
+cambiar abc12345 a placeres
+cambiar abc12345 a futuro
+```
 
 ## Supabase SQL pendiente
 
