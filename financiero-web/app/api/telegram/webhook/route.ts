@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
@@ -27,6 +28,12 @@ type TelegramUpdate = {
   message?: TelegramMessage;
 };
 
+type MensajeMemoria = {
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+};
+
 async function responderTelegram(chatId: number | undefined, texto: string) {
   if (!chatId || !telegramBotToken) return;
 
@@ -38,6 +45,56 @@ async function responderTelegram(chatId: number | undefined, texto: string) {
       text: texto,
     }),
   });
+}
+
+async function leerMemoriaChat(supabase: SupabaseClient, chatId: number | undefined): Promise<MensajeMemoria[]> {
+  if (!chatId) return [];
+
+  const { data, error } = await supabase
+    .from('telegram_memoria')
+    .select('messages')
+    .eq('chat_id', String(chatId))
+    .maybeSingle();
+
+  const row = data as { messages?: unknown } | null;
+
+  if (error || !Array.isArray(row?.messages)) return [];
+
+  return row.messages.slice(-12) as MensajeMemoria[];
+}
+
+async function guardarMemoriaChat({
+  supabase,
+  chatId,
+  memoria,
+  userText,
+  assistantText,
+}: {
+  supabase: SupabaseClient;
+  chatId: number | undefined;
+  memoria: MensajeMemoria[];
+  userText: string;
+  assistantText: string;
+}) {
+  if (!chatId) return;
+
+  const now = new Date().toISOString();
+  const messages = [
+    ...memoria,
+    { role: 'user' as const, content: userText, createdAt: now },
+    { role: 'assistant' as const, content: assistantText, createdAt: now },
+  ].slice(-16);
+
+  await supabase
+    .from('telegram_memoria')
+    .upsert(
+      {
+        chat_id: String(chatId),
+        messages,
+        updated_at: now,
+      },
+      { onConflict: 'chat_id' }
+    );
 }
 
 export async function POST(request: Request) {
@@ -68,14 +125,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ignored: true });
     }
 
+    const memoria = await leerMemoriaChat(supabase, chatId);
     const respuesta = await responderConversacionFinanciera({
       texto,
       apiKey: googleApiKey,
       supabase,
+      memoria,
     });
 
     if (respuesta.action === 'reply') {
       await responderTelegram(chatId, respuesta.message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: respuesta.message });
       return NextResponse.json({ success: true, ignored: true, message: respuesta.message });
     }
 
@@ -103,9 +163,11 @@ export async function POST(request: Request) {
 
       await sincronizarPresupuestoMensual(supabase, fechaIngreso);
 
-      await responderTelegram(chatId, `Registrado. ${respuesta.message} Ya recalculé tus bolsas 33/33/33.`);
+      const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 33/33/33.`;
+      await responderTelegram(chatId, message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message });
 
-      return NextResponse.json({ success: true, data, message: `Registrado. ${respuesta.message} Ya recalculé tus bolsas 33/33/33.` });
+      return NextResponse.json({ success: true, data, message });
     }
 
     const categoriaFinal = categoriaParaGastos(clasificacion.categoria);
@@ -126,12 +188,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    await responderTelegram(
-      chatId,
-      `Registrado. ${respuesta.message}`
-    );
+    const message = `Registrado. ${respuesta.message}`;
+    await responderTelegram(chatId, message);
+    await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message });
 
-    return NextResponse.json({ success: true, data, message: `Registrado. ${respuesta.message}` });
+    return NextResponse.json({ success: true, data, message });
   } catch (error: unknown) {
     console.error('Error en webhook de Telegram:', error);
     const message = error instanceof Error ? error.message : 'Error desconocido.';

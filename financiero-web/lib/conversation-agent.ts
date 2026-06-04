@@ -25,6 +25,11 @@ type Intent =
   | { type: 'conversation'; text: string };
 
 type MovementResult = Awaited<ReturnType<typeof clasificarMovimientoFinanciero>>;
+type MensajeMemoria = {
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+};
 
 const intentTypes = ['help', 'category-total', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
 
@@ -159,6 +164,7 @@ Reglas críticas:
 - Solo usa movement si hay un monto Y una intención explícita de registrar/pagar/gastar/comprar/ganar/cobrar/recibir/invertir/aportar/agregar.
 - Si solo menciona un número dentro de una pregunta, NO es movement.
 - "y todo mayo", "en todo este mes de mayo", "pero en todo enero" es summary.
+- "de enero a mayo", "enero para acá", "todo el año", "desde enero" es summary.
 - "cuánto gasté en placeres en enero" es category-total.
 - Responde solo JSON crudo.
 
@@ -274,6 +280,23 @@ function etiquetaMes(fecha: string | Date) {
   return `${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
 }
 
+function etiquetaPeriodo({
+  startYear,
+  startMonthIndex,
+  endYear,
+  endMonthIndex,
+}: {
+  startYear: number;
+  startMonthIndex: number;
+  endYear: number;
+  endMonthIndex: number;
+}) {
+  const inicio = `${String(startMonthIndex + 1).padStart(2, '0')}/${startYear}`;
+  const fin = `${String(endMonthIndex + 1).padStart(2, '0')}/${endYear}`;
+
+  return inicio === fin ? inicio : `${inicio} a ${fin}`;
+}
+
 function rangoMesDesdeTexto(texto: string) {
   const { year, monthIndex } = detectarMesConsulta(texto);
 
@@ -293,6 +316,55 @@ function detectarMesConsulta(texto: string) {
   const monthIndex = mesEncontrado ? mesEncontrado[1] : ahora.getUTCMonth();
 
   return { year, monthIndex };
+}
+
+function detectarPeriodoConsulta(texto: string) {
+  const ahora = new Date();
+  const normalizado = texto.toLowerCase();
+  const yearMatch = normalizado.match(/\b(20\d{2})\b/);
+  const year = yearMatch ? Number(yearMatch[1]) : ahora.getUTCFullYear();
+  const mesesEncontrados = Object.entries(mesesPorNombre)
+    .filter(([nombre]) => normalizado.includes(nombre))
+    .map(([, indice]) => indice)
+    .sort((a, b) => a - b);
+
+  if (/\b(todo\s+el\s+a[nñ]o|en\s+el\s+a[nñ]o|anual|desde\s+enero|enero\s+para\s+ac[aá]|de\s+enero\s+para\s+ac[aá])\b/.test(normalizado)) {
+    const endMonthIndex = mesesEncontrados.length ? Math.max(...mesesEncontrados) : ahora.getUTCMonth();
+
+    return {
+      inicio: new Date(Date.UTC(year, 0, 1)).toISOString(),
+      fin: new Date(Date.UTC(year, endMonthIndex + 1, 1)).toISOString(),
+      etiqueta: etiquetaPeriodo({ startYear: year, startMonthIndex: 0, endYear: year, endMonthIndex }),
+      year,
+      monthIndex: endMonthIndex,
+      isRange: endMonthIndex !== 0,
+    };
+  }
+
+  if (mesesEncontrados.length >= 2) {
+    const startMonthIndex = Math.min(...mesesEncontrados);
+    const endMonthIndex = Math.max(...mesesEncontrados);
+
+    return {
+      inicio: new Date(Date.UTC(year, startMonthIndex, 1)).toISOString(),
+      fin: new Date(Date.UTC(year, endMonthIndex + 1, 1)).toISOString(),
+      etiqueta: etiquetaPeriodo({ startYear: year, startMonthIndex, endYear: year, endMonthIndex }),
+      year,
+      monthIndex: endMonthIndex,
+      isRange: startMonthIndex !== endMonthIndex,
+    };
+  }
+
+  const { year: detectedYear, monthIndex } = detectarMesConsulta(texto);
+
+  return {
+    inicio: new Date(Date.UTC(detectedYear, monthIndex, 1)).toISOString(),
+    fin: new Date(Date.UTC(detectedYear, monthIndex + 1, 1)).toISOString(),
+    etiqueta: etiquetaPeriodo({ startYear: detectedYear, startMonthIndex: monthIndex, endYear: detectedYear, endMonthIndex: monthIndex }),
+    year: detectedYear,
+    monthIndex,
+    isRange: false,
+  };
 }
 
 async function listarGastos(supabase: SupabaseClient, texto: string) {
@@ -421,11 +493,10 @@ async function confirmarEliminarGasto(supabase: SupabaseClient, idPrefix: string
 }
 
 async function obtenerContextoConversacional(supabase: SupabaseClient, texto: string) {
-  const { year, monthIndex } = detectarMesConsulta(texto);
+  const periodo = detectarPeriodoConsulta(texto);
+  const { year, monthIndex } = periodo;
   const month = String(monthIndex + 1).padStart(2, '0');
   const mesKey = `${year}-${month}`;
-  const inicioMes = new Date(Date.UTC(year, monthIndex, 1)).toISOString();
-  const finMes = new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString();
   const inicioPromedio = new Date(Date.UTC(year, monthIndex - 2, 1)).toISOString();
 
   const [
@@ -436,17 +507,17 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     { data: ultimoIngreso, error: errorUltimoIngreso },
   ] =
     await Promise.all([
-      supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
-      supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', inicioMes).lt('fecha', finMes),
-      supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioPromedio).lt('fecha', finMes),
+      supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').gte('fecha', periodo.inicio).lt('fecha', periodo.fin),
+      supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', periodo.inicio).lt('fecha', periodo.fin),
+      supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioPromedio).lt('fecha', periodo.fin),
       supabase
         .from('gastos')
         .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
-        .gte('fecha', inicioMes)
-        .lt('fecha', finMes)
+        .gte('fecha', periodo.inicio)
+        .lt('fecha', periodo.fin)
         .order('fecha', { ascending: false })
         .limit(8),
-      supabase.from('ingresos').select('monto, fecha').lt('fecha', finMes).order('fecha', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('ingresos').select('monto, fecha').lt('fecha', periodo.fin).order('fecha', { ascending: false }).limit(1).maybeSingle(),
     ]);
 
   if (errorIngresos) throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
@@ -468,7 +539,8 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
   const restante = calcularRestantesPorBolsa({ presupuesto: presupuestoMes, gastado });
 
   return {
-    periodo: `${month}/${year}`,
+    periodo: periodo.etiqueta,
+    tipoPeriodo: periodo.isRange ? 'rango' : 'mes',
     ingresosMes,
     ingresosDetalle: ordenarPorFechaDesc(ingresosMesDetalle).map((ingreso) => ({
       fecha: formatearFecha(ingreso.fecha),
@@ -505,10 +577,12 @@ async function responderConversacionAbierta({
   texto,
   apiKey,
   supabase,
+  memoria = [],
 }: {
   texto: string;
   apiKey: string;
   supabase: SupabaseClient;
+  memoria?: MensajeMemoria[];
 }) {
   if (!apiKey) {
     return [
@@ -543,6 +617,9 @@ Reglas de clasificación:
 Contexto financiero:
 ${JSON.stringify(contexto, null, 2)}
 
+Memoria reciente del chat:
+${JSON.stringify(memoria.slice(-8), null, 2)}
+
 Usuario: "${texto}"
 
 Responde en español mexicano, máximo 8 líneas, con números concretos y explicando tu razonamiento cuando el usuario pregunte por una cifra.
@@ -557,10 +634,12 @@ export async function responderConversacionFinanciera({
   texto,
   apiKey,
   supabase,
+  memoria = [],
 }: {
   texto: string;
   apiKey: string;
   supabase: SupabaseClient;
+  memoria?: MensajeMemoria[];
 }): Promise<
   | { action: 'reply'; message: string }
   | { action: 'movement'; movement: MovementResult; message: string }
@@ -582,6 +661,7 @@ export async function responderConversacionFinanciera({
         texto: intent.text,
         apiKey,
         supabase,
+        memoria,
       }),
     };
   }
@@ -615,6 +695,7 @@ export async function responderConversacionFinanciera({
       texto: intent.text,
       apiKey,
       supabase,
+      memoria,
     }),
   };
 }
