@@ -82,18 +82,23 @@ Santander registrado.
 Lo clasifiqué como: Placeres / Cafe.
 ID: abc12345
 Si está mal, responde:
-cambiar abc12345 a vida
-cambiar abc12345 a placeres
-cambiar abc12345 a futuro
+cámbialo a vida
+cámbialo a placer
+cámbialo a futuro
 ```
 
 Comandos soportados:
 
 ```txt
+cámbialo a vida
+cámbialo a placer
+cámbialo a futuro
 cambiar abc12345 a vida
 cambiar abc12345 a placeres
 cambiar abc12345 a futuro
 ```
+
+El ID corto queda como respaldo. Si respondes sin ID, el bot corrige el último gasto registrado o notificado en ese chat.
 
 ## Supabase SQL pendiente
 

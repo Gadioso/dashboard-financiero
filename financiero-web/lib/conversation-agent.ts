@@ -17,7 +17,7 @@ import {
 type Intent =
   | { type: 'help' }
   | { type: 'category-total'; text: string }
-  | { type: 'update-category'; idPrefix: string; category: string }
+  | { type: 'update-category'; idPrefix?: string; category: string }
   | { type: 'summary'; text: string }
   | { type: 'list'; text: string }
   | { type: 'delete-request'; text: string }
@@ -30,6 +30,9 @@ type MensajeMemoria = {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  metadata?: {
+    lastExpenseId?: string;
+  };
 };
 
 const intentTypes = ['help', 'category-total', 'update-category', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
@@ -83,6 +86,12 @@ function detectarIntent(texto: string): Intent {
     return { type: 'update-category', idPrefix: actualizarCategoriaMatch[1], category: actualizarCategoriaMatch[2] };
   }
 
+  const actualizarUltimoMatch = normalizado.match(/\b(?:cambia|cambiar|corrige|corregir|clasifica|clasificar|pon|poner)\s*(?:lo|la|ese|esa|eso|este|esta|el\s+gasto|el\s+movimiento)?\s*(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversi[oó]n|inversion|ahorro|emergencia)\b/i);
+
+  if (actualizarUltimoMatch?.[1]) {
+    return { type: 'update-category', category: actualizarUltimoMatch[1] };
+  }
+
   const confirmarEliminarMatch = normalizado.match(/\b(?:confirmar|confirma|confirmo|s[ií])\s+(?:eliminar|borrar)\s+(?:gasto\s+)?([a-z0-9-]{1,})\b/i);
 
   if (confirmarEliminarMatch?.[1]) {
@@ -126,7 +135,7 @@ function normalizarIntentIA(valor: unknown, textoOriginal: string): Intent | nul
   }
 
   if (data.type === 'update-category') {
-    return data.idPrefix && data.category ? { type: 'update-category', idPrefix: data.idPrefix, category: data.category } : null;
+    return data.category ? { type: 'update-category', idPrefix: data.idPrefix || undefined, category: data.category } : null;
   }
 
   return { type: data.type as Exclude<Intent['type'], 'help' | 'delete-confirm'>, text: textoOriginal } as Intent;
@@ -183,6 +192,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "'de enero a mayo', 'enero para acá', 'todo el año', 'desde enero' are summary.",
     "'cuánto gasté en placeres en enero' is category-total.",
     "'cambiar abc12345 a vida', 'corrige abc12345 como placeres', 'pon abc12345 en futuro' are update-category.",
+    "'cambialo a vida', 'cámbialo a placer', 'ponlo en futuro' are update-category without idPrefix; they refer to the last expense in memory.",
     "Return only valid raw JSON matching output_schema."
   ],
   "user_message": ${JSON.stringify(texto)},
@@ -284,6 +294,18 @@ async function actualizarCategoriaGasto(supabase: SupabaseClient, idPrefix: stri
     `Ahora: ${nombreBolsa(String(actualizado.categoria))}${actualizado.subcategoria ? ` / ${actualizado.subcategoria}` : ''}.`,
     describirGasto(actualizado as Gasto),
   ].join('\n');
+}
+
+function obtenerUltimoGastoId(memoria: MensajeMemoria[]) {
+  const mensajeConMetadata = [...memoria].reverse().find((mensaje) => mensaje.metadata?.lastExpenseId);
+
+  if (mensajeConMetadata?.metadata?.lastExpenseId) {
+    return mensajeConMetadata.metadata.lastExpenseId;
+  }
+
+  const mensajeConId = [...memoria].reverse().find((mensaje) => /\bID:\s*([a-z0-9-]{4,})\b/i.test(mensaje.content));
+
+  return mensajeConId?.content.match(/\bID:\s*([a-z0-9-]{4,})\b/i)?.[1];
 }
 
 async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) {
@@ -754,7 +776,16 @@ export async function responderConversacionFinanciera({
   }
 
   if (intent.type === 'update-category') {
-    return { action: 'reply', message: await actualizarCategoriaGasto(supabase, intent.idPrefix, intent.category) };
+    const idPrefix = intent.idPrefix || obtenerUltimoGastoId(memoria);
+
+    if (!idPrefix) {
+      return {
+        action: 'reply',
+        message: 'No tengo un último gasto claro para corregir. Mándame "últimos gastos" o usa "cambiar <id> a vida/placeres/futuro".',
+      };
+    }
+
+    return { action: 'reply', message: await actualizarCategoriaGasto(supabase, idPrefix, intent.category) };
   }
 
   if (intent.type === 'summary') {

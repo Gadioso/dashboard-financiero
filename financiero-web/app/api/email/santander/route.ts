@@ -28,6 +28,50 @@ function idCorto(id: string | number) {
   return String(id).slice(0, 8);
 }
 
+async function guardarUltimoGastoNotificado({
+  supabase,
+  chatId,
+  gastoId,
+  message,
+}: {
+  supabase: SupabaseClient;
+  chatId: string;
+  gastoId: string | number;
+  message: string;
+}) {
+  const { data } = await supabase
+    .from('telegram_memoria')
+    .select('messages')
+    .eq('chat_id', chatId)
+    .maybeSingle();
+
+  const row = data as { messages?: unknown } | null;
+  const memoria = Array.isArray(row?.messages) ? row.messages : [];
+  const now = new Date().toISOString();
+  const messages = [
+    ...memoria,
+    {
+      role: 'assistant',
+      content: message,
+      createdAt: now,
+      metadata: {
+        lastExpenseId: String(gastoId),
+      },
+    },
+  ].slice(-16);
+
+  await supabase
+    .from('telegram_memoria')
+    .upsert(
+      {
+        chat_id: chatId,
+        messages,
+        updated_at: now,
+      },
+      { onConflict: 'chat_id' }
+    );
+}
+
 async function obtenerChatNotificacion(supabase: SupabaseClient) {
   if (telegramNotifyChatId) return telegramNotifyChatId;
 
@@ -71,9 +115,9 @@ async function notificarGastoSantander({
     `Lo clasifiqué como: ${categoria}.`,
     `ID: ${id}`,
     'Si está mal, responde:',
-    `cambiar ${id} a vida`,
-    `cambiar ${id} a placeres`,
-    `cambiar ${id} a futuro`,
+    '"cámbialo a vida"',
+    '"cámbialo a placer"',
+    '"cámbialo a futuro"',
   ].join('\n');
 
   await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
@@ -83,6 +127,13 @@ async function notificarGastoSantander({
       chat_id: chatId,
       text: message,
     }),
+  });
+
+  await guardarUltimoGastoNotificado({
+    supabase,
+    chatId,
+    gastoId: gasto.id,
+    message,
   });
 }
 

@@ -32,6 +32,9 @@ type MensajeMemoria = {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  metadata?: {
+    lastExpenseId?: string;
+  };
 };
 
 async function responderTelegram(chatId: number | undefined, texto: string) {
@@ -69,12 +72,14 @@ async function guardarMemoriaChat({
   memoria,
   userText,
   assistantText,
+  lastExpenseId,
 }: {
   supabase: SupabaseClient;
   chatId: number | undefined;
   memoria: MensajeMemoria[];
   userText: string;
   assistantText: string;
+  lastExpenseId?: string | number;
 }) {
   if (!chatId) return;
 
@@ -82,7 +87,12 @@ async function guardarMemoriaChat({
   const messages = [
     ...memoria,
     { role: 'user' as const, content: userText, createdAt: now },
-    { role: 'assistant' as const, content: assistantText, createdAt: now },
+    {
+      role: 'assistant' as const,
+      content: assistantText,
+      createdAt: now,
+      ...(lastExpenseId ? { metadata: { lastExpenseId: String(lastExpenseId) } } : {}),
+    },
   ].slice(-16);
 
   await supabase
@@ -199,7 +209,7 @@ export async function POST(request: Request) {
 
     const message = `Registrado. ${respuesta.message}`;
     await responderTelegram(chatId, message);
-    await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message });
+    await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, lastExpenseId: data.id });
 
     return NextResponse.json({ success: true, data, message });
   } catch (error: unknown) {
