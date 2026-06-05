@@ -65,6 +65,22 @@ function clasificarComercio(concepto: string, texto: string) {
     };
   }
 
+  if (/\boxxo\b/i.test(normalizado)) {
+    if (/\b(recarga|telcel|at[&y]t|movistar|servicio|luz|agua|internet|dep[oó]sito|deposito|farmacia|medicina|gasolina)\b/i.test(normalizado)) {
+      return {
+        categoria: 'Vida' as const,
+        subcategoria: 'Costo de Vida',
+        razon: 'OXXO con señal de servicio, recarga, salud o gasto necesario.',
+      };
+    }
+
+    return {
+      categoria: 'Placeres' as const,
+      subcategoria: 'Otros Placeres',
+      razon: 'OXXO sin señal de necesidad; por criterio de Diego se trata como consumo discrecional.',
+    };
+  }
+
   if (/\b(openai|chatgpt|codex|fiverr|opus|google|aws|vercel|github|software|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs)\b/i.test(normalizado)) {
     return {
       categoria: 'Vida' as const,
@@ -73,7 +89,7 @@ function clasificarComercio(concepto: string, texto: string) {
     };
   }
 
-  if (/\b(oxxo|super|s[uú]per|farmacia|gasolina|uber\b|didi|metro|luz|agua|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex|doctor|hospital|carro|auto)\b/i.test(normalizado)) {
+  if (/\b(super|s[uú]per|farmacia|gasolina|uber\b|didi|metro|luz|agua|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex|doctor|hospital|carro|auto)\b/i.test(normalizado)) {
     return {
       categoria: 'Vida' as const,
       subcategoria: 'Costo de Vida',

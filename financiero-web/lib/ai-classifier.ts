@@ -124,6 +124,28 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
     };
   }
 
+  if (/\boxxo\b/.test(normalizado)) {
+    if (/\b(recarga|telcel|at[&y]t|movistar|servicio|luz|agua|internet|dep[oó]sito|deposito|farmacia|medicina|gasolina)\b/.test(normalizado)) {
+      return {
+        concepto,
+        monto,
+        tipo: 'gasto',
+        categoria: 'Vida',
+        subcategoria: 'Costo de Vida',
+        razon: 'Clasificado por regla local: OXXO con señal de servicio, salud o gasto necesario.',
+      };
+    }
+
+    return {
+      concepto,
+      monto,
+      tipo: 'gasto',
+      categoria: 'Placeres',
+      subcategoria: 'Otros Placeres',
+      razon: 'Clasificado por regla local: OXXO sin señal de necesidad se trata como consumo discrecional.',
+    };
+  }
+
   if (/\b(renta|luz|agua|super|s[uú]per|despensa|gasolina|transporte|metro|camion|camión|deuda|doctor|medicina)\b/.test(normalizado)) {
     return {
       concepto,
@@ -201,6 +223,7 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "If it mentions emergency fund, classify as Futuro/Emergencia.",
     "If it mentions insurance, classify as Futuro/Seguros.",
     "OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Notion, Zoom, Figma, Canva and similar work/software tools are Vida/Herramientas Trabajo.",
+    "OXXO is Placeres/Otros Placeres by default for Diego, unless the text clearly says it was a bill payment, phone top-up, medicine, pharmacy, gas or another necessary service.",
     "If there is no clear amount, use 0. Do not invent an amount.",
     "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
     "Return only valid raw JSON matching the output_schema."

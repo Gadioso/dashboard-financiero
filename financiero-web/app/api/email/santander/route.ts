@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
+import { buscarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { categoriaParaGastos, formatearFecha, formatearMonto, nombreBolsa } from '@/lib/financial-core';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
 
@@ -340,6 +341,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data, parsed });
     }
 
+    const preferencia = await buscarPreferenciaClasificacion(supabase, parsed.concepto);
+    const categoriaClasificada = preferencia?.categoria || parsed.categoria;
+    const subcategoriaClasificada = preferencia?.subcategoria || parsed.subcategoria;
+
     const duplicado = await buscarGastoDuplicado({
       concepto: parsed.concepto,
       monto: parsed.monto,
@@ -362,8 +367,8 @@ export async function POST(request: Request) {
         {
           concepto: parsed.concepto,
           monto: parsed.monto,
-          categoria: categoriaParaGastos(parsed.categoria),
-          subcategoria: parsed.subcategoria,
+          categoria: categoriaParaGastos(categoriaClasificada),
+          subcategoria: subcategoriaClasificada,
           origen: 'Santander_Email',
           fecha: fecha.toISOString(),
         },
@@ -378,8 +383,8 @@ export async function POST(request: Request) {
           {
             concepto: parsed.concepto,
             monto: parsed.monto,
-            categoria: categoriaParaGastos(parsed.categoria),
-            subcategoria: parsed.subcategoria,
+            categoria: categoriaParaGastos(categoriaClasificada),
+            subcategoria: subcategoriaClasificada,
             origen: 'Web',
             fecha: fecha.toISOString(),
           },

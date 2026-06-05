@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
+import { guardarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { extraerJson, generateGeminiText } from '@/lib/gemini';
 import {
   calcularGastadoPorBolsa,
@@ -229,15 +230,15 @@ function normalizarCategoriaCorreccion(texto: string) {
   const normalizado = texto.toLowerCase();
 
   if (normalizado.includes('placer')) {
-    return { categoria: 'Placeres', subcategoria: 'Correccion Telegram' };
+    return { categoria: 'Placeres' as const, subcategoria: 'Otros Placeres' };
   }
 
   if (normalizado.includes('futuro') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia')) {
-    return { categoria: 'Seguros', subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
+    return { categoria: 'Seguros' as const, subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
   }
 
   if (normalizado.includes('vida') || normalizado.includes('costo')) {
-    return { categoria: 'Vida', subcategoria: 'Correccion Telegram' };
+    return { categoria: 'Vida' as const, subcategoria: 'Costo de Vida' };
   }
 
   return null;
@@ -287,6 +288,14 @@ async function actualizarCategoriaGasto(supabase: SupabaseClient, idPrefix: stri
   if (updateError) {
     throw new Error(`No pude corregir el gasto: ${updateError.message}`);
   }
+
+  const categoriaPreferencia = categoria.categoria === 'Seguros' ? 'Futuro' : categoria.categoria;
+  await guardarPreferenciaClasificacion({
+    supabase,
+    concepto: gasto.concepto,
+    categoria: categoriaPreferencia,
+    subcategoria: categoria.subcategoria,
+  });
 
   return [
     'Listo, corregí la categoría.',

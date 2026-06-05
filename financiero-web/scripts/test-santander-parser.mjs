@@ -51,7 +51,7 @@ El 02/06/2026 a las 10:00:00 hrs.`,
     expected: { concepto: 'CODEX', monto: 299, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Herramientas Trabajo' },
   },
   {
-    name: 'Oxxo Jacarandas life expense',
+    name: 'Oxxo Jacarandas pleasure expense',
     raw: `Santander México
 Pago/Compra con Tarjeta Santander
 Estimado Cliente:
@@ -59,7 +59,15 @@ Te informamos que se ha realizado una compra en el comercio OXXO JACARANDAS con 
 El 04/06/2026 a las 21:07:57 hrs.
 Atentamente
 Santander México`,
-    expected: { concepto: 'OXXO JACARANDAS', monto: 338, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+    expected: { concepto: 'OXXO JACARANDAS', monto: 338, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
+  },
+  {
+    name: 'Oxxo service life expense',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio OXXO RECARGA TELCEL con tu tarjeta de TDC terminación **1765, por un monto de $200.00 MXN.
+El 04/06/2026 a las 21:07:57 hrs.`,
+    expected: { concepto: 'OXXO RECARGA TELCEL', monto: 200, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
   },
   {
     name: 'Non movement',
