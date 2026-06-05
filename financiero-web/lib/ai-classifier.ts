@@ -43,22 +43,35 @@ function validarClasificacion(valor: unknown): ClasificacionMovimiento {
 
 function limpiarConcepto(texto: string) {
   return texto
+    .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*k\b/gi, '')
     .replace(/\$?\d+(?:[,.]\d{1,2})?/g, '')
-    .replace(/\b(pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|de|en|a|al|la|el|un|una|por)\b/gi, ' ')
+    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|quincena|efectivo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|de|en|a|al|la|el|un|una|por)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
+function extraerMonto(texto: string) {
+  const normalizado = texto.toLowerCase();
+  const milesMatch = normalizado.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)\s*k\b/);
+
+  if (milesMatch?.[1]) {
+    return Number(milesMatch[1].replace(/,/g, '')) * 1000;
+  }
+
+  const montoMatch = normalizado.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)/);
+
+  return montoMatch ? Number(montoMatch[1].replace(/,/g, '')) : 0;
+}
+
 function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
   const normalizado = texto.toLowerCase();
-  const montoMatch = normalizado.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)/);
-  const monto = montoMatch ? Number(montoMatch[1].replace(/,/g, '')) : 0;
+  const monto = extraerMonto(texto);
 
   if (!Number.isFinite(monto) || monto <= 0) return null;
 
   const concepto = limpiarConcepto(texto) || 'Movimiento';
 
-  if (/\b(gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision)\b/.test(normalizado)) {
+  if (/\b(reg[ií]strame|registrame|registra|registrar|gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision|efectivo)\b/.test(normalizado) && /\b(ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|efectivo)\b/.test(normalizado)) {
     return {
       concepto,
       monto,

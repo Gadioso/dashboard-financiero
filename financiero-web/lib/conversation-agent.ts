@@ -81,6 +81,10 @@ function detectarIntent(texto: string): Intent {
     return { type: 'help' };
   }
 
+  if (/\d/.test(normalizado) && esRegistroExplicito(normalizado)) {
+    return { type: 'movement', text: texto };
+  }
+
   const actualizarCategoriaMatch = normalizado.match(/\b(?:cambia|cambiar|corrige|corregir|clasifica|clasificar|pon|poner)\s+(?:el\s+)?(?:gasto\s+)?([a-z0-9-]{1,})\s+(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversi[oó]n|inversion|ahorro|emergencia)\b/i);
 
   if (actualizarCategoriaMatch?.[1] && actualizarCategoriaMatch?.[2]) {
@@ -143,11 +147,15 @@ function normalizarIntentIA(valor: unknown, textoOriginal: string): Intent | nul
 }
 
 function esRegistroExplicito(normalizado: string) {
-  return /\b(?:pagu[eé]|pag[ué]é|gast[eé]|gaste|compr[eé]|compre|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|me\s+pagaron|depositaron|registra|registrar|agrega|agregar|a[nñ]ade|añade)\b/.test(normalizado);
+  return /\b(?:pagu[eé]|pag[ué]é|gast[eé]|gaste|compr[eé]|compre|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|me\s+pagaron|depositaron|reg[ií]strame|registrame|registra|registrar|agrega|agregar|a[nñ]ade|añade)\b/.test(normalizado);
 }
 
 function protegerIntentAmbiguo(intent: Intent, texto: string): Intent {
   const normalizado = texto.toLowerCase();
+
+  if (/\d/.test(normalizado) && esRegistroExplicito(normalizado)) {
+    return { type: 'movement', text: texto };
+  }
 
   if (intent.type === 'movement' && !esRegistroExplicito(normalizado)) {
     return { type: 'conversation', text: texto };
@@ -187,7 +195,9 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
   },
   "critical_rules": [
     "Questions like 'de dónde sale', 'por qué', 'qué significa', 'eso', 'esos 92k', 'sin sentido' are conversation even if they include numbers.",
-    "Use movement only when there is an amount and an explicit registration verb: pagar, gastar, comprar, ganar, cobrar, recibir, invertir, aportar, agregar, registrar.",
+    "Use movement when there is an amount and an explicit registration verb: pagar, gastar, comprar, ganar, cobrar, recibir, invertir, aportar, agregar, registrar, regístrame.",
+    "'Regístrame $15k de ingresos de quincena de Aire' is movement, tipo ingreso.",
+    "'15k ingresos quincena Aire' is movement, tipo ingreso.",
     "A number inside a question is not a movement.",
     "'y todo mayo', 'en todo este mes de mayo', 'pero en todo enero' are summary.",
     "'de enero a mayo', 'enero para acá', 'todo el año', 'desde enero' are summary.",
@@ -728,6 +738,7 @@ async function responderConversacionAbierta({
   },
   "behavior_contract": [
     "Use only the provided financial_context and recent_chat_memory. Do not invent data.",
+    "Never say you cannot modify the database as a general rule. This Telegram bot can register movements when the router classifies the message as movement.",
     "Understand natural follow-ups such as 'y mayo?', 'pero completo', 'de dónde sale eso?', 'qué opinas?', 'está bien o mal?'.",
     "If the user asks where a number comes from, show the exact breakdown using ingresosDetalle, gastosPorBolsa or gastosRecientes.",
     "If the user asks for an opinion, give a diagnosis, the main risk, and the next best action. Do not repeat every dashboard number.",
@@ -760,6 +771,20 @@ async function responderConversacionAbierta({
   return message || 'Estoy aquí. Puedo revisar tus bolsas, gastos, ingresos o ayudarte a registrar un movimiento.';
 }
 
+function completarFollowUpMovimiento(texto: string, memoria: MensajeMemoria[]) {
+  const normalizado = texto.trim().toLowerCase();
+
+  if (!/\b(?:efectivo|cash|tarjeta|santander|transferencia|spei)\b/.test(normalizado) || /\d/.test(normalizado)) {
+    return texto;
+  }
+
+  const ultimoUsuario = [...memoria]
+    .reverse()
+    .find((mensaje) => mensaje.role === 'user' && /\d/.test(mensaje.content) && esRegistroExplicito(mensaje.content.toLowerCase()));
+
+  return ultimoUsuario ? `${ultimoUsuario.content} ${texto}` : texto;
+}
+
 export async function responderConversacionFinanciera({
   texto,
   apiKey,
@@ -774,7 +799,8 @@ export async function responderConversacionFinanciera({
   | { action: 'reply'; message: string }
   | { action: 'movement'; movement: MovementResult; message: string }
 > {
-  const intent = await detectarIntentInteligente(texto, apiKey);
+  const textoConContexto = completarFollowUpMovimiento(texto, memoria);
+  const intent = await detectarIntentInteligente(textoConContexto, apiKey);
 
   if (intent.type === 'help') {
     return { action: 'reply', message: ayuda };
