@@ -120,7 +120,7 @@ async function notificarGastoSantander({
     '"cámbialo a futuro"',
   ].join('\n');
 
-  await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -128,6 +128,11 @@ async function notificarGastoSantander({
       text: message,
     }),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Telegram no pudo enviar la alerta Santander: ${response.status} ${errorText}`);
+  }
 
   await guardarUltimoGastoNotificado({
     supabase,
@@ -343,6 +348,11 @@ export async function POST(request: Request) {
     });
 
     if (duplicado) {
+      await notificarGastoSantander({
+        supabase,
+        gasto: duplicado,
+      });
+
       return NextResponse.json({ success: true, duplicate: true, data: duplicado, parsed });
     }
 
