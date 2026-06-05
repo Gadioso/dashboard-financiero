@@ -159,20 +159,6 @@ export default function DashboardFinanciero() {
         faseAhorro: 'Regla 33/33/33 activa'
       });
 
-      if (mesActivo === mesActualKey && ingresosMes === 0) {
-        const ultimoMesConIngreso = [...ingresosTodoElAño]
-          .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-          .find((ingreso) => Number(ingreso.monto) > 0);
-
-        if (ultimoMesConIngreso) {
-          const siguienteMesActivo = mesKeyDesdeFecha(new Date(ultimoMesConIngreso.fecha));
-
-          if (siguienteMesActivo !== mesActivo) {
-            setMesActivo(siguienteMesActivo);
-          }
-        }
-      }
-
       setResumenMensual(
         calcularResumenMensual2026({
           ingresos: ingresosTodoElAño,
@@ -307,7 +293,7 @@ export default function DashboardFinanciero() {
   };
 
   const calcularPorcentaje = (gastado: number, limite: number) => {
-    if (!limite) return 0;
+    if (!limite) return gastado > 0 ? 100 : 0;
     return Math.min((gastado / limite) * 100, 100);
   };
 
@@ -320,6 +306,8 @@ export default function DashboardFinanciero() {
     gastado: resumen.gastado,
   });
   const presupuestoPromedio = calcularPresupuestoTresTercios(resumen.promedioIngresosUltimos3Meses);
+  const totalGastadoMes = resumen.gastado.Vida + resumen.gastado.Placeres + resumen.gastado.Futuro;
+  const mesSinIngresosConGastos = resumen.ingresosMes === 0 && totalGastadoMes > 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-6 md:p-10">
@@ -423,6 +411,15 @@ export default function DashboardFinanciero() {
           <p className="text-xs text-slate-500 mt-2">Crece junto con tus ingresos reales.</p>
         </div>
       </div>
+
+      {mesSinIngresosConGastos && (
+        <div className="mb-8 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-100">
+          <p className="font-semibold">Este mes tiene gastos registrados, pero todavía no tiene ingresos cargados.</p>
+          <p className="mt-1 text-amber-100/80">
+            Por eso el presupuesto real de las bolsas aparece en $0. Como referencia, tu presupuesto sugerido por promedio de 3 meses es de ${formatearMonto(presupuestoPromedio.Vida)} por bolsa.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
