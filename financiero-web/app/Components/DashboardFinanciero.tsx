@@ -82,6 +82,8 @@ export default function DashboardFinanciero() {
   const [resumen, setResumen] = useState(resumenInicial);
   const [resumenMensual, setResumenMensual] = useState<ResumenMensual[]>([]);
   const [ultimosMovimientos, setUltimosMovimientos] = useState<Movimiento[]>([]);
+  const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
+  const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -149,6 +151,8 @@ export default function DashboardFinanciero() {
           }
         : calcularPresupuestoTresTercios(ingresosMes);
 
+      setIngresosMensuales([...ingresosDelMes].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
+      setGastosMensuales([...gastosDelMes].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
       setUltimosMovimientos(combinarMovimientos({ ingresos: ingresosDelMes, gastos: gastosDelMes }));
 
       setResumen({
@@ -292,6 +296,36 @@ export default function DashboardFinanciero() {
     }
   };
 
+  const eliminarIngreso = async (ingreso: Ingreso) => {
+    const confirmar = window.confirm(`¿Eliminar este ingreso?\n\n${ingreso.concepto || 'Ingreso'} - $${formatearMonto(ingreso.monto)}`);
+
+    if (!confirmar) return;
+
+    const ingresoId = String(ingreso.id);
+    setDeletingId(`ingreso-${ingresoId}`);
+    setMensajeStatus('Eliminando ingreso...');
+
+    try {
+      const response = await fetch(`/api/ingresos/${ingresoId}`, {
+        method: 'DELETE',
+      });
+
+      const resultado = await response.json();
+
+      if (resultado.success) {
+        setMensajeStatus('Ingreso eliminado correctamente. Bolsas recalculadas.');
+        await fetchData();
+      } else {
+        setMensajeStatus(`Error: ${resultado.error}`);
+      }
+    } catch {
+      setMensajeStatus('Ocurrió un error al eliminar el ingreso.');
+    } finally {
+      setDeletingId(null);
+      setTimeout(() => setMensajeStatus(''), 5000);
+    }
+  };
+
   const calcularPorcentaje = (gastado: number, limite: number) => {
     if (!limite) return gastado > 0 ? 100 : 0;
     return Math.min((gastado / limite) * 100, 100);
@@ -307,25 +341,34 @@ export default function DashboardFinanciero() {
   });
   const presupuestoPromedio = calcularPresupuestoTresTercios(resumen.promedioIngresosUltimos3Meses);
   const totalGastadoMes = resumen.gastado.Vida + resumen.gastado.Placeres + resumen.gastado.Futuro;
+  const flujoNetoMes = resumen.ingresosMes - totalGastadoMes;
+  const tasaFuturo = resumen.ingresosMes > 0 ? (resumen.gastado.Futuro / resumen.ingresosMes) * 100 : 0;
+  const fechaActual = new Date();
+  const diasDelMes = new Date(Date.UTC(fechaActual.getUTCFullYear(), fechaActual.getUTCMonth() + 1, 0)).getUTCDate();
+  const avanceMes = mesActivo === mesActualKey ? Math.min((fechaActual.getUTCDate() / diasDelMes) * 100, 100) : 100;
+  const burnRate = resumen.presupuesto.Vida + resumen.presupuesto.Placeres > 0
+    ? ((resumen.gastado.Vida + resumen.gastado.Placeres) / (resumen.presupuesto.Vida + resumen.presupuesto.Placeres)) * 100
+    : totalGastadoMes > 0 ? 100 : 0;
   const mesSinIngresosConGastos = resumen.ingresosMes === 0 && totalGastadoMes > 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-6 md:p-10">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] text-slate-100 font-sans p-4 md:p-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-800 pb-6 mb-8">
+      <div className="mx-auto max-w-[1500px]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-white/10 pb-6 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
             Dashboard Financiero
           </h1>
-          <p className="text-slate-400 mt-1">Estrategia de los Tres Tercios</p>
+          <p className="text-slate-400 mt-1">Control mensual, automatización Santander y regla 33/33/33.</p>
         </div>
-        <div className="mt-4 md:mt-0 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-sm font-medium self-start">
+        <div className="mt-4 md:mt-0 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-300 self-start">
           {loading ? 'Actualizando datos...' : 'Regla 33/33/33 activa'}
         </div>
       </div>
 
       {/* Barra de Alta Rápida con IA */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
+      <div className="bg-slate-950/70 border border-white/10 shadow-2xl shadow-slate-950/40 rounded-2xl p-5 mb-6 backdrop-blur">
         <h2 className="text-lg font-semibold mb-3 text-emerald-400">Registra un movimiento, Diego</h2>
         <form onSubmit={procesarGastoIA} className="flex flex-col md:flex-row gap-3">
           <input
@@ -349,7 +392,7 @@ export default function DashboardFinanciero() {
         )}
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
+      <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-5 mb-6 backdrop-blur">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-100">Estado Gmail / Santander</h2>
@@ -374,6 +417,34 @@ export default function DashboardFinanciero() {
           </div>
         </div>
         {santanderStatus?.error && <p className="text-xs text-rose-300 mt-3">{santanderStatus.error}</p>}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-200/80">Ingresos</p>
+          <p className="mt-2 text-2xl font-bold">${formatearMonto(resumen.ingresosMes)}</p>
+          <p className="mt-1 text-xs text-emerald-100/60">{ingresosMensuales.length} registros del mes</p>
+        </div>
+        <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-rose-200/80">Egresos</p>
+          <p className="mt-2 text-2xl font-bold">${formatearMonto(totalGastadoMes)}</p>
+          <p className="mt-1 text-xs text-rose-100/60">{gastosMensuales.length} gastos del mes</p>
+        </div>
+        <div className={`rounded-2xl border p-4 ${flujoNetoMes < 0 ? 'border-rose-400/20 bg-rose-400/10' : 'border-cyan-400/20 bg-cyan-400/10'}`}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Flujo neto</p>
+          <p className={`mt-2 text-2xl font-bold ${flujoNetoMes < 0 ? 'text-rose-200' : 'text-cyan-200'}`}>${formatearMonto(flujoNetoMes)}</p>
+          <p className="mt-1 text-xs text-slate-400">Ingresos menos egresos</p>
+        </div>
+        <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-200/80">Futuro invertido</p>
+          <p className="mt-2 text-2xl font-bold">{tasaFuturo.toFixed(1)}%</p>
+          <p className="mt-1 text-xs text-indigo-100/60">${formatearMonto(resumen.gastado.Futuro)} este mes</p>
+        </div>
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-200/80">Burn rate</p>
+          <p className="mt-2 text-2xl font-bold">{burnRate.toFixed(1)}%</p>
+          <p className="mt-1 text-xs text-amber-100/60">Mes avanzado {avanceMes.toFixed(1)}%</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -437,6 +508,122 @@ export default function DashboardFinanciero() {
           <h2 className="text-2xl font-bold mt-2">${formatearMonto(presupuestoPromedio.Futuro)} MXN</h2>
           <p className="text-xs text-slate-500 mt-2">Meta mensual sugerida para inversión/ahorro con promedio de 3 meses.</p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 mb-8 xl:grid-cols-2">
+        <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-slate-950/30">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-emerald-200">Ingresos del mes</h2>
+              <p className="text-sm text-slate-400">Todo lo que entra durante el mes activo.</p>
+            </div>
+            <span className="rounded-lg bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-200">
+              ${formatearMonto(resumen.ingresosMes)}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
+                  <th className="pb-3 font-semibold">Fecha</th>
+                  <th className="pb-3 font-semibold">Concepto</th>
+                  <th className="pb-3 font-semibold">Tipo</th>
+                  <th className="pb-3 text-right font-semibold">Monto</th>
+                  <th className="pb-3 text-right font-semibold">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {ingresosMensuales.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-5 text-center text-slate-500">No hay ingresos registrados en este mes.</td>
+                  </tr>
+                ) : (
+                  ingresosMensuales.map((ingreso) => (
+                    <tr key={ingreso.id} className="transition-colors hover:bg-emerald-400/5">
+                      <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(ingreso.fecha)}</td>
+                      <td className="py-3 font-medium text-slate-100">{ingreso.concepto || 'Ingreso'}</td>
+                      <td className="py-3 text-slate-400">{ingreso.tipo || 'Ingreso'}</td>
+                      <td className="py-3 text-right font-semibold text-emerald-300">+${formatearMonto(ingreso.monto)}</td>
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => eliminarIngreso(ingreso)}
+                          disabled={deletingId === `ingreso-${ingreso.id}`}
+                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deletingId === `ingreso-${ingreso.id}` ? 'Eliminando...' : 'Eliminar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-slate-950/30">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-rose-100">Egresos del mes</h2>
+              <p className="text-sm text-slate-400">Gastos separados por bolsa, origen y subcategoría.</p>
+            </div>
+            <span className="rounded-lg bg-rose-400/10 px-3 py-1 text-sm font-semibold text-rose-200">
+              ${formatearMonto(totalGastadoMes)}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
+                  <th className="pb-3 font-semibold">Fecha</th>
+                  <th className="pb-3 font-semibold">Concepto</th>
+                  <th className="pb-3 font-semibold">Bolsa</th>
+                  <th className="pb-3 font-semibold">Origen</th>
+                  <th className="pb-3 text-right font-semibold">Monto</th>
+                  <th className="pb-3 text-right font-semibold">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {gastosMensuales.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-5 text-center text-slate-500">No hay egresos registrados en este mes.</td>
+                  </tr>
+                ) : (
+                  gastosMensuales.map((gasto) => (
+                    <tr key={gasto.id} className="transition-colors hover:bg-rose-400/5">
+                      <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(gasto.fecha)}</td>
+                      <td className="py-3">
+                        <p className="font-medium text-slate-100">{gasto.concepto}</p>
+                        <p className="text-xs text-slate-500">{gasto.subcategoria || 'Sin subcategoría'}</p>
+                      </td>
+                      <td className="py-3">
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                          nombreBolsa(String(gasto.categoria)) === 'Placeres' ? 'bg-emerald-400/10 text-emerald-300' :
+                          nombreBolsa(String(gasto.categoria)) === 'Vida' ? 'bg-cyan-400/10 text-cyan-300' : 'bg-indigo-400/10 text-indigo-300'
+                        }`}>
+                          {nombreBolsa(String(gasto.categoria))}
+                        </span>
+                      </td>
+                      <td className="py-3 text-slate-400">{nombreOrigen(gasto.origen, gasto.subcategoria)}</td>
+                      <td className="py-3 text-right font-semibold text-rose-100">-${formatearMonto(gasto.monto)}</td>
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => eliminarGasto(gasto)}
+                          disabled={deletingId === gasto.id}
+                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deletingId === gasto.id ? 'Eliminando...' : 'Eliminar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
@@ -631,7 +818,20 @@ export default function DashboardFinanciero() {
                           {deletingId === movimiento.id.replace('gasto-', '') ? 'Eliminando...' : 'Eliminar'}
                         </button>
                       ) : (
-                        <span className="text-xs text-slate-600">Sin acción</span>
+                        <button
+                          type="button"
+                          onClick={() => eliminarIngreso({
+                            id: movimiento.id.replace('ingreso-', ''),
+                            concepto: movimiento.concepto,
+                            monto: movimiento.monto,
+                            tipo: movimiento.subcategoria,
+                            fecha: movimiento.fecha,
+                          })}
+                          disabled={deletingId === movimiento.id}
+                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deletingId === movimiento.id ? 'Eliminando...' : 'Eliminar'}
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -640,6 +840,7 @@ export default function DashboardFinanciero() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );
