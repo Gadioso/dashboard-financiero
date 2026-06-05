@@ -51,6 +51,17 @@ El 02/06/2026 a las 10:00:00 hrs.`,
     expected: { concepto: 'CODEX', monto: 299, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Herramientas Trabajo' },
   },
   {
+    name: 'Oxxo Jacarandas life expense',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Estimado Cliente:
+Te informamos que se ha realizado una compra en el comercio OXXO JACARANDAS con tu tarjeta de TDC terminación **1765, por un monto de $338.00 MXN.
+El 04/06/2026 a las 21:07:57 hrs.
+Atentamente
+Santander México`,
+    expected: { concepto: 'OXXO JACARANDAS', monto: 338, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+  },
+  {
     name: 'Non movement',
     raw: `Santander México
 SUPERTOKEN ACTIVADO
