@@ -437,12 +437,54 @@ function etiquetaPeriodo({
 }
 
 function rangoMesDesdeTexto(texto: string) {
+  const rangoRelativo = detectarRangoRelativo(texto);
+
+  if (rangoRelativo) return rangoRelativo;
+
   const { year, monthIndex } = detectarMesConsulta(texto);
 
   return {
     inicio: new Date(Date.UTC(year, monthIndex, 1)).toISOString(),
     fin: new Date(Date.UTC(year, monthIndex + 1, 1)).toISOString(),
     etiqueta: `${String(monthIndex + 1).padStart(2, '0')}/${year}`,
+  };
+}
+
+function fechaActualMexicoUTC() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
+
+function detectarRangoRelativo(texto: string) {
+  const normalizado = texto.toLowerCase();
+  const hoy = fechaActualMexicoUTC();
+  let offset: number | null = null;
+  let etiqueta = '';
+
+  if (/\b(ayer|anoche|de\s+ayer|solo\s+los\s+de\s+ayer)\b/.test(normalizado)) {
+    offset = -1;
+    etiqueta = 'ayer';
+  } else if (/\b(hoy|de\s+hoy|solo\s+los\s+de\s+hoy)\b/.test(normalizado)) {
+    offset = 0;
+    etiqueta = 'hoy';
+  }
+
+  if (offset === null) return null;
+
+  const inicio = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate() + offset));
+  const fin = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate() + offset + 1));
+
+  return {
+    inicio: inicio.toISOString(),
+    fin: fin.toISOString(),
+    etiqueta,
   };
 }
 
@@ -458,6 +500,21 @@ function detectarMesConsulta(texto: string) {
 }
 
 function detectarPeriodoConsulta(texto: string) {
+  const rangoRelativo = detectarRangoRelativo(texto);
+
+  if (rangoRelativo) {
+    const inicio = new Date(rangoRelativo.inicio);
+
+    return {
+      inicio: rangoRelativo.inicio,
+      fin: rangoRelativo.fin,
+      etiqueta: rangoRelativo.etiqueta,
+      year: inicio.getUTCFullYear(),
+      monthIndex: inicio.getUTCMonth(),
+      isRange: false,
+    };
+  }
+
   const ahora = new Date();
   const normalizado = texto.toLowerCase();
   const yearMatch = normalizado.match(/\b(20\d{2})\b/);

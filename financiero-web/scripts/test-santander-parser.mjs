@@ -70,6 +70,22 @@ El 04/06/2026 a las 21:07:57 hrs.`,
     expected: { concepto: 'OXXO RECARGA TELCEL', monto: 200, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
   },
   {
+    name: '7 Eleven convenience pleasure expense',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio 7 ELEVEN T2718 JAVIER con tu tarjeta de TDC terminación **1765, por un monto de $248.00 MXN.
+El 06/06/2026 a las 22:15:35 hrs.`,
+    expected: { concepto: '7 ELEVEN T2718 JAVIER', monto: 248, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
+  },
+  {
+    name: 'Credit card payment',
+    raw: `Santander México
+Pago de Tarjeta de Crédito Santander
+Te informamos que se realizó un pago a tu tarjeta de crédito TDC terminación **1765, por un monto de $5,000.00 MXN.
+El 07/06/2026 a las 10:00:00 hrs.`,
+    expected: { concepto: 'Pago tarjeta de crédito Santander', monto: 5000, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Pago Tarjeta Credito' },
+  },
+  {
     name: 'Non movement',
     raw: `Santander México
 SUPERTOKEN ACTIVADO

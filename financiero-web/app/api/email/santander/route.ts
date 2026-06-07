@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { buscarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { categoriaParaGastos, formatearFecha, formatearMonto, nombreBolsa } from '@/lib/financial-core';
+import { obtenerSantanderIngestLogs, registrarSantanderIngestLog } from '@/lib/santander-ingest-log';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -27,6 +28,14 @@ function rangoDiaUTC(fecha: Date) {
 
 function idCorto(id: string | number) {
   return String(id).slice(0, 8);
+}
+
+function detectarMedioPagoSantander(raw: string) {
+  if (/\b(tdc|tarjeta\s+de\s+tdc|tarjeta\s+de\s+cr[eé]dito)\b/i.test(raw)) {
+    return 'Tarjeta de crédito Santander';
+  }
+
+  return null;
 }
 
 async function guardarUltimoGastoNotificado({
@@ -91,6 +100,7 @@ async function obtenerChatNotificacion(supabase: SupabaseClient) {
 async function notificarGastoSantander({
   supabase,
   gasto,
+  medioPago,
 }: {
   supabase: SupabaseClient;
   gasto: {
@@ -101,25 +111,27 @@ async function notificarGastoSantander({
     subcategoria?: string | null;
     fecha: string;
   };
+  medioPago?: string | null;
 }) {
-  if (!telegramBotToken) return;
+  if (!telegramBotToken) return false;
 
   const chatId = await obtenerChatNotificacion(supabase);
 
-  if (!chatId) return;
+  if (!chatId) return false;
 
   const id = idCorto(gasto.id);
   const categoria = `${nombreBolsa(gasto.categoria)}${gasto.subcategoria ? ` / ${gasto.subcategoria}` : ''}`;
   const message = [
     'Santander registrado.',
     `${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto}`,
+    medioPago ? `Medio: ${medioPago}.` : null,
     `Lo clasifiqué como: ${categoria}.`,
     `ID: ${id}`,
     'Si está mal, responde:',
     '"cámbialo a vida"',
     '"cámbialo a placer"',
     '"cámbialo a futuro"',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
     method: 'POST',
@@ -141,6 +153,8 @@ async function notificarGastoSantander({
     gastoId: gasto.id,
     message,
   });
+
+  return true;
 }
 
 async function buscarIngresoDuplicado({
@@ -246,6 +260,7 @@ export async function GET() {
       aceptaOrigenSantanderEmail(supabase),
       aceptaFaseRegla333333(supabase),
     ]);
+    const ingestLogs = await obtenerSantanderIngestLogs(supabase);
 
     return NextResponse.json({
       success: true,
@@ -256,8 +271,10 @@ export async function GET() {
       supabaseSchema: {
         acceptsSantanderEmailOrigin: origenSantanderEmail,
         acceptsRegla333333Phase: faseRegla333333,
-        migrationRequired: !origenSantanderEmail || !faseRegla333333,
+        acceptsSantanderIngestLogs: ingestLogs.available,
+        migrationRequired: !origenSantanderEmail || !faseRegla333333 || !ingestLogs.available,
       },
+      ingestLogs,
       endpoint: '/api/email/santander',
     });
   } catch (error: unknown) {
@@ -292,16 +309,35 @@ export async function POST(request: Request) {
     ].filter(Boolean).join('\n\n');
 
     if (!tieneSenalSantander(raw)) {
+      await registrarSantanderIngestLog({
+        supabase,
+        gmailMessageId: body.gmailMessageId,
+        from: body.from,
+        subject: body.subject,
+        status: 'ignored',
+        reason: 'Correo sin señal Santander.',
+      });
+
       return NextResponse.json({ success: true, ignored: true, reason: 'Correo sin señal Santander.' });
     }
 
     const parsed = parsearCorreoSantander(raw);
 
     if (!parsed) {
+      await registrarSantanderIngestLog({
+        supabase,
+        gmailMessageId: body.gmailMessageId,
+        from: body.from,
+        subject: body.subject,
+        status: 'ignored',
+        reason: 'No parece ser movimiento Santander.',
+      });
+
       return NextResponse.json({ success: true, ignored: true, reason: 'No parece ser movimiento Santander.' });
     }
 
     const fecha = parsed.fechaMovimiento ? new Date(parsed.fechaMovimiento) : body.fecha ? new Date(body.fecha) : new Date();
+    const medioPago = detectarMedioPagoSantander(raw);
 
     if (Number.isNaN(fecha.getTime())) {
       return NextResponse.json({ success: false, error: 'Fecha inválida.' }, { status: 400 });
@@ -316,6 +352,17 @@ export async function POST(request: Request) {
       });
 
       if (duplicado) {
+        await registrarSantanderIngestLog({
+          supabase,
+          gmailMessageId: body.gmailMessageId,
+          from: body.from,
+          subject: body.subject,
+          status: 'duplicate',
+          reason: 'Ingreso duplicado por día, concepto y monto.',
+          parsed,
+          ingresoId: duplicado.id,
+        });
+
         return NextResponse.json({ success: true, duplicate: true, data: duplicado, parsed });
       }
 
@@ -337,6 +384,16 @@ export async function POST(request: Request) {
       }
 
       await sincronizarPresupuestoMensual(supabase, fecha);
+      await registrarSantanderIngestLog({
+        supabase,
+        gmailMessageId: body.gmailMessageId,
+        from: body.from,
+        subject: body.subject,
+        status: 'inserted',
+        reason: 'Ingreso Santander insertado.',
+        parsed,
+        ingresoId: data.id,
+      });
 
       return NextResponse.json({ success: true, data, parsed });
     }
@@ -353,9 +410,21 @@ export async function POST(request: Request) {
     });
 
     if (duplicado) {
-      await notificarGastoSantander({
+      const telegramNotified = await notificarGastoSantander({
         supabase,
         gasto: duplicado,
+        medioPago,
+      });
+      await registrarSantanderIngestLog({
+        supabase,
+        gmailMessageId: body.gmailMessageId,
+        from: body.from,
+        subject: body.subject,
+        status: 'duplicate',
+        reason: 'Gasto duplicado por día, concepto y monto.',
+        parsed,
+        gastoId: duplicado.id,
+        telegramNotified,
       });
 
       return NextResponse.json({ success: true, duplicate: true, data: duplicado, parsed });
@@ -397,9 +466,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: result.error.message }, { status: 500 });
     }
 
-    await notificarGastoSantander({
+    const telegramNotified = await notificarGastoSantander({
       supabase,
       gasto: result.data,
+      medioPago,
+    });
+    await registrarSantanderIngestLog({
+      supabase,
+      gmailMessageId: body.gmailMessageId,
+      from: body.from,
+      subject: body.subject,
+      status: 'inserted',
+      reason: 'Gasto Santander insertado.',
+      parsed,
+      gastoId: result.data.id,
+      telegramNotified,
     });
 
     return NextResponse.json({ success: true, data: result.data, parsed });

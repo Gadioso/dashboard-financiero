@@ -46,6 +46,15 @@ function extraerFechaMovimiento(texto: string) {
   return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second))).toISOString();
 }
 
+function esPagoTarjetaCredito(texto: string) {
+  if (/\bcompra\s+en\s+el\s+comercio\b/i.test(texto) || /\bPago\/Compra\s+con\s+Tarjeta\s+Santander\b/i.test(texto)) {
+    return false;
+  }
+
+  return /\b(?:pago|pagaste|abono|abonaste|liquidaci[oó]n|liquidaste)\b.{0,80}\b(?:tarjeta\s+de\s+cr[eé]dito|tdc|tarjeta)\b/i.test(texto) ||
+    /\b(?:tarjeta\s+de\s+cr[eé]dito|tdc)\b.{0,80}\b(?:pago|pagaste|abono|abonaste|liquidaci[oó]n|liquidaste)\b/i.test(texto);
+}
+
 function clasificarComercio(concepto: string, texto: string) {
   const normalizado = `${concepto} ${texto}`.toLowerCase();
 
@@ -65,19 +74,19 @@ function clasificarComercio(concepto: string, texto: string) {
     };
   }
 
-  if (/\boxxo\b/i.test(normalizado)) {
+  if (/\b(oxxo|7\s*eleven|seven\s+eleven)\b/i.test(normalizado)) {
     if (/\b(recarga|telcel|at[&y]t|movistar|servicio|luz|agua|internet|dep[oó]sito|deposito|farmacia|medicina|gasolina)\b/i.test(normalizado)) {
       return {
         categoria: 'Vida' as const,
         subcategoria: 'Costo de Vida',
-        razon: 'OXXO con señal de servicio, recarga, salud o gasto necesario.',
+        razon: 'Tienda de conveniencia con señal de servicio, recarga, salud o gasto necesario.',
       };
     }
 
     return {
       categoria: 'Placeres' as const,
       subcategoria: 'Otros Placeres',
-      razon: 'OXXO sin señal de necesidad; por criterio de Diego se trata como consumo discrecional.',
+      razon: 'Tienda de conveniencia sin señal de necesidad; por criterio de Diego se trata como consumo discrecional.',
     };
   }
 
@@ -114,9 +123,10 @@ export function parsearCorreoSantander(raw: string): ClasificacionMovimiento | n
   if (!Number.isFinite(monto) || monto <= 0) return null;
 
   const esEgreso = /(compra|cargo|retiro|pago|disposici[oó]n)/i.test(normalizado);
-  const esIngreso = /(dep[oó]sito|deposito|abono|transferencia recibida|recibiste|te transfirieron|spei recibido)/i.test(normalizado);
+  const pagoTarjetaCredito = esPagoTarjetaCredito(texto);
+  const esIngreso = !pagoTarjetaCredito && /(dep[oó]sito|deposito|abono|transferencia recibida|recibiste|te transfirieron|spei recibido)/i.test(normalizado);
 
-  if (!esEgreso && !esIngreso) return null;
+  if (!esEgreso && !esIngreso && !pagoTarjetaCredito) return null;
 
   const concepto = extraerConcepto(texto);
   const fechaMovimiento = extraerFechaMovimiento(texto);
@@ -133,6 +143,18 @@ export function parsearCorreoSantander(raw: string): ClasificacionMovimiento | n
       categoria: 'Futuro',
       subcategoria: 'Santander',
       razon: 'Detectado desde correo Santander como entrada de dinero.',
+      fechaMovimiento,
+    };
+  }
+
+  if (pagoTarjetaCredito) {
+    return {
+      concepto: concepto === 'Movimiento Santander' ? 'Pago tarjeta de crédito Santander' : concepto,
+      monto,
+      tipo: 'gasto',
+      categoria: 'Vida',
+      subcategoria: 'Pago Tarjeta Credito',
+      razon: 'Detectado como pago/abono para reducir deuda de tarjeta de crédito Santander.',
       fechaMovimiento,
     };
   }
