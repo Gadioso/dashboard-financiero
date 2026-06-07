@@ -13,6 +13,7 @@ type SantanderIngestLogInput = {
   parsed?: ClasificacionMovimiento | null;
   gastoId?: string | number | null;
   ingresoId?: string | number | null;
+  abonoTarjetaId?: string | number | null;
   telegramNotified?: boolean;
   error?: string | null;
 };
@@ -27,6 +28,7 @@ export async function registrarSantanderIngestLog({
   parsed,
   gastoId,
   ingresoId,
+  abonoTarjetaId,
   telegramNotified,
   error,
 }: SantanderIngestLogInput) {
@@ -39,6 +41,7 @@ export async function registrarSantanderIngestLog({
     movimiento_tipo: parsed?.tipo || null,
     gasto_id: gastoId ? String(gastoId) : null,
     ingreso_id: ingresoId ? String(ingresoId) : null,
+    abono_tarjeta_id: abonoTarjetaId ? String(abonoTarjetaId) : null,
     concepto: parsed?.concepto || null,
     monto: parsed?.monto ?? null,
     categoria: parsed?.categoria || null,
@@ -57,7 +60,7 @@ export async function registrarSantanderIngestLog({
 export async function obtenerSantanderIngestLogs(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('santander_ingest_logs')
-    .select('id, created_at, gmail_message_id, subject, status, reason, movimiento_tipo, gasto_id, ingreso_id, concepto, monto, categoria, subcategoria, telegram_notified, error')
+    .select('id, created_at, gmail_message_id, subject, status, reason, movimiento_tipo, gasto_id, ingreso_id, abono_tarjeta_id, concepto, monto, categoria, subcategoria, telegram_notified, error')
     .order('created_at', { ascending: false })
     .limit(12);
 

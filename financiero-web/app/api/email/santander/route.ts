@@ -157,6 +157,50 @@ async function notificarGastoSantander({
   return true;
 }
 
+async function notificarAbonoTarjetaSantander({
+  supabase,
+  abono,
+}: {
+  supabase: SupabaseClient;
+  abono: {
+    id: string | number;
+    concepto: string;
+    monto: number | string;
+    tarjeta?: string | null;
+    fecha: string;
+  };
+}) {
+  if (!telegramBotToken) return false;
+
+  const chatId = await obtenerChatNotificacion(supabase);
+
+  if (!chatId) return false;
+
+  const message = [
+    'Abono Santander registrado.',
+    `${formatearFecha(abono.fecha)} · $${formatearMonto(abono.monto)} · ${abono.concepto}`,
+    abono.tarjeta ? `Tarjeta: ${abono.tarjeta}.` : 'Tarjeta: TDC Santander.',
+    'Esto reduce tu deuda de tarjeta; no cuenta como gasto nuevo ni consume bolsa de Vida.',
+    `ID: ${idCorto(abono.id)}`,
+  ].join('\n');
+
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: message,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Telegram no pudo enviar la alerta de abono Santander: ${response.status} ${errorText}`);
+  }
+
+  return true;
+}
+
 async function buscarIngresoDuplicado({
   concepto,
   monto,
@@ -209,6 +253,32 @@ async function buscarGastoDuplicado({
   return data;
 }
 
+async function buscarAbonoTarjetaDuplicado({
+  concepto,
+  monto,
+  fecha,
+  supabase,
+}: {
+  concepto: string;
+  monto: number;
+  fecha: Date;
+  supabase: SupabaseClient;
+}) {
+  const { inicio, fin } = rangoDiaUTC(fecha);
+  const { data, error } = await supabase
+    .from('abonos_tarjeta_credito')
+    .select('id, concepto, monto, tarjeta, origen, fecha')
+    .eq('concepto', concepto)
+    .eq('monto', monto)
+    .gte('fecha', inicio)
+    .lt('fecha', fin)
+    .maybeSingle();
+
+  if (error) throw new Error(`No pude buscar abono de tarjeta duplicado: ${error.message}`);
+
+  return data;
+}
+
 async function aceptaOrigenSantanderEmail(supabase: SupabaseClient) {
   const payload = {
     concepto: 'Healthcheck Santander Email',
@@ -248,6 +318,23 @@ async function aceptaFaseRegla333333(supabase: SupabaseClient) {
   return !result.error;
 }
 
+async function aceptaAbonosTarjetaCredito(supabase: SupabaseClient) {
+  const payload = {
+    concepto: 'Healthcheck abono TDC',
+    monto: 0.01,
+    tarjeta: 'Santander TDC',
+    origen: 'Healthcheck',
+    fecha: new Date(Date.UTC(2099, 0, 1)).toISOString(),
+  };
+  const { data, error } = await supabase.from('abonos_tarjeta_credito').insert([payload]).select('id').single();
+
+  if (data?.id) {
+    await supabase.from('abonos_tarjeta_credito').delete().eq('id', data.id);
+  }
+
+  return !error;
+}
+
 export async function GET() {
   try {
     const supabase = getSupabase();
@@ -256,9 +343,10 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
 
-    const [origenSantanderEmail, faseRegla333333] = await Promise.all([
+    const [origenSantanderEmail, faseRegla333333, abonosTarjetaCredito] = await Promise.all([
       aceptaOrigenSantanderEmail(supabase),
       aceptaFaseRegla333333(supabase),
+      aceptaAbonosTarjetaCredito(supabase),
     ]);
     const ingestLogs = await obtenerSantanderIngestLogs(supabase);
 
@@ -271,8 +359,9 @@ export async function GET() {
       supabaseSchema: {
         acceptsSantanderEmailOrigin: origenSantanderEmail,
         acceptsRegla333333Phase: faseRegla333333,
+        acceptsAbonosTarjetaCredito: abonosTarjetaCredito,
         acceptsSantanderIngestLogs: ingestLogs.available,
-        migrationRequired: !origenSantanderEmail || !faseRegla333333 || !ingestLogs.available,
+        migrationRequired: !origenSantanderEmail || !faseRegla333333 || !abonosTarjetaCredito || !ingestLogs.available,
       },
       ingestLogs,
       endpoint: '/api/email/santander',
@@ -341,6 +430,77 @@ export async function POST(request: Request) {
 
     if (Number.isNaN(fecha.getTime())) {
       return NextResponse.json({ success: false, error: 'Fecha inválida.' }, { status: 400 });
+    }
+
+    if (parsed.tipo === 'abono_tarjeta') {
+      const duplicado = await buscarAbonoTarjetaDuplicado({
+        concepto: parsed.concepto,
+        monto: parsed.monto,
+        fecha,
+        supabase,
+      });
+
+      if (duplicado) {
+        const telegramNotified = await notificarAbonoTarjetaSantander({
+          supabase,
+          abono: duplicado,
+        });
+        await registrarSantanderIngestLog({
+          supabase,
+          gmailMessageId: body.gmailMessageId,
+          from: body.from,
+          subject: body.subject,
+          status: 'duplicate',
+          reason: 'Abono de tarjeta duplicado por día, concepto y monto.',
+          parsed,
+          abonoTarjetaId: duplicado.id,
+          telegramNotified,
+        });
+
+        return NextResponse.json({ success: true, duplicate: true, data: duplicado, parsed });
+      }
+
+      const { data, error } = await supabase
+        .from('abonos_tarjeta_credito')
+        .insert([
+          {
+            concepto: parsed.concepto,
+            monto: parsed.monto,
+            tarjeta: medioPago || 'Tarjeta de crédito Santander',
+            origen: 'Santander_Email',
+            fecha: fecha.toISOString(),
+          },
+        ])
+        .select('id, concepto, monto, tarjeta, origen, fecha')
+        .single();
+
+      if (error) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `No pude guardar el abono de tarjeta. Ejecuta la migración de abonos si la tabla no existe: ${error.message}`,
+          },
+          { status: 500 }
+        );
+      }
+
+      const telegramNotified = await notificarAbonoTarjetaSantander({
+        supabase,
+        abono: data,
+      });
+      await registrarSantanderIngestLog({
+        supabase,
+        gmailMessageId: body.gmailMessageId,
+        from: body.from,
+        subject: body.subject,
+        status: 'inserted',
+        reason: 'Abono de tarjeta Santander insertado.',
+        parsed,
+        abonoTarjetaId: data.id,
+        telegramNotified,
+      });
+
+      return NextResponse.json({ success: true, data, parsed });
     }
 
     if (parsed.tipo === 'ingreso') {

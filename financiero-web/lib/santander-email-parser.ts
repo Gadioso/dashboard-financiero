@@ -151,8 +151,8 @@ export function parsearCorreoSantander(raw: string): ClasificacionMovimiento | n
     return {
       concepto: concepto === 'Movimiento Santander' ? 'Pago tarjeta de crédito Santander' : concepto,
       monto,
-      tipo: 'gasto',
-      categoria: 'Vida',
+      tipo: 'abono_tarjeta',
+      categoria: 'Futuro',
       subcategoria: 'Pago Tarjeta Credito',
       razon: 'Detectado como pago/abono para reducir deuda de tarjeta de crédito Santander.',
       fechaMovimiento,

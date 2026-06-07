@@ -83,7 +83,7 @@ El 06/06/2026 a las 22:15:35 hrs.`,
 Pago de Tarjeta de Crédito Santander
 Te informamos que se realizó un pago a tu tarjeta de crédito TDC terminación **1765, por un monto de $5,000.00 MXN.
 El 07/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'Pago tarjeta de crédito Santander', monto: 5000, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Pago Tarjeta Credito' },
+    expected: { concepto: 'Pago tarjeta de crédito Santander', monto: 5000, tipo: 'abono_tarjeta', categoria: 'Futuro', subcategoria: 'Pago Tarjeta Credito' },
   },
   {
     name: 'Non movement',

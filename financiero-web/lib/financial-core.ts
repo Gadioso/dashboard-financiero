@@ -1,6 +1,6 @@
 export type CategoriaFinanciera = 'Vida' | 'Placeres' | 'Futuro';
 export type CategoriaGasto = CategoriaFinanciera | 'Seguros';
-export type TipoMovimiento = 'gasto' | 'ingreso';
+export type TipoMovimiento = 'gasto' | 'ingreso' | 'abono_tarjeta';
 
 export type Gasto = {
   id: string | number;
@@ -17,6 +17,15 @@ export type Ingreso = {
   concepto: string | null;
   monto: number | string;
   tipo?: string | null;
+  fecha: string;
+};
+
+export type AbonoTarjetaCredito = {
+  id: string | number;
+  concepto: string;
+  monto: number | string;
+  tarjeta?: string | null;
+  origen: string;
   fecha: string;
 };
 

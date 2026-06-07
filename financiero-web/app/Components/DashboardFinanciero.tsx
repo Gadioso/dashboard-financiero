@@ -20,6 +20,7 @@ import {
   meses2026,
   type Gasto,
   type Ingreso,
+  type AbonoTarjetaCredito,
   type Movimiento,
   type ResumenMensual,
   nombreBolsa,
@@ -49,6 +50,7 @@ type SantanderStatus = {
   supabaseSchema?: {
     acceptsSantanderEmailOrigin: boolean;
     acceptsRegla333333Phase: boolean;
+    acceptsAbonosTarjetaCredito?: boolean;
     acceptsSantanderIngestLogs?: boolean;
     migrationRequired: boolean;
   };
@@ -102,6 +104,7 @@ export default function DashboardFinanciero() {
   const [ultimosMovimientos, setUltimosMovimientos] = useState<Movimiento[]>([]);
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
+  const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -123,7 +126,7 @@ export default function DashboardFinanciero() {
       const inicio2026 = new Date(Date.UTC(2026, 0, 1)).toISOString();
       const fin2026 = new Date(Date.UTC(2027, 0, 1)).toISOString();
 
-      const [{ data: pres }, { data: ingresosAnuales }, { data: gastosAnuales }] = await Promise.all([
+      const [{ data: pres }, { data: ingresosAnuales }, { data: gastosAnuales }, abonosTarjetaResult] = await Promise.all([
         supabase
         .from('presupuestos_mensuales')
         .select('techo_vida, techo_placeres, techo_futuro, fase_ahorro')
@@ -139,10 +142,17 @@ export default function DashboardFinanciero() {
           .select('*')
           .gte('fecha', inicio2026)
           .lt('fecha', fin2026),
+        supabase
+          .from('abonos_tarjeta_credito')
+          .select('id, concepto, monto, tarjeta, origen, fecha')
+          .gte('fecha', inicio2026)
+          .lt('fecha', fin2026)
+          .order('fecha', { ascending: false }),
       ]);
 
       const ingresosTodoElAño = (ingresosAnuales || []) as Ingreso[];
       const gastosTodoElAño = (gastosAnuales || []) as Gasto[];
+      const abonosTarjetaTodoElAño = abonosTarjetaResult.error ? [] : (abonosTarjetaResult.data || []) as AbonoTarjetaCredito[];
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -151,6 +161,10 @@ export default function DashboardFinanciero() {
       });
       const gastosDelMes = gastosTodoElAño.filter((gasto) => {
         const fecha = new Date(gasto.fecha).getTime();
+        return fecha >= inicioMes && fecha < finMes;
+      });
+      const abonosTarjetaDelMes = abonosTarjetaTodoElAño.filter((abono) => {
+        const fecha = new Date(abono.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
       });
 
@@ -171,6 +185,7 @@ export default function DashboardFinanciero() {
 
       setIngresosMensuales([...ingresosDelMes].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
       setGastosMensuales([...gastosDelMes].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
+      setAbonosTarjetaMensuales([...abonosTarjetaDelMes].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
       setUltimosMovimientos(combinarMovimientos({ ingresos: ingresosDelMes, gastos: gastosDelMes }));
 
       setResumen({
@@ -240,6 +255,13 @@ export default function DashboardFinanciero() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'ingresos' },
+        () => {
+          void fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'abonos_tarjeta_credito' },
         () => {
           void fetchData();
         }
@@ -358,6 +380,11 @@ export default function DashboardFinanciero() {
     gastado: resumen.gastado,
   });
   const presupuestoPromedio = calcularPresupuestoTresTercios(resumen.promedioIngresosUltimos3Meses);
+  const cargosSantanderTdcMes = gastosMensuales
+    .filter((gasto) => gasto.origen === 'Santander_Email')
+    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
+  const totalAbonosTarjetaMes = abonosTarjetaMensuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
+  const deudaTdcEstimadaMes = cargosSantanderTdcMes - totalAbonosTarjetaMes;
   const totalGastadoMes = resumen.gastado.Vida + resumen.gastado.Placeres + resumen.gastado.Futuro;
   const flujoNetoMes = resumen.ingresosMes - totalGastadoMes;
   const tasaFuturo = resumen.ingresosMes > 0 ? (resumen.gastado.Futuro / resumen.ingresosMes) * 100 : 0;
@@ -416,7 +443,7 @@ export default function DashboardFinanciero() {
             <h2 className="text-lg font-semibold text-slate-100">Estado Gmail / Santander</h2>
             <p className="text-sm text-slate-400 mt-1">Ingesta de correos Santander hacia Supabase.</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-4">
             <span className={`rounded-lg border px-3 py-2 ${
               santanderStatus?.configured?.emailIngestSecret ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
             }`}>
@@ -431,6 +458,11 @@ export default function DashboardFinanciero() {
               santanderStatus?.supabaseSchema?.migrationRequired === false ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
             }`}>
               Migración {santanderStatus?.supabaseSchema?.migrationRequired === false ? 'aplicada' : 'pendiente'}
+            </span>
+            <span className={`rounded-lg border px-3 py-2 ${
+              santanderStatus?.supabaseSchema?.acceptsAbonosTarjetaCredito ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+            }`}>
+              Abonos TDC {santanderStatus?.supabaseSchema?.acceptsAbonosTarjetaCredito ? 'listos' : 'pendientes'}
             </span>
           </div>
         </div>
@@ -477,7 +509,7 @@ export default function DashboardFinanciero() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-200/80">Ingresos</p>
           <p className="mt-2 text-2xl font-bold">${formatearMonto(resumen.ingresosMes)}</p>
@@ -502,6 +534,15 @@ export default function DashboardFinanciero() {
           <p className="text-xs font-semibold uppercase tracking-wider text-amber-200/80">Burn rate</p>
           <p className="mt-2 text-2xl font-bold">{burnRate.toFixed(1)}%</p>
           <p className="mt-1 text-xs text-amber-100/60">Mes avanzado {avanceMes.toFixed(1)}%</p>
+        </div>
+        <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-violet-200/80">TDC Santander</p>
+          <p className={`mt-2 text-2xl font-bold ${deudaTdcEstimadaMes > 0 ? 'text-violet-100' : 'text-emerald-200'}`}>
+            ${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}
+          </p>
+          <p className="mt-1 text-xs text-violet-100/60">
+            Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}
+          </p>
         </div>
       </div>
 
@@ -683,6 +724,50 @@ export default function DashboardFinanciero() {
           </div>
         </section>
       </div>
+
+      <section className="mb-8 rounded-2xl border border-violet-400/20 bg-slate-950/70 p-5 shadow-xl shadow-slate-950/30">
+        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-violet-100">Abonos a tarjeta de crédito</h2>
+            <p className="text-sm text-slate-400">Pagos para reducir deuda TDC. No cuentan como gasto nuevo ni consumen bolsas.</p>
+          </div>
+          <span className="rounded-lg bg-violet-400/10 px-3 py-1 text-sm font-semibold text-violet-200">
+            ${formatearMonto(totalAbonosTarjetaMes)}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[620px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
+                <th className="pb-3 font-semibold">Fecha</th>
+                <th className="pb-3 font-semibold">Concepto</th>
+                <th className="pb-3 font-semibold">Tarjeta</th>
+                <th className="pb-3 font-semibold">Origen</th>
+                <th className="pb-3 text-right font-semibold">Monto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {abonosTarjetaMensuales.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-5 text-center text-slate-500">
+                    No hay abonos de tarjeta registrados en este mes.
+                  </td>
+                </tr>
+              ) : (
+                abonosTarjetaMensuales.map((abono) => (
+                  <tr key={abono.id} className="transition-colors hover:bg-violet-400/5">
+                    <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(abono.fecha)}</td>
+                    <td className="py-3 font-medium text-slate-100">{abono.concepto}</td>
+                    <td className="py-3 text-slate-400">{abono.tarjeta || 'Tarjeta de crédito Santander'}</td>
+                    <td className="py-3 text-slate-400">{nombreOrigen(abono.origen)}</td>
+                    <td className="py-3 text-right font-semibold text-violet-200">-${formatearMonto(abono.monto)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
         <div className="flex flex-col gap-1 mb-5 md:flex-row md:items-end md:justify-between">
