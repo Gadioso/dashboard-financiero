@@ -1,23 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { buscarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { categoriaParaGastos, formatearFecha, formatearMonto, nombreBolsa } from '@/lib/financial-core';
 import { obtenerSantanderIngestLogs, registrarSantanderIngestLog } from '@/lib/santander-ingest-log';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
+import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const emailIngestSecret = process.env.EMAIL_INGEST_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramNotifyChatId = process.env.TELEGRAM_NOTIFY_CHAT_ID || '';
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseKey) return null;
-
-  return createClient(supabaseUrl, supabaseKey);
-}
 
 function rangoDiaUTC(fecha: Date) {
   const inicio = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
@@ -337,7 +329,7 @@ async function aceptaAbonosTarjetaCredito(supabase: SupabaseClient) {
 
 export async function GET() {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseServiceClient();
 
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
@@ -353,7 +345,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       configured: {
-        supabase: Boolean(supabaseUrl && supabaseKey),
+        supabase: Boolean(supabase),
         emailIngestSecret: Boolean(emailIngestSecret),
       },
       supabaseSchema: {
@@ -384,7 +376,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Ingesta de correo no autorizada.' }, { status: 401 });
     }
 
-    const supabase = getSupabase();
+    const supabase = getSupabaseServiceClient();
 
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });

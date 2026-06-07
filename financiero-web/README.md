@@ -39,7 +39,6 @@ Crear `.env.local` con:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL="https://..."
-NEXT_PUBLIC_SUPABASE_ANON_KEY="..."
 SUPABASE_SERVICE_ROLE_KEY="..."
 
 GOOGLE_API_KEY="..."
@@ -49,7 +48,7 @@ TELEGRAM_BOT_TOKEN="..."
 TELEGRAM_WEBHOOK_SECRET="..."
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` es recomendado para operaciones servidor como webhooks y borrados. La anon key puede funcionar si RLS lo permite.
+`SUPABASE_SERVICE_ROLE_KEY` es obligatoria para operaciones servidor como dashboard, webhooks, registros y borrados. El frontend no debe leer tablas de Supabase con anon key.
 
 ## Telegram
 

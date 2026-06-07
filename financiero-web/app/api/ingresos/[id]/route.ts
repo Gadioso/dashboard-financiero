@@ -1,15 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://goralfhisudzilfortuk.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseKey) return null;
-
-  return createClient(supabaseUrl, supabaseKey);
-}
+import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 type RouteContext = {
   params: Promise<{
@@ -19,11 +10,11 @@ type RouteContext = {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseServiceClient();
 
     if (!supabase) {
       return NextResponse.json(
-        { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY.' },
+        { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY.' },
         { status: 500 }
       );
     }

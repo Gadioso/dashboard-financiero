@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -28,18 +26,20 @@ import {
   resumenInicial,
 } from '@/lib/financial-core';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://goralfhisudzilfortuk.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-declare global {
-  var dashboardSupabaseClient: SupabaseClient | undefined;
-}
-
 type PresupuestoMensualRow = {
   techo_vida?: number | string | null;
   techo_placeres?: number | string | null;
   techo_futuro?: number | string | null;
   fase_ahorro?: string | null;
+};
+
+type DashboardApiResponse = {
+  success: boolean;
+  error?: string;
+  presupuesto: PresupuestoMensualRow | null;
+  ingresosAnuales: Ingreso[];
+  gastosAnuales: Gasto[];
+  abonosTarjetaAnuales: AbonoTarjetaCredito[];
 };
 
 type SantanderStatus = {
@@ -76,22 +76,6 @@ type SantanderStatus = {
 
 const mesActualKey = mesKeyDesdeFecha(new Date());
 
-const getSupabase = () => {
-  if (!supabaseUrl || !supabaseAnonKey) return null;
-
-  if (!globalThis.dashboardSupabaseClient) {
-    globalThis.dashboardSupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        storageKey: 'dashboard-financiero-anon',
-      },
-    });
-  }
-
-  return globalThis.dashboardSupabaseClient;
-};
-
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
@@ -111,48 +95,19 @@ export default function DashboardFinanciero() {
     try {
       setLoading(true);
 
-      if (!supabaseAnonKey) {
-        setMensajeStatus('Falta configurar NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.');
+      const response = await fetch(`/api/dashboard?mes=${encodeURIComponent(mesActivo)}`, {
+        cache: 'no-store',
+      });
+      const dashboardData = (await response.json()) as DashboardApiResponse;
+
+      if (!response.ok || !dashboardData.success) {
+        setMensajeStatus(`Error cargando dashboard: ${dashboardData.error || 'respuesta inválida'}`);
         return;
       }
 
-      const supabase = getSupabase();
-
-      if (!supabase) {
-        setMensajeStatus('Falta configurar Supabase para cargar el dashboard.');
-        return;
-      }
-
-      const inicio2026 = new Date(Date.UTC(2026, 0, 1)).toISOString();
-      const fin2026 = new Date(Date.UTC(2027, 0, 1)).toISOString();
-
-      const [{ data: pres }, { data: ingresosAnuales }, { data: gastosAnuales }, abonosTarjetaResult] = await Promise.all([
-        supabase
-        .from('presupuestos_mensuales')
-        .select('techo_vida, techo_placeres, techo_futuro, fase_ahorro')
-          .eq('mes_anio', `${mesActivo}-01`)
-          .maybeSingle(),
-        supabase
-          .from('ingresos')
-          .select('id, concepto, monto, tipo, fecha')
-          .gte('fecha', inicio2026)
-          .lt('fecha', fin2026),
-        supabase
-          .from('gastos')
-          .select('*')
-          .gte('fecha', inicio2026)
-          .lt('fecha', fin2026),
-        supabase
-          .from('abonos_tarjeta_credito')
-          .select('id, concepto, monto, tarjeta, origen, fecha')
-          .gte('fecha', inicio2026)
-          .lt('fecha', fin2026)
-          .order('fecha', { ascending: false }),
-      ]);
-
-      const ingresosTodoElAño = (ingresosAnuales || []) as Ingreso[];
-      const gastosTodoElAño = (gastosAnuales || []) as Gasto[];
-      const abonosTarjetaTodoElAño = abonosTarjetaResult.error ? [] : (abonosTarjetaResult.data || []) as AbonoTarjetaCredito[];
+      const ingresosTodoElAño = dashboardData.ingresosAnuales || [];
+      const gastosTodoElAño = dashboardData.gastosAnuales || [];
+      const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -168,7 +123,7 @@ export default function DashboardFinanciero() {
         return fecha >= inicioMes && fecha < finMes;
       });
 
-      const presupuesto = pres as PresupuestoMensualRow | null;
+      const presupuesto = dashboardData.presupuesto;
       const ingresosMes = calcularIngresosMes(ingresosDelMes);
       const promedioIngresosUltimos3Meses = calcularPromedioIngresosUltimos3Meses({
         ingresos: ingresosTodoElAño,
@@ -235,42 +190,12 @@ export default function DashboardFinanciero() {
   }, []);
 
   useEffect(() => {
-    const supabase = getSupabase();
-
-    if (!supabase) return;
-
     const intervalId = window.setInterval(() => {
       void fetchData();
     }, 5000);
 
-    const channel = supabase
-      .channel('dashboard-gastos-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'gastos' },
-        () => {
-          void fetchData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'ingresos' },
-        () => {
-          void fetchData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'abonos_tarjeta_credito' },
-        () => {
-          void fetchData();
-        }
-      )
-      .subscribe();
-
     return () => {
       window.clearInterval(intervalId);
-      void supabase.removeChannel(channel);
     };
   }, [fetchData]);
 

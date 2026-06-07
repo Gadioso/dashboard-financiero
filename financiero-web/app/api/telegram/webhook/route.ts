@@ -1,21 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
+import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://goralfhisudzilfortuk.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseKey) return null;
-
-  return createClient(supabaseUrl, supabaseKey);
-}
 
 type TelegramMessage = {
   chat?: {
@@ -117,11 +109,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const supabase = getSupabase();
+    const supabase = getSupabaseServiceClient();
 
     if (!supabase) {
       return NextResponse.json(
-        { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY.' },
+        { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY.' },
         { status: 500 }
       );
     }
