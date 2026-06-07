@@ -116,8 +116,9 @@ Antes de guardar origen `Santander_Email` y quitar `Fase 1: Escudo`, ejecutar:
 4. En `Project Settings > Script properties`, agregar:
    - `ENDPOINT_URL`: `https://tu-dominio.com/api/email/santander`
    - `EMAIL_INGEST_SECRET`: el mismo secreto configurado en Next.js
-5. Ejecutar `santanderIngest` una vez y aceptar permisos de Gmail.
-6. Crear trigger:
+5. Ejecutar `diagnosticarSantanderIngest` una vez. Debe imprimir la búsqueda, cantidad de threads y una muestra de correos Santander recientes.
+6. Ejecutar `santanderIngest` una vez y aceptar permisos de Gmail.
+7. Crear trigger:
    - Function: `santanderIngest`
    - Event source: `Time-driven`
    - Interval: cada 1 o 5 minutos
@@ -140,7 +141,8 @@ El script busca correos recientes con señales:
 
 - Remitente/asunto/texto Santander
 - Movimientos tipo compra, cargo, retiro, depósito, abono, SPEI o transferencia recibida
-- Excluye correos ya etiquetados como `Finanzas/Procesado-Santander`
+- Guarda IDs de mensajes ya procesados en Script Properties (`SANTANDER_PROCESSED_MESSAGE_IDS`) para no depender de etiquetas por thread.
+- Aplica la etiqueta visual `Finanzas/Procesado-Santander` como referencia, pero no la usa como única fuente de deduplicación.
 
 El endpoint vuelve a validar el texto y solo inserta si:
 

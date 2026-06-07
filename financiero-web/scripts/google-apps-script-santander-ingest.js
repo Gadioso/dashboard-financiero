@@ -13,6 +13,8 @@
  */
 
 const SANTANDER_PROCESSED_LABEL = 'Finanzas/Procesado-Santander';
+const SANTANDER_PROCESSED_IDS_PROPERTY = 'SANTANDER_PROCESSED_MESSAGE_IDS';
+const SANTANDER_MAX_PROCESSED_IDS = 1000;
 
 function getRequiredProperty_(name) {
   const value = PropertiesService.getScriptProperties().getProperty(name);
@@ -27,7 +29,6 @@ function getRequiredProperty_(name) {
 function santanderSearchQuery_() {
   return [
     'newer_than:14d',
-    '-label:"' + SANTANDER_PROCESSED_LABEL + '"',
     '(',
     'from:santander',
     'OR subject:Santander',
@@ -48,6 +49,33 @@ function santanderSearchQuery_() {
     'OR "Transferencia recibida"',
     ')',
   ].join(' ');
+}
+
+function readProcessedIds_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(SANTANDER_PROCESSED_IDS_PROPERTY);
+
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.warn('No pude leer IDs procesados, reinicio memoria local.', error);
+
+    return {};
+  }
+}
+
+function saveProcessedIds_(processedIds) {
+  const entries = Object.entries(processedIds)
+    .sort((a, b) => String(b[1]).localeCompare(String(a[1])))
+    .slice(0, SANTANDER_MAX_PROCESSED_IDS);
+
+  PropertiesService.getScriptProperties().setProperty(
+    SANTANDER_PROCESSED_IDS_PROPERTY,
+    JSON.stringify(Object.fromEntries(entries))
+  );
 }
 
 function plainText_(message) {
@@ -82,16 +110,25 @@ function postToDashboard_(payload) {
 function santanderIngest() {
   const label = GmailApp.getUserLabelByName(SANTANDER_PROCESSED_LABEL) || GmailApp.createLabel(SANTANDER_PROCESSED_LABEL);
   const threads = GmailApp.search(santanderSearchQuery_(), 0, 50);
+  const processedIds = readProcessedIds_();
   let sent = 0;
   let ignored = 0;
+  let skipped = 0;
 
   threads.forEach((thread) => {
     const messages = thread.getMessages();
     let threadProcessed = false;
 
     messages.forEach((message) => {
+      const messageId = message.getId();
+
+      if (processedIds[messageId]) {
+        skipped += 1;
+        return;
+      }
+
       const payload = {
-        gmailMessageId: message.getId(),
+        gmailMessageId: messageId,
         from: message.getFrom(),
         subject: message.getSubject(),
         fecha: message.getDate().toISOString(),
@@ -103,9 +140,15 @@ function santanderIngest() {
       };
       const result = postToDashboard_(payload);
 
-      if (result && result.success && !result.ignored) {
-        sent += 1;
+      if (result && result.success) {
+        processedIds[messageId] = new Date().toISOString();
         threadProcessed = true;
+
+        if (result.ignored) {
+          ignored += 1;
+        } else {
+          sent += 1;
+        }
       } else {
         ignored += 1;
       }
@@ -116,5 +159,29 @@ function santanderIngest() {
     }
   });
 
-  console.log(JSON.stringify({ sent, ignored, threads: threads.length }));
+  saveProcessedIds_(processedIds);
+
+  console.log(JSON.stringify({ sent, ignored, skipped, threads: threads.length }));
+}
+
+function diagnosticarSantanderIngest() {
+  const query = santanderSearchQuery_();
+  const threads = GmailApp.search(query, 0, 10);
+  const processedIds = readProcessedIds_();
+  const sample = [];
+
+  threads.forEach((thread) => {
+    thread.getMessages().forEach((message) => {
+      sample.push({
+        id: message.getId(),
+        processed: Boolean(processedIds[message.getId()]),
+        date: message.getDate().toISOString(),
+        from: message.getFrom(),
+        subject: message.getSubject(),
+        snippet: message.getPlainBody().slice(0, 180).replace(/\s+/g, ' '),
+      });
+    });
+  });
+
+  console.log(JSON.stringify({ query, threads: threads.length, sample: sample.slice(0, 20) }, null, 2));
 }

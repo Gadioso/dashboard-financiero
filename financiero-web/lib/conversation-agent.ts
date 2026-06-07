@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
+import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { guardarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { extraerJson, generateGeminiText } from '@/lib/gemini';
 import {
@@ -27,6 +28,11 @@ type Intent =
   | { type: 'conversation'; text: string };
 
 type MovementResult = Awaited<ReturnType<typeof clasificarMovimientoFinanciero>>;
+type TipoListado = 'ingresos' | 'gastos' | 'movimientos';
+type MovimientoEliminable =
+  | ({ kind: 'gasto' } & Gasto)
+  | ({ kind: 'ingreso' } & Ingreso);
+
 type MensajeMemoria = {
   role: 'user' | 'assistant';
   content: string;
@@ -43,8 +49,8 @@ const ayuda =
     'Soy tu asistente financiero. Puedes hablarme normal:',
     '- Registrar: "pagué 250 de gasolina", "150 tacos", "metí 1000 a cetes", "gané 60000 de sueldo".',
     '- Consultar: "cómo voy este mes", "cuánto me queda para placeres", "cuánto tengo que invertir".',
-    '- Ver: "últimos gastos", "gastos de placeres de junio", "gastos de vida enero 2026".',
-    '- Eliminar: "borra Starbucks" y luego "confirmar eliminar abc12345".',
+    '- Ver: "últimos gastos", "últimos ingresos", "últimos movimientos", "gastos de placeres de junio".',
+    '- Eliminar: "borra Starbucks", "borra ingreso Aire" y luego "confirmar eliminar g73" o "confirmar eliminar i55".',
   ].join('\n');
 
 const mesesPorNombre: Record<string, number> = {
@@ -97,7 +103,7 @@ function detectarIntent(texto: string): Intent {
     return { type: 'update-category', category: actualizarUltimoMatch[1] };
   }
 
-  const confirmarEliminarMatch = normalizado.match(/\b(?:confirmar|confirma|confirmo|s[ií])\s+(?:eliminar|borrar)\s+(?:gasto\s+)?([a-z0-9-]{1,})\b/i);
+  const confirmarEliminarMatch = normalizado.match(/\b(?:confirmar|confirma|confirmo|s[ií])\s+(?:eliminar|borrar)\s+(?:(?:gasto|ingreso|movimiento)\s+)?([a-z0-9-]{1,})\b/i);
 
   if (confirmarEliminarMatch?.[1]) {
     return { type: 'delete-confirm', idPrefix: confirmarEliminarMatch[1] };
@@ -111,7 +117,7 @@ function detectarIntent(texto: string): Intent {
     return { type: 'category-total', text: texto };
   }
 
-  if (/\b(?:[uú]ltimos?(?:\s+\d{1,2})?\s+(?:gastos?|movimientos?)|ver\s+gastos?|mu[eé]strame\s+gastos?|lista\s+gastos?|gastos?\s+de\s+(?:vida|placeres|futuro|inversi[oó]n)|movimientos?\s+de)\b/.test(normalizado)) {
+  if (/\b(?:[uú]ltimos?(?:\s+\d{1,2})?\s+(?:gastos?|ingresos?|movimientos?)|ver\s+(?:gastos?|ingresos?|movimientos?)|mu[eé]strame\s+(?:gastos?|ingresos?|movimientos?)|lista\s+(?:gastos?|ingresos?|movimientos?)|(?:gastos?|ingresos?|movimientos?)\s+de\s+(?:vida|placeres|futuro|inversi[oó]n|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre))\b/.test(normalizado)) {
     return { type: 'list', text: texto };
   }
 
@@ -173,6 +179,10 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
 
   if (!normalizado || normalizado === '/start' || normalizado === 'start') return fallback;
 
+  if (['help', 'list', 'delete-request', 'delete-confirm', 'update-category', 'movement'].includes(fallback.type)) {
+    return fallback;
+  }
+
   const prompt = `
 {
   "role": "telegram_financial_intent_router",
@@ -187,9 +197,9 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "summary": "Balance, budget, monthly/range overview, how am I doing, how much remains, how much to invest, how much to reserve.",
     "category-total": "How much was spent in one specific bucket/category such as Placeres, Vida or Futuro.",
     "update-category": "User wants to correct/reclassify an existing expense to Vida, Placeres or Futuro.",
-    "list": "Request to list latest expenses, movements or expenses by category/month.",
+    "list": "Request to list latest expenses, incomes, movements or entries by category/month.",
     "delete-request": "User asks to delete/remove something, but has not confirmed with an ID.",
-    "delete-confirm": "User confirms deletion with a short ID prefix.",
+    "delete-confirm": "User confirms deletion with a short ID prefix, usually starting with g for gastos or i for ingresos.",
     "movement": "User explicitly wants to register a new income, expense or investment.",
     "conversation": "Explanations, opinions, follow-ups, why/from where questions, ambiguity, or reasoning."
   },
@@ -209,7 +219,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
   "user_message": ${JSON.stringify(texto)},
   "output_schema": {
     "type": "help | summary | category-total | list | delete-request | delete-confirm | movement | conversation",
-    "idPrefix": "short expense id when type is delete-confirm or update-category, otherwise empty string",
+    "idPrefix": "short movement id when type is delete-confirm, short expense id when type is update-category, otherwise empty string",
     "category": "Vida | Placeres | Futuro when type is update-category, otherwise empty string"
   }
 }
@@ -368,7 +378,7 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) 
 function limpiarBusquedaEliminacion(texto: string) {
   return texto
     .toLowerCase()
-    .replace(/\b(?:elimina|eliminar|borra|borrar|quita|quitar|gasto|movimiento|de|del|la|el|un|una|por|favor)\b/g, ' ')
+    .replace(/\b(?:elimina|eliminar|borra|borrar|quita|quitar|gasto|gastos|egreso|egresos|ingreso|ingresos|entrada|entradas|movimiento|movimientos|de|del|la|el|un|una|por|favor)\b/g, ' ')
     .replace(/\$?\d+(?:[,.]\d{1,2})?/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -496,12 +506,64 @@ function detectarPeriodoConsulta(texto: string) {
   };
 }
 
-async function listarGastos(supabase: SupabaseClient, texto: string) {
+function detectarTipoListado(texto: string): TipoListado {
+  const normalizado = texto.toLowerCase();
+
+  if (/\b(?:ingreso|ingresos|entrada|entradas|gan[eé]|cobr[eé]|depositaron|quincena|sueldo)\b/.test(normalizado)) return 'ingresos';
+  if (/\b(?:gasto|gastos|egreso|egresos|gast[eé]|pag[ué]?[eé]?|compr[eé]|vida|placeres|futuro)\b/.test(normalizado)) return 'gastos';
+
+  return 'movimientos';
+}
+
+function normalizarTextoBusqueda(texto: string) {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function textoIncluyeBusqueda(movimiento: MovimientoEliminable, busqueda: string) {
+  if (!busqueda) return true;
+
+  const campos = [
+    movimiento.concepto || '',
+    movimiento.kind,
+    movimiento.kind === 'gasto' ? movimiento.categoria : movimiento.tipo || '',
+    movimiento.kind === 'gasto' ? movimiento.subcategoria || '' : movimiento.tipo || '',
+  ].join(' ');
+
+  return normalizarTextoBusqueda(campos).includes(normalizarTextoBusqueda(busqueda));
+}
+
+function idCortoMovimiento(movimiento: MovimientoEliminable) {
+  const prefijo = movimiento.kind === 'gasto' ? 'g' : 'i';
+
+  return `${prefijo}${idCorto(movimiento.id)}`;
+}
+
+function describirIngreso(ingreso: Ingreso) {
+  return `${idCortoMovimiento({ ...ingreso, kind: 'ingreso' })} · ${formatearFecha(ingreso.fecha)} · Ingreso · $${formatearMonto(ingreso.monto)} · ${ingreso.concepto || 'Ingreso'}${ingreso.tipo ? ` · ${ingreso.tipo}` : ''}`;
+}
+
+function describirMovimientoEliminable(movimiento: MovimientoEliminable) {
+  if (movimiento.kind === 'ingreso') return describirIngreso(movimiento);
+
+  return `${idCortoMovimiento(movimiento)} · ${formatearFecha(movimiento.fecha)} · Gasto · $${formatearMonto(movimiento.monto)} · ${movimiento.concepto} · ${nombreBolsa(String(movimiento.categoria))}${movimiento.subcategoria ? ` / ${movimiento.subcategoria}` : ''}`;
+}
+
+async function consultarMovimientosPeriodo({
+  supabase,
+  texto,
+  limit,
+}: {
+  supabase: SupabaseClient;
+  texto: string;
+  limit: number;
+}) {
   const rango = rangoMesDesdeTexto(texto);
   const categoria = detectarFiltroCategoria(texto);
-  const limitMatch = texto.match(/\b(\d{1,2})\b/);
-  const limit = Math.min(Math.max(limitMatch ? Number(limitMatch[1]) : 10, 1), 20);
-  let query = supabase
+  let gastosQuery = supabase
     .from('gastos')
     .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
     .gte('fecha', rango.inicio)
@@ -510,114 +572,146 @@ async function listarGastos(supabase: SupabaseClient, texto: string) {
     .limit(limit);
 
   if (categoria) {
-    query = query.eq('categoria', categoria);
+    gastosQuery = gastosQuery.eq('categoria', categoria);
   }
 
-  const { data, error } = await query;
+  const [gastosResult, ingresosResult] = await Promise.all([
+    gastosQuery,
+    supabase
+      .from('ingresos')
+      .select('id, concepto, monto, tipo, fecha')
+      .gte('fecha', rango.inicio)
+      .lt('fecha', rango.fin)
+      .order('fecha', { ascending: false })
+      .limit(limit),
+  ]);
 
-  if (error) {
-    throw new Error(`No pude consultar gastos: ${error.message}`);
+  if (gastosResult.error) throw new Error(`No pude consultar gastos: ${gastosResult.error.message}`);
+  if (ingresosResult.error) throw new Error(`No pude consultar ingresos: ${ingresosResult.error.message}`);
+
+  const gastos = ((gastosResult.data || []) as Gasto[]).map((gasto) => ({ ...gasto, kind: 'gasto' as const }));
+  const ingresos = ((ingresosResult.data || []) as Ingreso[]).map((ingreso) => ({ ...ingreso, kind: 'ingreso' as const }));
+
+  return { rango, categoria, gastos, ingresos, movimientos: ordenarPorFechaDesc<MovimientoEliminable>([...gastos, ...ingresos]) };
+}
+
+async function listarMovimientos(supabase: SupabaseClient, texto: string) {
+  const limitMatch = texto.match(/\b(\d{1,2})\b/);
+  const limit = Math.min(Math.max(limitMatch ? Number(limitMatch[1]) : 10, 1), 20);
+  const tipoListado = detectarTipoListado(texto);
+  const { rango, categoria, gastos, ingresos, movimientos } = await consultarMovimientosPeriodo({ supabase, texto, limit });
+  const resultados = tipoListado === 'ingresos' ? ingresos : tipoListado === 'gastos' ? gastos : movimientos;
+
+  if (!resultados.length) {
+    const etiquetaTipo = tipoListado === 'movimientos' ? 'movimientos' : tipoListado;
+    return `No encontré ${etiquetaTipo}${categoria ? ` de ${nombreBolsa(categoria)}` : ''} en ${rango.etiqueta}.`;
   }
 
-  const gastos = (data || []) as Gasto[];
-
-  if (!gastos.length) {
-    return `No encontré gastos${categoria ? ` de ${nombreBolsa(categoria)}` : ''} en ${rango.etiqueta}.`;
-  }
-
-  const total = gastos.reduce((sum, gasto) => sum + Number(gasto.monto || 0), 0);
+  const total = resultados.reduce((sum, movimiento) => sum + Number(movimiento.monto || 0), 0);
+  const titulo = tipoListado === 'ingresos'
+    ? 'ingresos'
+    : tipoListado === 'gastos'
+      ? `gastos${categoria ? ` de ${nombreBolsa(categoria)}` : ''}`
+      : 'movimientos';
 
   return [
-    `Últimos ${gastos.length} gastos${categoria ? ` de ${nombreBolsa(categoria)}` : ''} en ${rango.etiqueta}:`,
-    ...gastos.map((gasto) => `- ${describirGasto(gasto)}`),
+    `Últimos ${resultados.length} ${titulo} en ${rango.etiqueta}:`,
+    ...resultados.map((movimiento) => `- ${describirMovimientoEliminable(movimiento)}`),
     `Total mostrado: $${formatearMonto(total)}.`,
-    'Para borrar uno: "confirmar eliminar <id corto>".',
+    'Para borrar uno: "confirmar eliminar g73" o "confirmar eliminar i55".',
   ].join('\n');
 }
 
-async function buscarGastosParaEliminar(supabase: SupabaseClient, texto: string) {
+async function buscarMovimientosParaEliminar(supabase: SupabaseClient, texto: string) {
   const rango = rangoMesDesdeTexto(texto);
   const busqueda = limpiarBusquedaEliminacion(texto);
   const montoMatch = texto.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)/);
   const monto = montoMatch ? Number(montoMatch[1].replace(/,/g, '')) : null;
+  const tipoListado = detectarTipoListado(texto);
+  const { movimientos, gastos, ingresos } = await consultarMovimientosPeriodo({ supabase, texto, limit: 30 });
+  const base = tipoListado === 'ingresos' ? ingresos : tipoListado === 'gastos' ? gastos : movimientos;
 
-  let query = supabase
-    .from('gastos')
-    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
-    .gte('fecha', rango.inicio)
-    .lt('fecha', rango.fin)
-    .order('fecha', { ascending: false })
-    .limit(20);
+  const resultados = base.filter((movimiento) => {
+    const coincideMonto = monto ? Math.abs(Number(movimiento.monto) - monto) < 0.01 : true;
 
-  if (busqueda) {
-    query = query.ilike('concepto', `%${busqueda}%`);
-  }
+    return coincideMonto && textoIncluyeBusqueda(movimiento, busqueda);
+  });
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(`No pude buscar gastos para eliminar: ${error.message}`);
-  }
-
-  const gastos = ((data || []) as Gasto[]).filter((gasto) => (monto ? Math.abs(Number(gasto.monto) - monto) < 0.01 : true));
-
-  if (!gastos.length) {
+  if (!resultados.length) {
+    const etiquetaTipo = tipoListado === 'movimientos' ? 'movimiento' : tipoListado === 'ingresos' ? 'ingreso' : 'gasto';
     return [
-      `No encontré un gasto para borrar${busqueda ? ` con "${busqueda}"` : ''} en ${rango.etiqueta}.`,
-      'Prueba con "últimos gastos" para ver IDs cortos.',
+      `No encontré un ${etiquetaTipo} para borrar${busqueda ? ` con "${busqueda}"` : ''} en ${rango.etiqueta}.`,
+      'Prueba con "últimos movimientos" para ver IDs cortos.',
     ].join('\n');
   }
 
-  if (gastos.length === 1) {
+  if (resultados.length === 1) {
+    const movimiento = resultados[0];
+
     return [
-      'Encontré este gasto:',
-      `- ${describirGasto(gastos[0])}`,
-      `Para borrarlo escribe: confirmar eliminar ${idCorto(gastos[0].id)}`,
+      'Encontré este movimiento:',
+      `- ${describirMovimientoEliminable(movimiento)}`,
+      `Para borrarlo escribe: confirmar eliminar ${idCortoMovimiento(movimiento)}`,
     ].join('\n');
   }
 
   return [
-    `Encontré ${gastos.length} posibles gastos. No borraré nada hasta que confirmes uno:`,
-    ...gastos.slice(0, 10).map((gasto) => `- ${describirGasto(gasto)}`),
-    'Para borrar uno: "confirmar eliminar <id corto>".',
+    `Encontré ${resultados.length} posibles movimientos. No borraré nada hasta que confirmes uno:`,
+    ...resultados.slice(0, 10).map((movimiento) => `- ${describirMovimientoEliminable(movimiento)}`),
+    'Para borrar uno: "confirmar eliminar g73" o "confirmar eliminar i55".',
   ].join('\n');
 }
 
-async function confirmarEliminarGasto(supabase: SupabaseClient, idPrefix: string) {
-  const { data, error } = await supabase
-    .from('gastos')
-    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
-    .order('fecha', { ascending: false })
-    .limit(200);
+async function confirmarEliminarMovimiento(supabase: SupabaseClient, idPrefix: string) {
+  const normalizado = idPrefix.toLowerCase().trim();
+  const tipoSolicitado = normalizado.startsWith('g') ? 'gasto' : normalizado.startsWith('i') ? 'ingreso' : null;
+  const idBuscado = tipoSolicitado ? normalizado.slice(1) : normalizado;
+  const [gastosResult, ingresosResult] = await Promise.all([
+    tipoSolicitado === 'ingreso'
+      ? Promise.resolve({ data: [], error: null })
+      : supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').order('fecha', { ascending: false }).limit(300),
+    tipoSolicitado === 'gasto'
+      ? Promise.resolve({ data: [], error: null })
+      : supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').order('fecha', { ascending: false }).limit(300),
+  ]);
 
-  if (error) {
-    throw new Error(`No pude buscar el gasto a eliminar: ${error.message}`);
-  }
+  if (gastosResult.error) throw new Error(`No pude buscar gastos a eliminar: ${gastosResult.error.message}`);
+  if (ingresosResult.error) throw new Error(`No pude buscar ingresos a eliminar: ${ingresosResult.error.message}`);
 
-  const matches = ((data || []) as Gasto[]).filter((gasto) => String(gasto.id).toLowerCase().startsWith(idPrefix.toLowerCase()));
+  const matches: MovimientoEliminable[] = [
+    ...(((gastosResult.data || []) as Gasto[]).map((gasto) => ({ ...gasto, kind: 'gasto' as const }))),
+    ...(((ingresosResult.data || []) as Ingreso[]).map((ingreso) => ({ ...ingreso, kind: 'ingreso' as const }))),
+  ].filter((movimiento) => String(movimiento.id).toLowerCase().startsWith(idBuscado));
 
   if (!matches.length) {
-    return `No encontré ningún gasto con ID corto "${idPrefix}". Escribe "últimos gastos" para ver IDs recientes.`;
+    return `No encontré ningún movimiento con ID corto "${idPrefix}". Escribe "últimos movimientos" para ver IDs recientes.`;
   }
 
   if (matches.length > 1) {
     return [
-      `Ese ID corto coincide con ${matches.length} gastos. Usa más caracteres del ID:`,
-      ...matches.slice(0, 5).map((gasto) => `- ${describirGasto(gasto)}`),
+      `Ese ID corto coincide con ${matches.length} movimientos. Usa más caracteres del ID:`,
+      ...matches.slice(0, 5).map((movimiento) => `- ${describirMovimientoEliminable(movimiento)}`),
     ].join('\n');
   }
 
-  const gasto = matches[0];
-  const { error: deleteError } = await supabase.from('gastos').delete().eq('id', gasto.id);
+  const movimiento = matches[0];
+  const tabla = movimiento.kind === 'ingreso' ? 'ingresos' : 'gastos';
+  const { error: deleteError } = await supabase.from(tabla).delete().eq('id', movimiento.id);
 
   if (deleteError) {
-    throw new Error(`No pude eliminar el gasto: ${deleteError.message}`);
+    throw new Error(`No pude eliminar el ${movimiento.kind}: ${deleteError.message}`);
+  }
+
+  if (movimiento.kind === 'ingreso') {
+    await sincronizarPresupuestoMensual(supabase, new Date(movimiento.fecha));
   }
 
   return [
-    'Gasto eliminado.',
-    describirGasto(gasto),
-    'Ya debería reflejarse en el dashboard y en tus bolsas.',
+    `${movimiento.kind === 'ingreso' ? 'Ingreso' : 'Gasto'} eliminado.`,
+    describirMovimientoEliminable(movimiento),
+    movimiento.kind === 'ingreso'
+      ? 'Recalculé el presupuesto mensual de las bolsas.'
+      : 'Ya debería reflejarse en el dashboard y en tus bolsas.',
   ].join('\n');
 }
 
@@ -836,15 +930,15 @@ export async function responderConversacionFinanciera({
   }
 
   if (intent.type === 'list') {
-    return { action: 'reply', message: await listarGastos(supabase, intent.text) };
+    return { action: 'reply', message: await listarMovimientos(supabase, intent.text) };
   }
 
   if (intent.type === 'delete-request') {
-    return { action: 'reply', message: await buscarGastosParaEliminar(supabase, intent.text) };
+    return { action: 'reply', message: await buscarMovimientosParaEliminar(supabase, intent.text) };
   }
 
   if (intent.type === 'delete-confirm') {
-    return { action: 'reply', message: await confirmarEliminarGasto(supabase, intent.idPrefix) };
+    return { action: 'reply', message: await confirmarEliminarMovimiento(supabase, intent.idPrefix) };
   }
 
   if (intent.type === 'movement') {
