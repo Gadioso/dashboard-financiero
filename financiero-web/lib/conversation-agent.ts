@@ -19,6 +19,7 @@ import {
 type Intent =
   | { type: 'help' }
   | { type: 'category-total'; text: string }
+  | { type: 'expense-total'; text: string }
   | { type: 'update-category'; idPrefix?: string; category: string }
   | { type: 'summary'; text: string }
   | { type: 'list'; text: string }
@@ -42,7 +43,7 @@ type MensajeMemoria = {
   };
 };
 
-const intentTypes = ['help', 'category-total', 'update-category', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
+const intentTypes = ['help', 'category-total', 'expense-total', 'update-category', 'summary', 'list', 'delete-request', 'delete-confirm', 'movement', 'conversation'] as const;
 
 const ayuda =
   [
@@ -113,6 +114,10 @@ function detectarIntent(texto: string): Intent {
     return { type: 'delete-request', text: texto };
   }
 
+  if (esConsultaTotalGastos(normalizado) && !detectarFiltroCategoria(normalizado)) {
+    return { type: 'expense-total', text: texto };
+  }
+
   if (/\b(?:cu[aá]nto\s+)?(?:he\s+)?gast(?:e|é|ado|aste)?\b/.test(normalizado) && detectarFiltroCategoria(normalizado)) {
     return { type: 'category-total', text: texto };
   }
@@ -179,7 +184,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
 
   if (!normalizado || normalizado === '/start' || normalizado === 'start') return fallback;
 
-  if (['help', 'list', 'delete-request', 'delete-confirm', 'update-category', 'movement'].includes(fallback.type)) {
+  if (['help', 'list', 'expense-total', 'delete-request', 'delete-confirm', 'update-category', 'movement'].includes(fallback.type)) {
     return fallback;
   }
 
@@ -196,6 +201,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "help": "Greeting, help, start or onboarding.",
     "summary": "Balance, budget, monthly/range overview, how am I doing, how much remains, how much to invest, how much to reserve.",
     "category-total": "How much was spent in one specific bucket/category such as Placeres, Vida or Futuro.",
+    "expense-total": "How much was spent overall in a day, month or range, without limiting to one category.",
     "update-category": "User wants to correct/reclassify an existing expense to Vida, Placeres or Futuro.",
     "list": "Request to list latest expenses, incomes, movements or entries by category/month.",
     "delete-request": "User asks to delete/remove something, but has not confirmed with an ID.",
@@ -212,13 +218,15 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "'y todo mayo', 'en todo este mes de mayo', 'pero en todo enero' are summary.",
     "'de enero a mayo', 'enero para acá', 'todo el año', 'desde enero' are summary.",
     "'cuánto gasté en placeres en enero' is category-total.",
+    "'cuáles fueron mis gastos totales de ayer', 'cuánto gasté ayer', 'total de gastos de hoy' are expense-total, not list.",
+    "'cuál fue mi último gasto' is list with one latest expense, not a monthly list.",
     "'cambiar abc12345 a vida', 'corrige abc12345 como placeres', 'pon abc12345 en futuro' are update-category.",
     "'cambialo a vida', 'cámbialo a placer', 'ponlo en futuro' are update-category without idPrefix; they refer to the last expense in memory.",
     "Return only valid raw JSON matching output_schema."
   ],
   "user_message": ${JSON.stringify(texto)},
   "output_schema": {
-    "type": "help | summary | category-total | list | delete-request | delete-confirm | movement | conversation",
+    "type": "help | summary | category-total | expense-total | update-category | list | delete-request | delete-confirm | movement | conversation",
     "idPrefix": "short movement id when type is delete-confirm, short expense id when type is update-category, otherwise empty string",
     "category": "Vida | Placeres | Futuro when type is update-category, otherwise empty string"
   }
@@ -244,6 +252,13 @@ function detectarFiltroCategoria(texto: string) {
   if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?)\b/.test(normalizado)) return 'Seguros';
 
   return null;
+}
+
+function esConsultaTotalGastos(normalizado: string) {
+  return (
+    /\b(?:gastos?\s+totales?|total\s+de\s+gastos?|cu[aá]les?\s+fueron\s+mis\s+gastos?|cu[aá]nto\s+(?:he\s+)?gast(?:e|é|ado|aste)?)\b/.test(normalizado) &&
+    !/\b(?:[uú]ltimos?|lista|listar|ver|mu[eé]strame)\b/.test(normalizado)
+  );
 }
 
 function normalizarCategoriaCorreccion(texto: string) {
@@ -372,6 +387,46 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) 
     `En ${rango.etiqueta} gastaste $${formatearMonto(total)} en ${nombreBolsa(categoria)}.`,
     `Movimientos: ${gastos.length}.`,
     ...topGastos,
+  ].join('\n');
+}
+
+async function totalGastosGenerales(supabase: SupabaseClient, texto: string) {
+  const rango = rangoMesDesdeTexto(texto);
+  const { data, error } = await supabase
+    .from('gastos')
+    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+    .gte('fecha', rango.inicio)
+    .lt('fecha', rango.fin)
+    .order('fecha', { ascending: false });
+
+  if (error) {
+    throw new Error(`No pude consultar tus gastos: ${error.message}`);
+  }
+
+  const gastos = (data || []) as Gasto[];
+
+  if (!gastos.length) {
+    return `En ${rango.etiqueta} no encontré gastos registrados.`;
+  }
+
+  const total = gastos.reduce((sum, gasto) => sum + Number(gasto.monto || 0), 0);
+  const totalesPorBolsa = ['Vida', 'Placeres', 'Futuro'].map((bolsa) => {
+    const totalBolsa = gastos
+      .filter((gasto) => nombreBolsa(String(gasto.categoria)) === bolsa)
+      .reduce((sum, gasto) => sum + Number(gasto.monto || 0), 0);
+
+    return `${bolsa}: $${formatearMonto(totalBolsa)}`;
+  });
+  const principales = gastos
+    .sort((a, b) => Number(b.monto || 0) - Number(a.monto || 0))
+    .slice(0, 4)
+    .map((gasto) => `- ${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto} · ${nombreBolsa(String(gasto.categoria))}`);
+
+  return [
+    `En ${rango.etiqueta} gastaste $${formatearMonto(total)} en ${gastos.length} movimientos.`,
+    totalesPorBolsa.join(' · '),
+    'Principales:',
+    ...principales,
   ].join('\n');
 }
 
@@ -572,6 +627,12 @@ function detectarTipoListado(texto: string): TipoListado {
   return 'movimientos';
 }
 
+function esConsultaUltimoSingular(texto: string) {
+  const normalizado = texto.toLowerCase();
+
+  return /\b(?:cu[aá]l\s+fue\s+mi\s+)?[uú]ltim[oa]\s+(?:gasto|ingreso|movimiento)\b/.test(normalizado);
+}
+
 function normalizarTextoBusqueda(texto: string) {
   return texto
     .normalize('NFD')
@@ -654,7 +715,8 @@ async function consultarMovimientosPeriodo({
 
 async function listarMovimientos(supabase: SupabaseClient, texto: string) {
   const limitMatch = texto.match(/\b(\d{1,2})\b/);
-  const limit = Math.min(Math.max(limitMatch ? Number(limitMatch[1]) : 10, 1), 20);
+  const singular = esConsultaUltimoSingular(texto);
+  const limit = Math.min(Math.max(limitMatch ? Number(limitMatch[1]) : singular ? 1 : 10, 1), 20);
   const tipoListado = detectarTipoListado(texto);
   const { rango, categoria, gastos, ingresos, movimientos } = await consultarMovimientosPeriodo({ supabase, texto, limit });
   const resultados = tipoListado === 'ingresos' ? ingresos : tipoListado === 'gastos' ? gastos : movimientos;
@@ -670,6 +732,15 @@ async function listarMovimientos(supabase: SupabaseClient, texto: string) {
     : tipoListado === 'gastos'
       ? `gastos${categoria ? ` de ${nombreBolsa(categoria)}` : ''}`
       : 'movimientos';
+
+  if (singular && resultados.length === 1) {
+    return [
+      `Último ${titulo.replace(/s$/, '')} en ${rango.etiqueta}:`,
+      describirMovimientoEliminable(resultados[0]),
+      `Total: $${formatearMonto(total)}.`,
+      'Para borrarlo: "confirmar eliminar g73" o "confirmar eliminar i55" usando su ID.',
+    ].join('\n');
+  }
 
   return [
     `Últimos ${resultados.length} ${titulo} en ${rango.etiqueta}:`,
@@ -959,6 +1030,10 @@ export async function responderConversacionFinanciera({
 
   if (intent.type === 'category-total') {
     return { action: 'reply', message: await totalGastosPorCategoria(supabase, intent.text) };
+  }
+
+  if (intent.type === 'expense-total') {
+    return { action: 'reply', message: await totalGastosGenerales(supabase, intent.text) };
   }
 
   if (intent.type === 'update-category') {
