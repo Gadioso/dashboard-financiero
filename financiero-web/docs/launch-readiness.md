@@ -11,6 +11,7 @@
 - Ejecutar `npm run security:secrets`.
 - Ejecutar `npm run data:audit`.
 - Ejecutar `LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check`.
+- Ejecutar el plan manual: [manual-test-plan.md](./manual-test-plan.md).
 - Probar Telegram:
   - "mi id"
   - "últimos gastos"
@@ -35,6 +36,22 @@ Solo borra candidatos si se ejecuta explícitamente:
 
 ```bash
 npm run data:cleanup-suspects -- --apply
+```
+
+## SQL de lanzamiento
+
+Para v1 privada:
+
+```bash
+npm run sql:launch
+```
+
+Pega el SQL completo en Supabase SQL Editor.
+
+Para preparar SaaS multiusuario, no ejecutar todavía en producción sin auth real:
+
+```bash
+npm run sql:multi-user
 ```
 
 ## Criterio para SaaS multiusuario

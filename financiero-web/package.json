@@ -15,7 +15,9 @@
     "launch:check": "node scripts/launch-check.mjs",
     "security:secrets": "node scripts/secret-scan.mjs",
     "data:audit": "node scripts/data-audit.mjs",
-    "data:cleanup-suspects": "node scripts/cleanup-suspect-data.mjs"
+    "data:cleanup-suspects": "node scripts/cleanup-suspect-data.mjs",
+    "sql:launch": "node scripts/print-launch-sql.mjs",
+    "sql:multi-user": "node scripts/print-launch-sql.mjs --multi-user"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
