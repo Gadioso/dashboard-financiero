@@ -1,8 +1,23 @@
 import { NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 const authCookieName = 'dashboard_auth';
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit({
+    key: `auth-login:${ip}`,
+    limit: 8,
+    windowMs: 10 * 60 * 1000,
+  });
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { success: false, error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' },
+      { status: 429 }
+    );
+  }
+
   const expectedToken = process.env.DASHBOARD_ACCESS_TOKEN || '';
 
   if (!expectedToken) {

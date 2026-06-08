@@ -4,6 +4,7 @@ import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { buscarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { categoriaParaGastos, formatearFecha, formatearMonto, nombreBolsa } from '@/lib/financial-core';
 import { obtenerSantanderIngestLogs, registrarSantanderIngestLog } from '@/lib/santander-ingest-log';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
@@ -366,6 +367,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit({
+      key: `email-santander:${ip}`,
+      limit: 180,
+      windowMs: 60 * 1000,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Límite de ingesta excedido.' }, { status: 429 });
+    }
+
     if (!emailIngestSecret) {
       return NextResponse.json({ success: false, error: 'Falta configurar EMAIL_INGEST_SECRET.' }, { status: 500 });
     }

@@ -11,7 +11,9 @@
     "telegram:test-agent": "node scripts/test-telegram-agent.mjs",
     "audit:goal": "node scripts/audit-financial-goal.mjs",
     "gmail:props": "node scripts/print-gmail-script-properties.mjs",
-    "test:santander-parser": "node scripts/test-santander-parser.mjs"
+    "test:santander-parser": "node scripts/test-santander-parser.mjs",
+    "launch:check": "node scripts/launch-check.mjs",
+    "security:secrets": "node scripts/secret-scan.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
