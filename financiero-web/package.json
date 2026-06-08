@@ -13,7 +13,9 @@
     "gmail:props": "node scripts/print-gmail-script-properties.mjs",
     "test:santander-parser": "node scripts/test-santander-parser.mjs",
     "launch:check": "node scripts/launch-check.mjs",
-    "security:secrets": "node scripts/secret-scan.mjs"
+    "security:secrets": "node scripts/secret-scan.mjs",
+    "data:audit": "node scripts/data-audit.mjs",
+    "data:cleanup-suspects": "node scripts/cleanup-suspect-data.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

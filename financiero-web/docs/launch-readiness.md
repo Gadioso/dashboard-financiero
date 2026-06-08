@@ -8,6 +8,8 @@
 - Ejecutar `npm run lint`.
 - Ejecutar `npm run build`.
 - Ejecutar `npm run test:santander-parser`.
+- Ejecutar `npm run security:secrets`.
+- Ejecutar `npm run data:audit`.
 - Ejecutar `LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check`.
 - Probar Telegram:
   - "mi id"
@@ -16,6 +18,24 @@
   - "cámbialo a placer"
   - "cuánto debo de tarjeta"
 - Probar Gmail/Santander con un correo real o fixture.
+
+## Limpieza de datos
+
+`npm run data:audit` genera un reporte de:
+
+- ingresos sospechosos que parecen texto informativo de Santander,
+- duplicados por día, concepto y monto,
+- presupuestos mensuales faltantes o desfasados,
+- cargos y abonos de tarjeta Santander,
+- errores o notificaciones pendientes en `santander_ingest_logs`.
+
+`npm run data:cleanup-suspects` corre en modo `dry-run`.
+
+Solo borra candidatos si se ejecuta explícitamente:
+
+```bash
+npm run data:cleanup-suspects -- --apply
+```
 
 ## Criterio para SaaS multiusuario
 
