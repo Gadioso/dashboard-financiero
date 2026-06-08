@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 const requiredEnv = {
   dashboardAuth: 'DASHBOARD_ACCESS_TOKEN',
   supabaseUrl: 'NEXT_PUBLIC_SUPABASE_URL',
+  supabaseAnon: 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   supabaseServiceRole: 'SUPABASE_SERVICE_ROLE_KEY',
   telegramBot: 'TELEGRAM_BOT_TOKEN',
   telegramWebhook: 'TELEGRAM_WEBHOOK_SECRET',

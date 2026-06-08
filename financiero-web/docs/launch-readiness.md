@@ -11,6 +11,7 @@
 - Ejecutar `npm run security:secrets`.
 - Ejecutar `npm run data:audit`.
 - Ejecutar `LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check`.
+  - Debe confirmar login, migraciones launch aplicadas y escrituras públicas anon bloqueadas.
 - Ejecutar el plan manual: [manual-test-plan.md](./manual-test-plan.md).
 - Probar Telegram:
   - "mi id"
@@ -47,6 +48,8 @@ npm run sql:launch
 ```
 
 Pega el SQL completo en Supabase SQL Editor.
+
+Después de aplicarlo, `launch:check` debe reportar `Migraciones launch aplicadas` y `Escrituras públicas anon bloqueadas en Supabase`.
 
 Para preparar SaaS multiusuario, no ejecutar todavía en producción sin auth real:
 

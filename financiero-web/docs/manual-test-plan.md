@@ -59,6 +59,7 @@ Enviar al bot:
 - `POST /api/email/santander` sin secret debe responder `401`.
 - `GET /api/health` debe responder `200` sin datos financieros.
 - Supabase debe mostrar RLS habilitado en tablas financieras.
+- Con token válido, `launch:check` debe confirmar que `anon` no puede escribir en `gastos`.
 
 ## Automatizado
 
@@ -68,4 +69,5 @@ npm run build
 npm run test:santander-parser
 npm run security:secrets
 LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app npm run launch:check
+LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check
 ```

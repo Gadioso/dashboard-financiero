@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { buscarPreferenciaClasificacion } from '@/lib/classification-preferences';
@@ -11,6 +12,8 @@ import { getSupabaseServiceClient } from '@/lib/supabase-server';
 const emailIngestSecret = process.env.EMAIL_INGEST_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramNotifyChatId = process.env.TELEGRAM_NOTIFY_CHAT_ID || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 function rangoDiaUTC(fecha: Date) {
   const inicio = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
@@ -328,6 +331,42 @@ async function aceptaAbonosTarjetaCredito(supabase: SupabaseClient) {
   return !error;
 }
 
+async function bloqueaEscriturasPublicas(supabase: SupabaseClient) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return {
+      checked: false,
+      blocked: null,
+      reason: 'Falta NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY para verificar anon.',
+    };
+  }
+
+  const anon = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+  const payload = {
+    concepto: 'Healthcheck anon write',
+    monto: 0.01,
+    categoria: 'Vida',
+    subcategoria: 'Security Probe',
+    origen: 'Web',
+    fecha: new Date(Date.UTC(2099, 0, 2)).toISOString(),
+  };
+  const { data, error } = await anon.from('gastos').insert([payload]).select('id').single();
+
+  if (data?.id) {
+    await supabase.from('gastos').delete().eq('id', data.id);
+  }
+
+  return {
+    checked: true,
+    blocked: Boolean(error),
+    reason: error ? error.message : 'Anon pudo escribir en gastos; revisar RLS/policies/grants.',
+  };
+}
+
 export async function GET() {
   try {
     const supabase = getSupabaseServiceClient();
@@ -336,10 +375,11 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
 
-    const [origenSantanderEmail, faseRegla333333, abonosTarjetaCredito] = await Promise.all([
+    const [origenSantanderEmail, faseRegla333333, abonosTarjetaCredito, publicWrites] = await Promise.all([
       aceptaOrigenSantanderEmail(supabase),
       aceptaFaseRegla333333(supabase),
       aceptaAbonosTarjetaCredito(supabase),
+      bloqueaEscriturasPublicas(supabase),
     ]);
     const ingestLogs = await obtenerSantanderIngestLogs(supabase);
 
@@ -354,6 +394,9 @@ export async function GET() {
         acceptsRegla333333Phase: faseRegla333333,
         acceptsAbonosTarjetaCredito: abonosTarjetaCredito,
         acceptsSantanderIngestLogs: ingestLogs.available,
+        publicWritesBlocked: publicWrites.blocked,
+        publicWritesChecked: publicWrites.checked,
+        publicWritesReason: publicWrites.reason,
         migrationRequired: !origenSantanderEmail || !faseRegla333333 || !abonosTarjetaCredito || !ingestLogs.available,
       },
       ingestLogs,

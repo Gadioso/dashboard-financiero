@@ -5,6 +5,7 @@ const dashboardToken = process.env.DASHBOARD_ACCESS_TOKEN || process.env.LAUNCH_
 const checksLocalEnv = process.env.CHECK_LOCAL_ENV === 'true' || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(baseUrl);
 const requiredEnvKeys = [
   'NEXT_PUBLIC_SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'DASHBOARD_ACCESS_TOKEN',
   'TELEGRAM_BOT_TOKEN',
@@ -127,6 +128,12 @@ async function main() {
       const santanderStatus = await request('/api/email/santander', {
         headers: { Cookie: cookie },
       });
+      let santanderStatusPayload = null;
+      try {
+        santanderStatusPayload = JSON.parse(santanderStatus.text);
+      } catch {
+        santanderStatusPayload = null;
+      }
       checks.push(
         assertCheck(
           santanderStatus.response.status === 200 && santanderStatus.text.includes('"success":true'),
@@ -134,6 +141,22 @@ async function main() {
           `status=${santanderStatus.response.status}`
         )
       );
+      if (santanderStatusPayload?.supabaseSchema) {
+        checks.push(
+          assertCheck(
+            santanderStatusPayload.supabaseSchema.migrationRequired === false,
+            'Migraciones launch aplicadas',
+            JSON.stringify(santanderStatusPayload.supabaseSchema)
+          )
+        );
+        checks.push(
+          assertCheck(
+            santanderStatusPayload.supabaseSchema.publicWritesBlocked === true,
+            'Escrituras públicas anon bloqueadas en Supabase',
+            santanderStatusPayload.supabaseSchema.publicWritesReason || ''
+          )
+        );
+      }
     }
   } else {
     checks.push({
