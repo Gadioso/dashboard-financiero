@@ -40,6 +40,7 @@ Crear `.env.local` con:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL="https://..."
 SUPABASE_SERVICE_ROLE_KEY="..."
+DASHBOARD_ACCESS_TOKEN="..."
 
 GOOGLE_API_KEY="..."
 GEMINI_API_KEY="..."
@@ -49,6 +50,8 @@ TELEGRAM_WEBHOOK_SECRET="..."
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` es obligatoria para operaciones servidor como dashboard, webhooks, registros y borrados. El frontend no debe leer tablas de Supabase con anon key.
+
+`DASHBOARD_ACCESS_TOKEN` protege el dashboard y las APIs internas con una cookie `httpOnly`. En producción debe existir en Vercel; Telegram y el webhook de Santander siguen usando sus propios secretos.
 
 ## Telegram
 
