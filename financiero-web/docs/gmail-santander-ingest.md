@@ -13,6 +13,7 @@ Objetivo: que `diegayoso1999@gmail.com` detecte correos de Santander y mande sol
 - Dedupe backend: evita insertar dos veces el mismo día + concepto + monto
 - Validación backend: ignora payloads sin señal Santander aunque traigan formato de movimiento
 - Notificación Telegram: cuando inserta un gasto nuevo de Santander, avisa la categoría detectada y da comandos para corregirla.
+- Latencia esperada: depende del trigger de Google Apps Script. Para alertas rápidas, configurar `santanderIngest` cada 1 minuto; si está cada 5 minutos, la alerta puede tardar hasta 5 minutos aunque el endpoint y Telegram estén sanos.
 
 ## Auditoría local
 
@@ -121,7 +122,8 @@ Antes de guardar origen `Santander_Email` y quitar `Fase 1: Escudo`, ejecutar:
 7. Crear trigger:
    - Function: `santanderIngest`
    - Event source: `Time-driven`
-   - Interval: cada 1 o 5 minutos
+   - Interval recomendado: cada 1 minuto
+   - Interval aceptable: cada 5 minutos si no importa esperar más
 
 Para preparar las propiedades sin exponer el secret por accidente:
 

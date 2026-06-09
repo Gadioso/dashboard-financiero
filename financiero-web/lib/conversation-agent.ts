@@ -971,8 +971,8 @@ async function responderConversacionAbierta({
   ],
   "business_rules": {
     "budget_rule": "Each income month is divided equally into Vida, Placeres and Futuro.",
-    "Vida": "Required cost of living and operating/work tools such as Telcel, OpenAI, Codex, Fiverr, Opus.",
-    "Placeres": "Leisure, restaurants, coffee, outings, trips, entertainment.",
+    "Vida": "Narrow required cost of living: gasoline, supermarket/basic groceries, phone, utilities, health, rent, debt, and operating/work tools such as Telcel, OpenAI, Codex, Fiverr, Opus, cloud/software tools.",
+    "Placeres": "Default for discretionary spending: OXXO/7 Eleven without a clear necessary-service signal, Mercado Pago/PayPal ambiguous purchases, restaurants, coffee, outings, trips, hotels, Uber/Didi rides, delivery and entertainment.",
     "Futuro": "Investments, GBM, CETES, emergency fund, insurance and patrimonial savings."
   },
   "financial_context": ${JSON.stringify(contexto, null, 2)},

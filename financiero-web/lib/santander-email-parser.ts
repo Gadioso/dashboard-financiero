@@ -55,7 +55,7 @@ function esPagoTarjetaCredito(texto: string) {
     /\b(?:tarjeta\s+de\s+cr[eé]dito|tdc)\b.{0,80}\b(?:pago|pagaste|abono|abonaste|liquidaci[oó]n|liquidaste)\b/i.test(texto);
 }
 
-function clasificarComercio(concepto: string, texto: string) {
+export function clasificarConceptoGastoSantander(concepto: string, texto = '') {
   const normalizado = `${concepto} ${texto}`.toLowerCase();
 
   if (/\b(gbm|cetes|casa de bolsa|kuspit|fintual|acciones|etf|inversi[oó]n)\b/i.test(normalizado)) {
@@ -66,10 +66,16 @@ function clasificarComercio(concepto: string, texto: string) {
     };
   }
 
-  if (/\b(starbucks|cafe|caf[eé]|restaurante|taquer|tacos|cine|bar|rappi|uber eats|netflix|spotify|concierto|viaje|hotel|muay thai)\b/i.test(normalizado)) {
+  if (/\b(starbucks|cafe|caf[eé]|restaurante|taquer|tacos|cine|bar|rappi|uber eats|netflix|spotify|concierto|viaje|hotel|muay thai|mercado\s*pago|mercadopago|paypal|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/i.test(normalizado)) {
     return {
       categoria: 'Placeres' as const,
-      subcategoria: /\b(starbucks|cafe|caf[eé])\b/i.test(normalizado) ? 'Cafe' : 'Otros Placeres',
+      subcategoria: /\b(starbucks|cafe|caf[eé])\b/i.test(normalizado)
+        ? 'Cafe'
+        : /\b(restaurante|taquer|tacos|rappi|uber eats)\b/i.test(normalizado)
+          ? 'Restaurantes'
+          : /\b(viaje|hotel|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/i.test(normalizado)
+            ? 'Viajes'
+            : 'Otros Placeres',
       razon: 'Comercio identificado como consumo discrecional o estilo de vida.',
     };
   }
@@ -98,7 +104,7 @@ function clasificarComercio(concepto: string, texto: string) {
     };
   }
 
-  if (/\b(super|s[uú]per|farmacia|gasolina|uber\b|didi|metro|luz|agua|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex|doctor|hospital|carro|auto)\b/i.test(normalizado)) {
+  if (/\b(super|s[uú]per|despensa|farmacia|gasolina|metro|luz|agua|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex|doctor|hospital|carro|auto)\b/i.test(normalizado)) {
     return {
       categoria: 'Vida' as const,
       subcategoria: 'Costo de Vida',
@@ -107,9 +113,9 @@ function clasificarComercio(concepto: string, texto: string) {
   }
 
   return {
-    categoria: 'Vida' as const,
-    subcategoria: 'Santander',
-    razon: 'Movimiento Santander sin señal clara; se clasifica conservadoramente como costo de vida.',
+    categoria: 'Placeres' as const,
+    subcategoria: 'Otros Placeres',
+    razon: 'Movimiento Santander sin señal clara de necesidad; por criterio de Diego se clasifica como consumo discrecional.',
   };
 }
 
@@ -159,7 +165,7 @@ export function parsearCorreoSantander(raw: string): ClasificacionMovimiento | n
     };
   }
 
-  const clasificacion = clasificarComercio(concepto, texto);
+  const clasificacion = clasificarConceptoGastoSantander(concepto, texto);
 
   return {
     concepto,

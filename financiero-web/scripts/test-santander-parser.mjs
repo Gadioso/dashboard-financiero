@@ -78,6 +78,46 @@ El 06/06/2026 a las 22:15:35 hrs.`,
     expected: { concepto: '7 ELEVEN T2718 JAVIER', monto: 248, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
+    name: 'Mercado Pago ambiguous expense is pleasure',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio MERCADOPAGO *MARIADEL con tu tarjeta de TDC terminación **1765, por un monto de $161.00 MXN.
+El 06/06/2026 a las 20:40:00 hrs.`,
+    expected: { concepto: 'MERCADOPAGO *MARIADEL', monto: 161, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
+  },
+  {
+    name: 'Unknown Santander expense defaults to pleasure',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio COMERCIO RANDOM con tu tarjeta de TDC terminación **1765, por un monto de $120.00 MXN.
+El 06/06/2026 a las 20:40:00 hrs.`,
+    expected: { concepto: 'RANDOM', monto: 120, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
+  },
+  {
+    name: 'Gasoline is life expense',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio GASOLINA SHELL con tu tarjeta de TDC terminación **1765, por un monto de $800.00 MXN.
+El 06/06/2026 a las 20:40:00 hrs.`,
+    expected: { concepto: 'GASOLINA SHELL', monto: 800, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+  },
+  {
+    name: 'Super groceries are life expense',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio SUPERAMA DESPENSA con tu tarjeta de TDC terminación **1765, por un monto de $1500.00 MXN.
+El 06/06/2026 a las 20:40:00 hrs.`,
+    expected: { concepto: 'SUPERAMA DESPENSA', monto: 1500, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+  },
+  {
+    name: 'Uber is pleasure by default',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio UBER TRIP HELP.UBER.COM con tu tarjeta de TDC terminación **1765, por un monto de $146.00 MXN.
+El 06/06/2026 a las 20:40:00 hrs.`,
+    expected: { concepto: 'UBER TRIP HELP.UBER.COM', monto: 146, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Viajes' },
+  },
+  {
     name: 'Credit card payment',
     raw: `Santander México
 Pago de Tarjeta de Crédito Santander

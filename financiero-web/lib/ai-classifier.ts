@@ -126,13 +126,17 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
     };
   }
 
-  if (/\b(caf[eé]|starbucks|taco|tacos|restaurante|cine|uber eats|rappi|salida|bar|concierto|viaje)\b/.test(normalizado)) {
+  if (/\b(caf[eé]|starbucks|taco|tacos|restaurante|cine|uber eats|rappi|salida|bar|concierto|viaje|hotel|mercado\s*pago|mercadopago|paypal|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/.test(normalizado)) {
     return {
       concepto,
       monto,
       tipo: 'gasto',
       categoria: 'Placeres',
-      subcategoria: /\b(caf[eé]|starbucks)\b/.test(normalizado) ? 'Cafe' : 'Restaurantes',
+      subcategoria: /\b(caf[eé]|starbucks)\b/.test(normalizado)
+        ? 'Cafe'
+        : /\b(viaje|hotel|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/.test(normalizado)
+          ? 'Viajes'
+          : 'Restaurantes',
       razon: 'Clasificado por regla local de consumo discrecional.',
     };
   }
@@ -159,7 +163,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
     };
   }
 
-  if (/\b(renta|luz|agua|super|s[uú]per|despensa|gasolina|transporte|metro|camion|camión|deuda|doctor|medicina)\b/.test(normalizado)) {
+  if (/\b(renta|luz|agua|super|s[uú]per|despensa|gasolina|transporte necesario|metro|camion|camión|deuda|doctor|medicina|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex)\b/.test(normalizado)) {
     return {
       concepto,
       monto,
@@ -237,6 +241,8 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "If it mentions insurance, classify as Futuro/Seguros.",
     "OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Notion, Zoom, Figma, Canva and similar work/software tools are Vida/Herramientas Trabajo.",
     "OXXO is Placeres/Otros Placeres by default for Diego, unless the text clearly says it was a bill payment, phone top-up, medicine, pharmacy, gas or another necessary service.",
+    "Mercado Pago, PayPal, restaurants, travel, hotels, Uber/Didi rides, coffee, convenience stores and leisure purchases are Placeres unless the user explicitly says they were for a necessary living expense.",
+    "Vida is narrow: gasoline, supermarket/basic groceries, phone, utilities, health, rent, debt, and work/software tools. Do not default ambiguous card purchases to Vida.",
     "If there is no clear amount, use 0. Do not invent an amount.",
     "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
     "Return only valid raw JSON matching the output_schema."
