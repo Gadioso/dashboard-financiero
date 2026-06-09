@@ -9,7 +9,7 @@
  * 3. Configurar Script Properties:
  *    - ENDPOINT_URL: https://tu-dominio.com/api/email/santander
  *    - EMAIL_INGEST_SECRET: el mismo secret configurado en Next.js
- * 4. Crear un trigger de tiempo para ejecutar santanderIngest cada 1 o 5 minutos.
+ * 4. Ejecutar crearTriggerSantanderCadaMinuto una vez para activar la revisión cada minuto.
  */
 
 const SANTANDER_PROCESSED_LABEL = 'Finanzas/Procesado-Santander';
@@ -89,6 +89,7 @@ function plainText_(message) {
 function postToDashboard_(payload) {
   const endpointUrl = getRequiredProperty_('ENDPOINT_URL');
   const secret = getRequiredProperty_('EMAIL_INGEST_SECRET');
+  const startedAt = new Date();
   const response = UrlFetchApp.fetch(endpointUrl, {
     method: 'post',
     contentType: 'application/json',
@@ -104,7 +105,12 @@ function postToDashboard_(payload) {
     throw new Error(`Dashboard respondió ${status}: ${response.getContentText()}`);
   }
 
-  return JSON.parse(response.getContentText());
+  const parsed = JSON.parse(response.getContentText());
+
+  return Object.assign(parsed, {
+    endpointStatus: status,
+    endpointDurationMs: new Date().getTime() - startedAt.getTime(),
+  });
 }
 
 function santanderIngest() {
@@ -131,6 +137,8 @@ function santanderIngest() {
         gmailMessageId: messageId,
         from: message.getFrom(),
         subject: message.getSubject(),
+        gmailReceivedAt: message.getDate().toISOString(),
+        appsScriptDetectedAt: new Date().toISOString(),
         fecha: message.getDate().toISOString(),
         raw: [
           message.getSubject(),
@@ -162,6 +170,16 @@ function santanderIngest() {
   saveProcessedIds_(processedIds);
 
   console.log(JSON.stringify({ sent, ignored, skipped, threads: threads.length }));
+}
+
+function crearTriggerSantanderCadaMinuto() {
+  ScriptApp.getProjectTriggers()
+    .filter((trigger) => trigger.getHandlerFunction() === 'santanderIngest')
+    .forEach((trigger) => ScriptApp.deleteTrigger(trigger));
+
+  ScriptApp.newTrigger('santanderIngest').timeBased().everyMinutes(1).create();
+
+  console.log('Trigger santanderIngest creado cada 1 minuto.');
 }
 
 function diagnosticarSantanderIngest() {

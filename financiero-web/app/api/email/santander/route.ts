@@ -34,6 +34,10 @@ function detectarMedioPagoSantander(raw: string) {
   return null;
 }
 
+function getStringField(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 async function guardarUltimoGastoNotificado({
   supabase,
   chatId,
@@ -409,6 +413,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const backendReceivedAt = new Date().toISOString();
+
   try {
     const ip = getClientIp(request);
     const rateLimit = checkRateLimit({
@@ -438,6 +444,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    const logContext = {
+      gmailReceivedAt: getStringField(body.gmailReceivedAt) || getStringField(body.fecha),
+      appsScriptDetectedAt: getStringField(body.appsScriptDetectedAt),
+      backendReceivedAt,
+    };
     const raw = [
       body.from,
       body.subject,
@@ -447,6 +458,7 @@ export async function POST(request: Request) {
     if (!tieneSenalSantander(raw)) {
       await registrarSantanderIngestLog({
         supabase,
+        ...logContext,
         gmailMessageId: body.gmailMessageId,
         from: body.from,
         subject: body.subject,
@@ -462,6 +474,7 @@ export async function POST(request: Request) {
     if (!parsed) {
       await registrarSantanderIngestLog({
         supabase,
+        ...logContext,
         gmailMessageId: body.gmailMessageId,
         from: body.from,
         subject: body.subject,
@@ -492,8 +505,10 @@ export async function POST(request: Request) {
           supabase,
           abono: duplicado,
         });
+        const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
         await registrarSantanderIngestLog({
           supabase,
+          ...logContext,
           gmailMessageId: body.gmailMessageId,
           from: body.from,
           subject: body.subject,
@@ -502,6 +517,7 @@ export async function POST(request: Request) {
           parsed,
           abonoTarjetaId: duplicado.id,
           telegramNotified,
+          telegramSentAt,
         });
 
         return NextResponse.json({ success: true, duplicate: true, data: duplicado, parsed });
@@ -535,8 +551,10 @@ export async function POST(request: Request) {
         supabase,
         abono: data,
       });
+      const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
       await registrarSantanderIngestLog({
         supabase,
+        ...logContext,
         gmailMessageId: body.gmailMessageId,
         from: body.from,
         subject: body.subject,
@@ -545,6 +563,7 @@ export async function POST(request: Request) {
         parsed,
         abonoTarjetaId: data.id,
         telegramNotified,
+        telegramSentAt,
       });
 
       return NextResponse.json({ success: true, data, parsed });
@@ -561,6 +580,7 @@ export async function POST(request: Request) {
       if (duplicado) {
         await registrarSantanderIngestLog({
           supabase,
+          ...logContext,
           gmailMessageId: body.gmailMessageId,
           from: body.from,
           subject: body.subject,
@@ -593,6 +613,7 @@ export async function POST(request: Request) {
       await sincronizarPresupuestoMensual(supabase, fecha);
       await registrarSantanderIngestLog({
         supabase,
+        ...logContext,
         gmailMessageId: body.gmailMessageId,
         from: body.from,
         subject: body.subject,
@@ -622,8 +643,10 @@ export async function POST(request: Request) {
         gasto: duplicado,
         medioPago,
       });
+      const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
       await registrarSantanderIngestLog({
         supabase,
+        ...logContext,
         gmailMessageId: body.gmailMessageId,
         from: body.from,
         subject: body.subject,
@@ -632,6 +655,7 @@ export async function POST(request: Request) {
         parsed,
         gastoId: duplicado.id,
         telegramNotified,
+        telegramSentAt,
       });
 
       return NextResponse.json({ success: true, duplicate: true, data: duplicado, parsed });
@@ -678,8 +702,10 @@ export async function POST(request: Request) {
       gasto: result.data,
       medioPago,
     });
+    const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
     await registrarSantanderIngestLog({
       supabase,
+      ...logContext,
       gmailMessageId: body.gmailMessageId,
       from: body.from,
       subject: body.subject,
@@ -688,6 +714,7 @@ export async function POST(request: Request) {
       parsed,
       gastoId: result.data.id,
       telegramNotified,
+      telegramSentAt,
     });
 
     return NextResponse.json({ success: true, data: result.data, parsed });

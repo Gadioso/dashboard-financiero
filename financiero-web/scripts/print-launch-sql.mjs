@@ -11,6 +11,7 @@ const migrationSets = {
     '20260605_create_classification_preferences.sql',
     '20260607_create_santander_ingest_logs.sql',
     '20260607_create_credit_card_payments.sql',
+    '20260609_add_santander_ingest_latency.sql',
     '20260607_enable_rls_financial_tables.sql',
   ],
   'multi-user': [
