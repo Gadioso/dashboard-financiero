@@ -35,6 +35,8 @@ Ejecutar después de aplicar SQL/RLS y antes de considerar v1 lista.
   - ingreso si realmente entra dinero.
 - Confirmar que Telegram manda alerta al usuario `945363158`.
 - Confirmar que duplicados no crean doble gasto.
+- Confirmar en el dashboard que el evento muestra latencia de `Ingesta` y `Telegram`.
+- Ejecutar Apps Script `crearTriggerSantanderCadaMinuto` y confirmar que existe un trigger de `santanderIngest` cada 1 minuto.
 
 ## Telegram
 

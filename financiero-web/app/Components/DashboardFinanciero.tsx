@@ -52,6 +52,7 @@ type SantanderStatus = {
     acceptsRegla333333Phase: boolean;
     acceptsAbonosTarjetaCredito?: boolean;
     acceptsSantanderIngestLogs?: boolean;
+    acceptsSantanderIngestLatency?: boolean;
     migrationRequired: boolean;
   };
   ingestLogs?: {
@@ -68,6 +69,12 @@ type SantanderStatus = {
       categoria?: string | null;
       subcategoria?: string | null;
       telegram_notified?: boolean | null;
+      gmail_received_at?: string | null;
+      apps_script_detected_at?: string | null;
+      backend_received_at?: string | null;
+      telegram_sent_at?: string | null;
+      ingest_latency_ms?: number | null;
+      telegram_latency_ms?: number | null;
       error?: string | null;
     }>;
   };
@@ -75,6 +82,20 @@ type SantanderStatus = {
 };
 
 const mesActualKey = mesKeyDesdeFecha(new Date());
+
+function formatearDuracionMs(value?: number | null) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+
+  if (value < 1000) return `${Math.max(0, Math.round(value))} ms`;
+
+  const seconds = value / 1000;
+
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
+
+  const minutes = seconds / 60;
+
+  return `${minutes.toFixed(minutes < 10 ? 1 : 0)} min`;
+}
 
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
@@ -412,33 +433,50 @@ export default function DashboardFinanciero() {
               <h3 className="text-sm font-semibold text-slate-200">Última ingesta Santander</h3>
               <span className="text-xs text-slate-500">Últimos {santanderStatus.ingestLogs.logs.length} eventos</span>
             </div>
+            {santanderStatus.ingestLogs.error && (
+              <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                {santanderStatus.ingestLogs.error}
+              </p>
+            )}
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {santanderStatus.ingestLogs.logs.slice(0, 6).map((log) => (
-                <div key={log.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs text-slate-400">{formatearFecha(log.created_at)}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      log.status === 'inserted'
-                        ? 'bg-emerald-400/10 text-emerald-300'
-                        : log.status === 'duplicate'
-                          ? 'bg-cyan-400/10 text-cyan-300'
-                          : log.status === 'error'
-                            ? 'bg-rose-400/10 text-rose-300'
-                            : 'bg-amber-400/10 text-amber-300'
-                    }`}>
-                      {log.status}
-                    </span>
+              {santanderStatus.ingestLogs.logs.slice(0, 6).map((log) => {
+                const ingestLatency = formatearDuracionMs(log.ingest_latency_ms);
+                const telegramLatency = formatearDuracionMs(log.telegram_latency_ms);
+
+                return (
+                  <div key={log.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs text-slate-400">{formatearFecha(log.created_at)}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        log.status === 'inserted'
+                          ? 'bg-emerald-400/10 text-emerald-300'
+                          : log.status === 'duplicate'
+                            ? 'bg-cyan-400/10 text-cyan-300'
+                            : log.status === 'error'
+                              ? 'bg-rose-400/10 text-rose-300'
+                              : 'bg-amber-400/10 text-amber-300'
+                      }`}>
+                        {log.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 truncate text-sm font-medium text-slate-100">{log.concepto || log.reason || 'Sin concepto'}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
+                      {log.categoria ? `${nombreBolsa(log.categoria)}${log.subcategoria ? ` / ${log.subcategoria}` : ''}` : log.reason || 'Sin categoría'}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                      <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-slate-400">
+                        Ingesta {ingestLatency || 'pendiente'}
+                      </span>
+                      <span className={`rounded-lg border px-2 py-1 ${
+                        log.telegram_notified ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-white/[0.03] text-slate-500'
+                      }`}>
+                        Telegram {telegramLatency || (log.telegram_notified ? 'ok' : 'sin aviso')}
+                      </span>
+                    </div>
                   </div>
-                  <p className="mt-2 truncate text-sm font-medium text-slate-100">{log.concepto || log.reason || 'Sin concepto'}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
-                    {log.categoria ? `${nombreBolsa(log.categoria)}${log.subcategoria ? ` / ${log.subcategoria}` : ''}` : log.reason || 'Sin categoría'}
-                  </p>
-                  <p className={`mt-2 text-xs ${log.telegram_notified ? 'text-emerald-300' : 'text-slate-500'}`}>
-                    Telegram {log.telegram_notified ? 'notificado' : 'sin notificación'}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (

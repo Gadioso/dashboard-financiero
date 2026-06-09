@@ -14,6 +14,7 @@ Objetivo: que `diegayoso1999@gmail.com` detecte correos de Santander y mande sol
 - Validación backend: ignora payloads sin señal Santander aunque traigan formato de movimiento
 - Notificación Telegram: cuando inserta un gasto nuevo de Santander, avisa la categoría detectada y da comandos para corregirla.
 - Latencia esperada: depende del trigger de Google Apps Script. Para alertas rápidas, configurar `santanderIngest` cada 1 minuto; si está cada 5 minutos, la alerta puede tardar hasta 5 minutos aunque el endpoint y Telegram estén sanos.
+- Observabilidad: el dashboard muestra latencia de ingesta y Telegram cuando está aplicada la migración `20260609_add_santander_ingest_latency.sql`.
 
 ## Auditoría local
 
@@ -101,13 +102,15 @@ cambiar abc12345 a futuro
 
 El ID corto queda como respaldo. Si respondes sin ID, el bot corrige el último gasto registrado o notificado en ese chat.
 
-## Supabase SQL pendiente
+## Supabase SQL
 
-Antes de guardar origen `Santander_Email` y quitar `Fase 1: Escudo`, ejecutar:
+Para preparar todo el esquema privado v1:
 
-```sql
--- financiero-web/supabase/migrations/20260602_allow_dashboard_phase_and_santander_origin.sql
+```bash
+npm run sql:launch
 ```
+
+Pega el SQL completo en Supabase SQL Editor. Incluye origen `Santander_Email`, memoria Telegram, preferencias de clasificación, logs de ingesta, abonos TDC, latencia Gmail/App Script/Telegram y RLS.
 
 ## Configurar Google Apps Script
 
@@ -119,11 +122,14 @@ Antes de guardar origen `Santander_Email` y quitar `Fase 1: Escudo`, ejecutar:
    - `EMAIL_INGEST_SECRET`: el mismo secreto configurado en Next.js
 5. Ejecutar `diagnosticarSantanderIngest` una vez. Debe imprimir la búsqueda, cantidad de threads y una muestra de correos Santander recientes.
 6. Ejecutar `santanderIngest` una vez y aceptar permisos de Gmail.
-7. Crear trigger:
-   - Function: `santanderIngest`
-   - Event source: `Time-driven`
-   - Interval recomendado: cada 1 minuto
-   - Interval aceptable: cada 5 minutos si no importa esperar más
+7. Ejecutar `crearTriggerSantanderCadaMinuto` una vez. Esa función borra triggers viejos de `santanderIngest` y crea uno nuevo cada 1 minuto.
+
+Si prefieres configurarlo manualmente:
+
+- Function: `santanderIngest`
+- Event source: `Time-driven`
+- Interval recomendado: cada 1 minuto
+- Interval aceptable: cada 5 minutos si no importa esperar más
 
 Para preparar las propiedades sin exponer el secret por accidente:
 
@@ -151,3 +157,12 @@ El endpoint vuelve a validar el texto y solo inserta si:
 - Hay señal Santander en remitente/asunto/cuerpo.
 - El parser detecta monto y tipo de movimiento.
 - No existe ya un movimiento con el mismo día, concepto y monto.
+
+## Cómo leer latencia
+
+En el dashboard, cada evento Santander muestra:
+
+- `Ingesta`: tiempo desde que Apps Script detectó el correo hasta que Vercel recibió el POST.
+- `Telegram`: tiempo desde que Vercel recibió el POST hasta que terminó el envío de alerta.
+
+Si `Ingesta` es alta, el cuello de botella suele ser Gmail/Apps Script/trigger. Si `Telegram` es alta o aparece como `sin aviso`, revisar `TELEGRAM_BOT_TOKEN`, `TELEGRAM_NOTIFY_CHAT_ID` y conectividad con Telegram.
