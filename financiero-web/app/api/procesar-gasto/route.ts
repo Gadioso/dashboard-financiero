@@ -3,6 +3,7 @@ import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { getPrivateTenantContext, withProfile } from '@/lib/tenant-context';
 
 // 2. Inicializar el motor de Google Gemini
 // Recuerda que debes tener tu variable GEMINI_API_KEY en tu archivo .env.local
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     }
 
     const { texto } = await request.json();
+    const tenant = getPrivateTenantContext();
 
     if (!texto) {
       return NextResponse.json({ success: false, error: 'No proporcionaste ningún texto.' }, { status: 400 });
@@ -29,32 +31,32 @@ export async function POST(request: Request) {
     if (dataAI.tipo === 'gasto') {
       // Ajustamos el nombre de la categoría para que haga match con tu base de datos
       const categoriaFinal = categoriaParaGastos(dataAI.categoria);
-      
+
       queryResult = await supabase
         .from('gastos')
-        .insert([{ 
-          concepto: dataAI.concepto, 
-          monto: Number(dataAI.monto), 
-          categoria: categoriaFinal, 
+        .insert([withProfile({
+          concepto: dataAI.concepto,
+          monto: Number(dataAI.monto),
+          categoria: categoriaFinal,
           subcategoria: dataAI.subcategoria,
-          origen: 'Web', 
-          fecha: new Date().toISOString() 
-        }])
+          origen: 'Web',
+          fecha: new Date().toISOString()
+        }, tenant.profileId)])
         .select();
     } else {
       const fechaIngreso = new Date();
       queryResult = await supabase
         .from('ingresos')
-        .insert([{ 
-          concepto: dataAI.concepto, 
-          monto: Number(dataAI.monto), 
-          tipo: 'Extra', 
+        .insert([withProfile({
+          concepto: dataAI.concepto,
+          monto: Number(dataAI.monto),
+          tipo: 'Extra',
           fecha: fechaIngreso.toISOString()
-        }])
+        }, tenant.profileId)])
         .select();
 
       if (!queryResult.error) {
-        await sincronizarPresupuestoMensual(supabase, fechaIngreso);
+        await sincronizarPresupuestoMensual(supabase, fechaIngreso, tenant.profileId);
       }
     }
 

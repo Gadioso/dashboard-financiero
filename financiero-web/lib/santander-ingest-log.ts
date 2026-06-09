@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ClasificacionMovimiento } from '@/lib/financial-core';
+import { applyProfileFilter, withProfile } from '@/lib/tenant-context';
 
 export type SantanderIngestLogStatus = 'inserted' | 'duplicate' | 'ignored' | 'error';
 
@@ -12,6 +13,7 @@ type SantanderIngestLogInput = {
   appsScriptDetectedAt?: string | null;
   backendReceivedAt?: string | null;
   telegramSentAt?: string | null;
+  profileId?: string | null;
   status: SantanderIngestLogStatus;
   reason?: string | null;
   parsed?: ClasificacionMovimiento | null;
@@ -50,6 +52,7 @@ export async function registrarSantanderIngestLog({
   appsScriptDetectedAt,
   backendReceivedAt,
   telegramSentAt,
+  profileId,
   status,
   reason,
   parsed,
@@ -63,7 +66,7 @@ export async function registrarSantanderIngestLog({
   const gmailAt = safeDate(gmailReceivedAt);
   const appsScriptAt = safeDate(appsScriptDetectedAt);
   const telegramAt = safeDate(telegramSentAt);
-  const basePayload = {
+  const basePayload = withProfile({
     gmail_message_id: gmailMessageId || null,
     from_email: from || null,
     subject: subject || null,
@@ -79,7 +82,7 @@ export async function registrarSantanderIngestLog({
     subcategoria: parsed?.subcategoria || null,
     telegram_notified: telegramNotified ?? false,
     error: error || null,
-  };
+  }, profileId);
   const payload = {
     ...basePayload,
     gmail_received_at: gmailAt,
@@ -108,21 +111,27 @@ export async function registrarSantanderIngestLog({
 }
 
 export async function obtenerSantanderIngestLogs(supabase: SupabaseClient) {
+  return obtenerSantanderIngestLogsPorPerfil(supabase, null);
+}
+
+export async function obtenerSantanderIngestLogsPorPerfil(supabase: SupabaseClient, profileId?: string | null) {
   const selectBase = 'id, created_at, gmail_message_id, subject, status, reason, movimiento_tipo, gasto_id, ingreso_id, abono_tarjeta_id, concepto, monto, categoria, subcategoria, telegram_notified, error';
   const selectWithLatency = `${selectBase}, gmail_received_at, apps_script_detected_at, backend_received_at, telegram_sent_at, ingest_latency_ms, telegram_latency_ms`;
-  const { data, error } = await supabase
+  const query = supabase
     .from('santander_ingest_logs')
     .select(selectWithLatency)
     .order('created_at', { ascending: false })
     .limit(12);
+  const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) {
     if (/column .* does not exist|schema cache|Could not find/i.test(error.message)) {
-      const fallback = await supabase
+      const fallbackQuery = supabase
         .from('santander_ingest_logs')
         .select(selectBase)
         .order('created_at', { ascending: false })
         .limit(12);
+      const fallback = await applyProfileFilter(fallbackQuery, profileId);
 
       if (!fallback.error) {
         return {

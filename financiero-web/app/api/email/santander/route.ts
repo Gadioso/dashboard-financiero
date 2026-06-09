@@ -4,10 +4,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { buscarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { categoriaParaGastos, formatearFecha, formatearMonto, nombreBolsa } from '@/lib/financial-core';
-import { obtenerSantanderIngestLogs, registrarSantanderIngestLog } from '@/lib/santander-ingest-log';
+import { obtenerSantanderIngestLogsPorPerfil, registrarSantanderIngestLog } from '@/lib/santander-ingest-log';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { applyProfileFilter, getEmailIngestTenantContext, getPrivateTenantContext, withProfile } from '@/lib/tenant-context';
 
 const emailIngestSecret = process.env.EMAIL_INGEST_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -43,17 +44,19 @@ async function guardarUltimoGastoNotificado({
   chatId,
   gastoId,
   message,
+  profileId,
 }: {
   supabase: SupabaseClient;
   chatId: string;
   gastoId: string | number;
   message: string;
+  profileId?: string | null;
 }) {
-  const { data } = await supabase
+  const memoryQuery = supabase
     .from('telegram_memoria')
     .select('messages')
-    .eq('chat_id', chatId)
-    .maybeSingle();
+    .eq('chat_id', chatId);
+  const { data } = await applyProfileFilter(memoryQuery, profileId).maybeSingle();
 
   const row = data as { messages?: unknown } | null;
   const memoria = Array.isArray(row?.messages) ? row.messages : [];
@@ -75,6 +78,7 @@ async function guardarUltimoGastoNotificado({
     .upsert(
       {
         chat_id: chatId,
+        ...(profileId ? { profile_id: profileId } : {}),
         messages,
         updated_at: now,
       },
@@ -82,15 +86,28 @@ async function guardarUltimoGastoNotificado({
     );
 }
 
-async function obtenerChatNotificacion(supabase: SupabaseClient) {
+async function obtenerChatNotificacion(supabase: SupabaseClient, profileId?: string | null) {
+  if (profileId) {
+    const { data } = await supabase
+      .from('telegram_accounts')
+      .select('chat_id')
+      .eq('profile_id', profileId)
+      .order('last_seen_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const chatId = (data as { chat_id?: string } | null)?.chat_id;
+
+    if (chatId) return chatId;
+  }
+
   if (telegramNotifyChatId) return telegramNotifyChatId;
 
-  const { data, error } = await supabase
+  const memoryQuery = supabase
     .from('telegram_memoria')
     .select('chat_id')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  const { data, error } = await applyProfileFilter(memoryQuery, profileId).maybeSingle();
 
   if (error) return null;
 
@@ -101,6 +118,7 @@ async function notificarGastoSantander({
   supabase,
   gasto,
   medioPago,
+  profileId,
 }: {
   supabase: SupabaseClient;
   gasto: {
@@ -112,10 +130,11 @@ async function notificarGastoSantander({
     fecha: string;
   };
   medioPago?: string | null;
+  profileId?: string | null;
 }) {
   if (!telegramBotToken) return false;
 
-  const chatId = await obtenerChatNotificacion(supabase);
+  const chatId = await obtenerChatNotificacion(supabase, profileId);
 
   if (!chatId) return false;
 
@@ -152,6 +171,7 @@ async function notificarGastoSantander({
     chatId,
     gastoId: gasto.id,
     message,
+    profileId,
   });
 
   return true;
@@ -160,6 +180,7 @@ async function notificarGastoSantander({
 async function notificarAbonoTarjetaSantander({
   supabase,
   abono,
+  profileId,
 }: {
   supabase: SupabaseClient;
   abono: {
@@ -169,10 +190,11 @@ async function notificarAbonoTarjetaSantander({
     tarjeta?: string | null;
     fecha: string;
   };
+  profileId?: string | null;
 }) {
   if (!telegramBotToken) return false;
 
-  const chatId = await obtenerChatNotificacion(supabase);
+  const chatId = await obtenerChatNotificacion(supabase, profileId);
 
   if (!chatId) return false;
 
@@ -206,21 +228,23 @@ async function buscarIngresoDuplicado({
   monto,
   fecha,
   supabase,
+  profileId,
 }: {
   concepto: string;
   monto: number;
   fecha: Date;
   supabase: SupabaseClient;
+  profileId?: string | null;
 }) {
   const { inicio, fin } = rangoDiaUTC(fecha);
-  const { data, error } = await supabase
+  const query = supabase
     .from('ingresos')
     .select('id, concepto, monto, tipo, fecha')
     .eq('concepto', concepto)
     .eq('monto', monto)
     .gte('fecha', inicio)
-    .lt('fecha', fin)
-    .maybeSingle();
+    .lt('fecha', fin);
+  const { data, error } = await applyProfileFilter(query, profileId).maybeSingle();
 
   if (error) throw new Error(`No pude buscar ingreso duplicado: ${error.message}`);
 
@@ -232,21 +256,23 @@ async function buscarGastoDuplicado({
   monto,
   fecha,
   supabase,
+  profileId,
 }: {
   concepto: string;
   monto: number;
   fecha: Date;
   supabase: SupabaseClient;
+  profileId?: string | null;
 }) {
   const { inicio, fin } = rangoDiaUTC(fecha);
-  const { data, error } = await supabase
+  const query = supabase
     .from('gastos')
     .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
     .eq('concepto', concepto)
     .eq('monto', monto)
     .gte('fecha', inicio)
-    .lt('fecha', fin)
-    .maybeSingle();
+    .lt('fecha', fin);
+  const { data, error } = await applyProfileFilter(query, profileId).maybeSingle();
 
   if (error) throw new Error(`No pude buscar gasto duplicado: ${error.message}`);
 
@@ -258,21 +284,23 @@ async function buscarAbonoTarjetaDuplicado({
   monto,
   fecha,
   supabase,
+  profileId,
 }: {
   concepto: string;
   monto: number;
   fecha: Date;
   supabase: SupabaseClient;
+  profileId?: string | null;
 }) {
   const { inicio, fin } = rangoDiaUTC(fecha);
-  const { data, error } = await supabase
+  const query = supabase
     .from('abonos_tarjeta_credito')
     .select('id, concepto, monto, tarjeta, origen, fecha')
     .eq('concepto', concepto)
     .eq('monto', monto)
     .gte('fecha', inicio)
-    .lt('fecha', fin)
-    .maybeSingle();
+    .lt('fecha', fin);
+  const { data, error } = await applyProfileFilter(query, profileId).maybeSingle();
 
   if (error) throw new Error(`No pude buscar abono de tarjeta duplicado: ${error.message}`);
 
@@ -378,6 +406,7 @@ export async function GET() {
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
+    const tenant = getPrivateTenantContext();
 
     const [origenSantanderEmail, faseRegla333333, abonosTarjetaCredito, publicWrites] = await Promise.all([
       aceptaOrigenSantanderEmail(supabase),
@@ -385,7 +414,7 @@ export async function GET() {
       aceptaAbonosTarjetaCredito(supabase),
       bloqueaEscriturasPublicas(supabase),
     ]);
-    const ingestLogs = await obtenerSantanderIngestLogs(supabase);
+    const ingestLogs = await obtenerSantanderIngestLogsPorPerfil(supabase, tenant.profileId);
 
     return NextResponse.json({
       success: true,
@@ -403,6 +432,7 @@ export async function GET() {
         publicWritesChecked: publicWrites.checked,
         publicWritesReason: publicWrites.reason,
         migrationRequired: !origenSantanderEmail || !faseRegla333333 || !abonosTarjetaCredito || !ingestLogs.available || Boolean(ingestLogs.error),
+        profileScoped: Boolean(tenant.profileId),
       },
       ingestLogs,
       endpoint: '/api/email/santander',
@@ -445,10 +475,12 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    const tenant = getEmailIngestTenantContext();
     const logContext = {
       gmailReceivedAt: getStringField(body.gmailReceivedAt) || getStringField(body.fecha),
       appsScriptDetectedAt: getStringField(body.appsScriptDetectedAt),
       backendReceivedAt,
+      profileId: tenant.profileId,
     };
     const raw = [
       body.from,
@@ -499,12 +531,14 @@ export async function POST(request: Request) {
         monto: parsed.monto,
         fecha,
         supabase,
+        profileId: tenant.profileId,
       });
 
       if (duplicado) {
         const telegramNotified = await notificarAbonoTarjetaSantander({
           supabase,
           abono: duplicado,
+          profileId: tenant.profileId,
         });
         const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
         await registrarSantanderIngestLog({
@@ -527,13 +561,13 @@ export async function POST(request: Request) {
       const { data, error } = await supabase
         .from('abonos_tarjeta_credito')
         .insert([
-          {
+          withProfile({
             concepto: parsed.concepto,
             monto: parsed.monto,
             tarjeta: medioPago || 'Tarjeta de crédito Santander',
             origen: 'Santander_Email',
             fecha: fecha.toISOString(),
-          },
+          }, tenant.profileId),
         ])
         .select('id, concepto, monto, tarjeta, origen, fecha')
         .single();
@@ -551,6 +585,7 @@ export async function POST(request: Request) {
       const telegramNotified = await notificarAbonoTarjetaSantander({
         supabase,
         abono: data,
+        profileId: tenant.profileId,
       });
       const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
       await registrarSantanderIngestLog({
@@ -576,6 +611,7 @@ export async function POST(request: Request) {
         monto: parsed.monto,
         fecha,
         supabase,
+        profileId: tenant.profileId,
       });
 
       if (duplicado) {
@@ -597,12 +633,12 @@ export async function POST(request: Request) {
       const { data, error } = await supabase
         .from('ingresos')
         .insert([
-          {
+          withProfile({
             concepto: parsed.concepto,
             monto: parsed.monto,
             tipo: 'Extra',
             fecha: fecha.toISOString(),
-          },
+          }, tenant.profileId),
         ])
         .select('id, concepto, monto, tipo, fecha')
         .single();
@@ -611,7 +647,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      await sincronizarPresupuestoMensual(supabase, fecha);
+      await sincronizarPresupuestoMensual(supabase, fecha, tenant.profileId);
       await registrarSantanderIngestLog({
         supabase,
         ...logContext,
@@ -627,7 +663,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data, parsed });
     }
 
-    const preferencia = await buscarPreferenciaClasificacion(supabase, parsed.concepto);
+    const preferencia = await buscarPreferenciaClasificacion(supabase, parsed.concepto, tenant.profileId);
     const categoriaClasificada = preferencia?.categoria || parsed.categoria;
     const subcategoriaClasificada = preferencia?.subcategoria || parsed.subcategoria;
 
@@ -636,6 +672,7 @@ export async function POST(request: Request) {
       monto: parsed.monto,
       fecha,
       supabase,
+      profileId: tenant.profileId,
     });
 
     if (duplicado) {
@@ -643,6 +680,7 @@ export async function POST(request: Request) {
         supabase,
         gasto: duplicado,
         medioPago,
+        profileId: tenant.profileId,
       });
       const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
       await registrarSantanderIngestLog({
@@ -665,14 +703,14 @@ export async function POST(request: Request) {
     let result = await supabase
       .from('gastos')
       .insert([
-        {
+        withProfile({
           concepto: parsed.concepto,
           monto: parsed.monto,
           categoria: categoriaParaGastos(categoriaClasificada),
           subcategoria: subcategoriaClasificada,
           origen: 'Santander_Email',
           fecha: fecha.toISOString(),
-        },
+        }, tenant.profileId),
       ])
       .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
       .single();
@@ -681,14 +719,14 @@ export async function POST(request: Request) {
       result = await supabase
         .from('gastos')
         .insert([
-          {
+          withProfile({
             concepto: parsed.concepto,
             monto: parsed.monto,
             categoria: categoriaParaGastos(categoriaClasificada),
             subcategoria: subcategoriaClasificada,
             origen: 'Web',
             fecha: fecha.toISOString(),
-          },
+          }, tenant.profileId),
         ])
         .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
         .single();
@@ -702,6 +740,7 @@ export async function POST(request: Request) {
       supabase,
       gasto: result.data,
       medioPago,
+      profileId: tenant.profileId,
     });
     const telegramSentAt = telegramNotified ? new Date().toISOString() : null;
     await registrarSantanderIngestLog({

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
 
 type RouteContext = {
   params: Promise<{
@@ -19,17 +20,18 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
 
     const { id } = await context.params;
+    const tenant = getPrivateTenantContext();
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'No proporcionaste el ID del gasto.' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const deleteQuery = supabase
       .from('gastos')
       .delete()
       .eq('id', id)
-      .select('id')
-      .maybeSingle();
+      .select('id');
+    const { data, error } = await applyProfileFilter(deleteQuery, tenant.profileId).maybeSingle();
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });

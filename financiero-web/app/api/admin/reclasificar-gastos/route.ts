@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { clasificarConceptoGastoSantander } from '@/lib/santander-email-parser';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,12 +39,14 @@ export async function GET(request: Request) {
     const year = Number(searchParams.get('year') || 2026);
     const start = new Date(Date.UTC(year, 0, 1)).toISOString();
     const end = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
-    const { data, error } = await supabase
+    const tenant = getPrivateTenantContext();
+    const gastosQuery = supabase
       .from('gastos')
       .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
       .gte('fecha', start)
       .lt('fecha', end)
       .order('fecha', { ascending: false });
+    const { data, error } = await applyProfileFilter(gastosQuery, tenant.profileId);
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -78,13 +81,14 @@ export async function GET(request: Request) {
 
     if (apply) {
       for (const item of candidatos) {
-        const { error: updateError } = await supabase
+        const updateQuery = supabase
           .from('gastos')
           .update({
             categoria: item.nueva.categoria,
             subcategoria: item.nueva.subcategoria,
           })
           .eq('id', item.id);
+        const { error: updateError } = await applyProfileFilter(updateQuery, tenant.profileId);
 
         if (updateError) {
           errors.push({ id: item.id, error: updateError.message });
@@ -102,6 +106,7 @@ export async function GET(request: Request) {
       candidates: candidatos.length,
       updated,
       errors,
+      profileScoped: Boolean(tenant.profileId),
       sample: candidatos.slice(0, 25),
     });
   } catch (error: unknown) {

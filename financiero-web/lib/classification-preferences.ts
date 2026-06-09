@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CategoriaFinanciera } from '@/lib/financial-core';
+import { applyProfileFilter, withProfile } from '@/lib/tenant-context';
 
 export type PreferenciaClasificacion = {
   categoria: CategoriaFinanciera;
@@ -37,13 +38,15 @@ function matcherCoincide(concepto: string, matcher: string) {
 
 export async function buscarPreferenciaClasificacion(
   supabase: SupabaseClient,
-  concepto: string
+  concepto: string,
+  profileId?: string | null
 ): Promise<PreferenciaClasificacion | null> {
-  const { data, error } = await supabase
+  const query = supabase
     .from('classification_preferences')
     .select('matcher, categoria, subcategoria')
     .order('updated_at', { ascending: false })
     .limit(100);
+  const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) return null;
 
@@ -57,11 +60,13 @@ export async function guardarPreferenciaClasificacion({
   concepto,
   categoria,
   subcategoria,
+  profileId,
 }: {
   supabase: SupabaseClient;
   concepto: string;
   categoria: CategoriaFinanciera;
   subcategoria: string;
+  profileId?: string | null;
 }) {
   const matcher = normalizarComercioParaPreferencia(concepto);
 
@@ -70,12 +75,12 @@ export async function guardarPreferenciaClasificacion({
   await supabase
     .from('classification_preferences')
     .upsert(
-      {
+      withProfile({
         matcher,
         categoria,
         subcategoria,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'matcher' }
+      }, profileId),
+      { onConflict: profileId ? 'profile_id,matcher' : 'matcher' }
     );
 }

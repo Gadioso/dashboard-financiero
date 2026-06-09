@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,32 +24,36 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const mesActivo = validarMes(url.searchParams.get('mes'));
+    const tenant = getPrivateTenantContext();
     const inicio2026 = new Date(Date.UTC(2026, 0, 1)).toISOString();
     const fin2026 = new Date(Date.UTC(2027, 0, 1)).toISOString();
+    const presupuestosQuery = supabase
+      .from('presupuestos_mensuales')
+      .select('techo_vida, techo_placeres, techo_futuro, fase_ahorro')
+      .eq('mes_anio', `${mesActivo}-01`);
+    const ingresosQuery = supabase
+      .from('ingresos')
+      .select('id, concepto, monto, tipo, fecha')
+      .gte('fecha', inicio2026)
+      .lt('fecha', fin2026);
+    const gastosQuery = supabase
+      .from('gastos')
+      .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+      .gte('fecha', inicio2026)
+      .lt('fecha', fin2026);
+    const abonosQuery = supabase
+      .from('abonos_tarjeta_credito')
+      .select('id, concepto, monto, tarjeta, origen, fecha')
+      .gte('fecha', inicio2026)
+      .lt('fecha', fin2026)
+      .order('fecha', { ascending: false });
 
     const [{ data: pres, error: errorPres }, { data: ingresosAnuales, error: errorIngresos }, { data: gastosAnuales, error: errorGastos }, abonosTarjetaResult] =
       await Promise.all([
-        supabase
-          .from('presupuestos_mensuales')
-          .select('techo_vida, techo_placeres, techo_futuro, fase_ahorro')
-          .eq('mes_anio', `${mesActivo}-01`)
-          .maybeSingle(),
-        supabase
-          .from('ingresos')
-          .select('id, concepto, monto, tipo, fecha')
-          .gte('fecha', inicio2026)
-          .lt('fecha', fin2026),
-        supabase
-          .from('gastos')
-          .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
-          .gte('fecha', inicio2026)
-          .lt('fecha', fin2026),
-        supabase
-          .from('abonos_tarjeta_credito')
-          .select('id, concepto, monto, tarjeta, origen, fecha')
-          .gte('fecha', inicio2026)
-          .lt('fecha', fin2026)
-          .order('fecha', { ascending: false }),
+        applyProfileFilter(presupuestosQuery, tenant.profileId).maybeSingle(),
+        applyProfileFilter(ingresosQuery, tenant.profileId),
+        applyProfileFilter(gastosQuery, tenant.profileId),
+        applyProfileFilter(abonosQuery, tenant.profileId),
       ]);
 
     if (errorPres) throw new Error(`No pude consultar presupuestos: ${errorPres.message}`);
@@ -65,6 +70,7 @@ export async function GET(request: Request) {
       schema: {
         acceptsAbonosTarjetaCredito: !abonosTarjetaResult.error,
         abonosTarjetaError: abonosTarjetaResult.error?.message || null,
+        profileScoped: Boolean(tenant.profileId),
       },
     });
   } catch (error: unknown) {

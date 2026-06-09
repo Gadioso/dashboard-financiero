@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { calcularIngresosMes, calcularPresupuestoTresTercios } from '@/lib/financial-core';
+import { applyProfileFilter, withProfile } from '@/lib/tenant-context';
 
 function monthKeyFromDate(fecha: Date) {
   const year = fecha.getUTCFullYear();
@@ -18,13 +19,14 @@ function monthRange(mesKey: string) {
   };
 }
 
-export async function sincronizarPresupuestoMensual(supabase: SupabaseClient, fecha = new Date()) {
+export async function sincronizarPresupuestoMensual(supabase: SupabaseClient, fecha = new Date(), profileId?: string | null) {
   const { mesAnio, inicio, fin } = monthRange(monthKeyFromDate(fecha));
-  const { data: ingresos, error: ingresosError } = await supabase
+  const ingresosQuery = supabase
     .from('ingresos')
     .select('monto')
     .gte('fecha', inicio)
     .lt('fecha', fin);
+  const { data: ingresos, error: ingresosError } = await applyProfileFilter(ingresosQuery, profileId);
 
   if (ingresosError) {
     throw new Error(`No pude calcular ingresos del mes: ${ingresosError.message}`);
@@ -32,18 +34,18 @@ export async function sincronizarPresupuestoMensual(supabase: SupabaseClient, fe
 
   const ingresosMes = calcularIngresosMes(ingresos || []);
   const presupuesto = calcularPresupuestoTresTercios(ingresosMes);
-  const payload = {
+  const payload = withProfile({
     mes_anio: mesAnio,
     techo_vida: presupuesto.Vida,
     techo_placeres: presupuesto.Placeres,
     techo_futuro: presupuesto.Futuro,
     fase_ahorro: 'Regla 33/33/33 activa',
-  };
-  const { data: existente, error: existenteError } = await supabase
+  }, profileId);
+  const existenteQuery = supabase
     .from('presupuestos_mensuales')
     .select('id')
-    .eq('mes_anio', mesAnio)
-    .maybeSingle();
+    .eq('mes_anio', mesAnio);
+  const { data: existente, error: existenteError } = await applyProfileFilter(existenteQuery, profileId).maybeSingle();
 
   if (existenteError) {
     throw new Error(`No pude consultar presupuesto mensual: ${existenteError.message}`);

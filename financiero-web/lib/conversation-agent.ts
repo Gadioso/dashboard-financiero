@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { guardarPreferenciaClasificacion } from '@/lib/classification-preferences';
+import { applyProfileFilter } from '@/lib/tenant-context';
 import { extraerJson, generateGeminiText } from '@/lib/gemini';
 import {
   calcularGastadoPorBolsa,
@@ -279,18 +280,24 @@ function normalizarCategoriaCorreccion(texto: string) {
   return null;
 }
 
-async function actualizarCategoriaGasto(supabase: SupabaseClient, idPrefix: string, categoriaTexto: string) {
+async function actualizarCategoriaGasto(
+  supabase: SupabaseClient,
+  idPrefix: string,
+  categoriaTexto: string,
+  profileId?: string | null
+) {
   const categoria = normalizarCategoriaCorreccion(categoriaTexto);
 
   if (!categoria) {
     return 'No entendí la categoría. Usa: vida, placeres o futuro.';
   }
 
-  const { data, error } = await supabase
+  const query = supabase
     .from('gastos')
     .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
     .order('fecha', { ascending: false })
     .limit(300);
+  const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) {
     throw new Error(`No pude buscar el gasto para corregir: ${error.message}`);
@@ -310,14 +317,15 @@ async function actualizarCategoriaGasto(supabase: SupabaseClient, idPrefix: stri
   }
 
   const gasto = matches[0];
-  const { data: actualizado, error: updateError } = await supabase
+  const updateQuery = supabase
     .from('gastos')
     .update({
       categoria: categoria.categoria,
       subcategoria: categoria.subcategoria,
     })
     .eq('id', gasto.id)
-    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+    .select('id, concepto, monto, categoria, subcategoria, origen, fecha');
+  const { data: actualizado, error: updateError } = await applyProfileFilter(updateQuery, profileId)
     .single();
 
   if (updateError) {
@@ -330,6 +338,7 @@ async function actualizarCategoriaGasto(supabase: SupabaseClient, idPrefix: stri
     concepto: gasto.concepto,
     categoria: categoriaPreferencia,
     subcategoria: categoria.subcategoria,
+    profileId,
   });
 
   return [
@@ -352,7 +361,7 @@ function obtenerUltimoGastoId(memoria: MensajeMemoria[]) {
   return mensajeConId?.content.match(/\bID:\s*([a-z0-9-]{4,})\b/i)?.[1];
 }
 
-async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) {
+async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string, profileId?: string | null) {
   const rango = rangoMesDesdeTexto(texto);
   const categoria = detectarFiltroCategoria(texto);
 
@@ -360,12 +369,13 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) 
     return 'Dime qué bolsa quieres revisar: Vida, Placeres o Futuro.';
   }
 
-  const { data, error } = await supabase
+  const query = supabase
     .from('gastos')
     .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
     .gte('fecha', rango.inicio)
     .lt('fecha', rango.fin)
     .eq('categoria', categoria);
+  const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) {
     throw new Error(`No pude consultar gastos de ${nombreBolsa(categoria)}: ${error.message}`);
@@ -390,14 +400,15 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string) 
   ].join('\n');
 }
 
-async function totalGastosGenerales(supabase: SupabaseClient, texto: string) {
+async function totalGastosGenerales(supabase: SupabaseClient, texto: string, profileId?: string | null) {
   const rango = rangoMesDesdeTexto(texto);
-  const { data, error } = await supabase
+  const query = supabase
     .from('gastos')
     .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
     .gte('fecha', rango.inicio)
     .lt('fecha', rango.fin)
     .order('fecha', { ascending: false });
+  const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) {
     throw new Error(`No pude consultar tus gastos: ${error.message}`);
@@ -674,10 +685,12 @@ async function consultarMovimientosPeriodo({
   supabase,
   texto,
   limit,
+  profileId,
 }: {
   supabase: SupabaseClient;
   texto: string;
   limit: number;
+  profileId?: string | null;
 }) {
   const rango = rangoMesDesdeTexto(texto);
   const categoria = detectarFiltroCategoria(texto);
@@ -693,15 +706,17 @@ async function consultarMovimientosPeriodo({
     gastosQuery = gastosQuery.eq('categoria', categoria);
   }
 
+  const ingresosQuery = supabase
+    .from('ingresos')
+    .select('id, concepto, monto, tipo, fecha')
+    .gte('fecha', rango.inicio)
+    .lt('fecha', rango.fin)
+    .order('fecha', { ascending: false })
+    .limit(limit);
+
   const [gastosResult, ingresosResult] = await Promise.all([
-    gastosQuery,
-    supabase
-      .from('ingresos')
-      .select('id, concepto, monto, tipo, fecha')
-      .gte('fecha', rango.inicio)
-      .lt('fecha', rango.fin)
-      .order('fecha', { ascending: false })
-      .limit(limit),
+    applyProfileFilter(gastosQuery, profileId),
+    applyProfileFilter(ingresosQuery, profileId),
   ]);
 
   if (gastosResult.error) throw new Error(`No pude consultar gastos: ${gastosResult.error.message}`);
@@ -713,12 +728,12 @@ async function consultarMovimientosPeriodo({
   return { rango, categoria, gastos, ingresos, movimientos: ordenarPorFechaDesc<MovimientoEliminable>([...gastos, ...ingresos]) };
 }
 
-async function listarMovimientos(supabase: SupabaseClient, texto: string) {
+async function listarMovimientos(supabase: SupabaseClient, texto: string, profileId?: string | null) {
   const limitMatch = texto.match(/\b(\d{1,2})\b/);
   const singular = esConsultaUltimoSingular(texto);
   const limit = Math.min(Math.max(limitMatch ? Number(limitMatch[1]) : singular ? 1 : 10, 1), 20);
   const tipoListado = detectarTipoListado(texto);
-  const { rango, categoria, gastos, ingresos, movimientos } = await consultarMovimientosPeriodo({ supabase, texto, limit });
+  const { rango, categoria, gastos, ingresos, movimientos } = await consultarMovimientosPeriodo({ supabase, texto, limit, profileId });
   const resultados = tipoListado === 'ingresos' ? ingresos : tipoListado === 'gastos' ? gastos : movimientos;
 
   if (!resultados.length) {
@@ -750,13 +765,13 @@ async function listarMovimientos(supabase: SupabaseClient, texto: string) {
   ].join('\n');
 }
 
-async function buscarMovimientosParaEliminar(supabase: SupabaseClient, texto: string) {
+async function buscarMovimientosParaEliminar(supabase: SupabaseClient, texto: string, profileId?: string | null) {
   const rango = rangoMesDesdeTexto(texto);
   const busqueda = limpiarBusquedaEliminacion(texto);
   const montoMatch = texto.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)/);
   const monto = montoMatch ? Number(montoMatch[1].replace(/,/g, '')) : null;
   const tipoListado = detectarTipoListado(texto);
-  const { movimientos, gastos, ingresos } = await consultarMovimientosPeriodo({ supabase, texto, limit: 30 });
+  const { movimientos, gastos, ingresos } = await consultarMovimientosPeriodo({ supabase, texto, limit: 30, profileId });
   const base = tipoListado === 'ingresos' ? ingresos : tipoListado === 'gastos' ? gastos : movimientos;
 
   const resultados = base.filter((movimiento) => {
@@ -790,17 +805,19 @@ async function buscarMovimientosParaEliminar(supabase: SupabaseClient, texto: st
   ].join('\n');
 }
 
-async function confirmarEliminarMovimiento(supabase: SupabaseClient, idPrefix: string) {
+async function confirmarEliminarMovimiento(supabase: SupabaseClient, idPrefix: string, profileId?: string | null) {
   const normalizado = idPrefix.toLowerCase().trim();
   const tipoSolicitado = normalizado.startsWith('g') ? 'gasto' : normalizado.startsWith('i') ? 'ingreso' : null;
   const idBuscado = tipoSolicitado ? normalizado.slice(1) : normalizado;
+  const gastosQuery = supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').order('fecha', { ascending: false }).limit(300);
+  const ingresosQuery = supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').order('fecha', { ascending: false }).limit(300);
   const [gastosResult, ingresosResult] = await Promise.all([
     tipoSolicitado === 'ingreso'
       ? Promise.resolve({ data: [], error: null })
-      : supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').order('fecha', { ascending: false }).limit(300),
+      : applyProfileFilter(gastosQuery, profileId),
     tipoSolicitado === 'gasto'
       ? Promise.resolve({ data: [], error: null })
-      : supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').order('fecha', { ascending: false }).limit(300),
+      : applyProfileFilter(ingresosQuery, profileId),
   ]);
 
   if (gastosResult.error) throw new Error(`No pude buscar gastos a eliminar: ${gastosResult.error.message}`);
@@ -824,14 +841,15 @@ async function confirmarEliminarMovimiento(supabase: SupabaseClient, idPrefix: s
 
   const movimiento = matches[0];
   const tabla = movimiento.kind === 'ingreso' ? 'ingresos' : 'gastos';
-  const { error: deleteError } = await supabase.from(tabla).delete().eq('id', movimiento.id);
+  const deleteQuery = supabase.from(tabla).delete().eq('id', movimiento.id);
+  const { error: deleteError } = await applyProfileFilter(deleteQuery, profileId);
 
   if (deleteError) {
     throw new Error(`No pude eliminar el ${movimiento.kind}: ${deleteError.message}`);
   }
 
   if (movimiento.kind === 'ingreso') {
-    await sincronizarPresupuestoMensual(supabase, new Date(movimiento.fecha));
+    await sincronizarPresupuestoMensual(supabase, new Date(movimiento.fecha), profileId);
   }
 
   return [
@@ -843,12 +861,23 @@ async function confirmarEliminarMovimiento(supabase: SupabaseClient, idPrefix: s
   ].join('\n');
 }
 
-async function obtenerContextoConversacional(supabase: SupabaseClient, texto: string) {
+async function obtenerContextoConversacional(supabase: SupabaseClient, texto: string, profileId?: string | null) {
   const periodo = detectarPeriodoConsulta(texto);
   const { year, monthIndex } = periodo;
   const month = String(monthIndex + 1).padStart(2, '0');
   const mesKey = `${year}-${month}`;
   const inicioPromedio = new Date(Date.UTC(year, monthIndex - 2, 1)).toISOString();
+  const ingresosPeriodoQuery = supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').gte('fecha', periodo.inicio).lt('fecha', periodo.fin);
+  const gastosPeriodoQuery = supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', periodo.inicio).lt('fecha', periodo.fin);
+  const ingresosPromedioQuery = supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioPromedio).lt('fecha', periodo.fin);
+  const gastosRecientesQuery = supabase
+    .from('gastos')
+    .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
+    .gte('fecha', periodo.inicio)
+    .lt('fecha', periodo.fin)
+    .order('fecha', { ascending: false })
+    .limit(8);
+  const ultimoIngresoQuery = supabase.from('ingresos').select('monto, fecha').lt('fecha', periodo.fin).order('fecha', { ascending: false }).limit(1);
 
   const [
     { data: ingresos, error: errorIngresos },
@@ -858,17 +887,11 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     { data: ultimoIngreso, error: errorUltimoIngreso },
   ] =
     await Promise.all([
-      supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').gte('fecha', periodo.inicio).lt('fecha', periodo.fin),
-      supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', periodo.inicio).lt('fecha', periodo.fin),
-      supabase.from('ingresos').select('monto, fecha').gte('fecha', inicioPromedio).lt('fecha', periodo.fin),
-      supabase
-        .from('gastos')
-        .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
-        .gte('fecha', periodo.inicio)
-        .lt('fecha', periodo.fin)
-        .order('fecha', { ascending: false })
-        .limit(8),
-      supabase.from('ingresos').select('monto, fecha').lt('fecha', periodo.fin).order('fecha', { ascending: false }).limit(1).maybeSingle(),
+      applyProfileFilter(ingresosPeriodoQuery, profileId),
+      applyProfileFilter(gastosPeriodoQuery, profileId),
+      applyProfileFilter(ingresosPromedioQuery, profileId),
+      applyProfileFilter(gastosRecientesQuery, profileId),
+      applyProfileFilter(ultimoIngresoQuery, profileId).maybeSingle(),
     ]);
 
   if (errorIngresos) throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
@@ -929,11 +952,13 @@ async function responderConversacionAbierta({
   apiKey,
   supabase,
   memoria = [],
+  profileId = null,
 }: {
   texto: string;
   apiKey: string;
   supabase: SupabaseClient;
   memoria?: MensajeMemoria[];
+  profileId?: string | null;
 }) {
   if (!apiKey) {
     return [
@@ -942,7 +967,7 @@ async function responderConversacionAbierta({
     ].join('\n');
   }
 
-  const contexto = await obtenerContextoConversacional(supabase, texto);
+  const contexto = await obtenerContextoConversacional(supabase, texto, profileId);
   const prompt = `
 {
   "role": "financial_conversation_agent",
@@ -1012,11 +1037,13 @@ export async function responderConversacionFinanciera({
   apiKey,
   supabase,
   memoria = [],
+  profileId = null,
 }: {
   texto: string;
   apiKey: string;
   supabase: SupabaseClient;
   memoria?: MensajeMemoria[];
+  profileId?: string | null;
 }): Promise<
   | { action: 'reply'; message: string }
   | { action: 'movement'; movement: MovementResult; message: string }
@@ -1029,11 +1056,11 @@ export async function responderConversacionFinanciera({
   }
 
   if (intent.type === 'category-total') {
-    return { action: 'reply', message: await totalGastosPorCategoria(supabase, intent.text) };
+    return { action: 'reply', message: await totalGastosPorCategoria(supabase, intent.text, profileId) };
   }
 
   if (intent.type === 'expense-total') {
-    return { action: 'reply', message: await totalGastosGenerales(supabase, intent.text) };
+    return { action: 'reply', message: await totalGastosGenerales(supabase, intent.text, profileId) };
   }
 
   if (intent.type === 'update-category') {
@@ -1046,7 +1073,7 @@ export async function responderConversacionFinanciera({
       };
     }
 
-    return { action: 'reply', message: await actualizarCategoriaGasto(supabase, idPrefix, intent.category) };
+    return { action: 'reply', message: await actualizarCategoriaGasto(supabase, idPrefix, intent.category, profileId) };
   }
 
   if (intent.type === 'summary') {
@@ -1057,20 +1084,21 @@ export async function responderConversacionFinanciera({
         apiKey,
         supabase,
         memoria,
+        profileId,
       }),
     };
   }
 
   if (intent.type === 'list') {
-    return { action: 'reply', message: await listarMovimientos(supabase, intent.text) };
+    return { action: 'reply', message: await listarMovimientos(supabase, intent.text, profileId) };
   }
 
   if (intent.type === 'delete-request') {
-    return { action: 'reply', message: await buscarMovimientosParaEliminar(supabase, intent.text) };
+    return { action: 'reply', message: await buscarMovimientosParaEliminar(supabase, intent.text, profileId) };
   }
 
   if (intent.type === 'delete-confirm') {
-    return { action: 'reply', message: await confirmarEliminarMovimiento(supabase, intent.idPrefix) };
+    return { action: 'reply', message: await confirmarEliminarMovimiento(supabase, intent.idPrefix, profileId) };
   }
 
   if (intent.type === 'movement') {
@@ -1091,6 +1119,7 @@ export async function responderConversacionFinanciera({
       apiKey,
       supabase,
       memoria,
+      profileId,
     }),
   };
 }

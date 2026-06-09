@@ -4,6 +4,7 @@ import { responderConversacionFinanciera } from '@/lib/conversation-agent';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib/tenant-context';
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
@@ -42,14 +43,14 @@ async function responderTelegram(chatId: number | undefined, texto: string) {
   });
 }
 
-async function leerMemoriaChat(supabase: SupabaseClient, chatId: number | undefined): Promise<MensajeMemoria[]> {
+async function leerMemoriaChat(supabase: SupabaseClient, chatId: number | undefined, profileId?: string | null): Promise<MensajeMemoria[]> {
   if (!chatId) return [];
 
-  const { data, error } = await supabase
+  const query = supabase
     .from('telegram_memoria')
     .select('messages')
-    .eq('chat_id', String(chatId))
-    .maybeSingle();
+    .eq('chat_id', String(chatId));
+  const { data, error } = await applyProfileFilter(query, profileId).maybeSingle();
 
   const row = data as { messages?: unknown } | null;
 
@@ -65,6 +66,7 @@ async function guardarMemoriaChat({
   userText,
   assistantText,
   lastExpenseId,
+  profileId,
 }: {
   supabase: SupabaseClient;
   chatId: number | undefined;
@@ -72,6 +74,7 @@ async function guardarMemoriaChat({
   userText: string;
   assistantText: string;
   lastExpenseId?: string | number;
+  profileId?: string | null;
 }) {
   if (!chatId) return;
 
@@ -92,6 +95,7 @@ async function guardarMemoriaChat({
     .upsert(
       {
         chat_id: String(chatId),
+        ...(profileId ? { profile_id: profileId } : {}),
         messages,
         updated_at: now,
       },
@@ -121,6 +125,7 @@ export async function POST(request: Request) {
     const update = (await request.json()) as TelegramUpdate;
     const chatId = update.message?.chat?.id;
     const texto = update.message?.text?.trim();
+    const tenant = await getTelegramTenantContext({ supabase, chatId });
 
     if (!texto) {
       await responderTelegram(chatId, 'Estoy listo. Puedes decirme "pagué 250 de gasolina" o preguntarme "cómo voy este mes".');
@@ -136,17 +141,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ignored: true, message });
     }
 
-    const memoria = await leerMemoriaChat(supabase, chatId);
+    const memoria = await leerMemoriaChat(supabase, chatId, tenant.profileId);
     const respuesta = await responderConversacionFinanciera({
       texto,
       apiKey: googleApiKey,
       supabase,
       memoria,
+      profileId: tenant.profileId,
     });
 
     if (respuesta.action === 'reply') {
       await responderTelegram(chatId, respuesta.message);
-      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: respuesta.message });
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: respuesta.message, profileId: tenant.profileId });
       return NextResponse.json({ success: true, ignored: true, message: respuesta.message });
     }
 
@@ -154,12 +160,12 @@ export async function POST(request: Request) {
 
     if (clasificacion.tipo === 'ingreso') {
       const fechaIngreso = new Date();
-      const ingresoPayload = {
+      const ingresoPayload = withProfile({
         concepto: clasificacion.concepto,
         monto: clasificacion.monto,
         tipo: 'Extra',
         fecha: fechaIngreso.toISOString(),
-      };
+      }, tenant.profileId);
 
       const { data, error } = await supabase
         .from('ingresos')
@@ -172,25 +178,25 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      await sincronizarPresupuestoMensual(supabase, fechaIngreso);
+      await sincronizarPresupuestoMensual(supabase, fechaIngreso, tenant.profileId);
 
       const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 33/33/33.`;
       await responderTelegram(chatId, message);
-      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message });
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
 
       return NextResponse.json({ success: true, data, message });
     }
 
     const categoriaFinal = categoriaParaGastos(clasificacion.categoria);
 
-    const payload = {
+    const payload = withProfile({
       concepto: clasificacion.concepto,
       monto: clasificacion.monto,
       categoria: categoriaFinal,
       subcategoria: clasificacion.subcategoria,
       origen: 'Telegram',
       fecha: new Date().toISOString(),
-    };
+    }, tenant.profileId);
 
     const { data, error } = await supabase.from('gastos').insert([payload]).select('id, concepto, monto, categoria, subcategoria, origen, fecha').single();
 
@@ -201,7 +207,7 @@ export async function POST(request: Request) {
 
     const message = `Registrado. ${respuesta.message}`;
     await responderTelegram(chatId, message);
-    await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, lastExpenseId: data.id });
+    await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, lastExpenseId: data.id, profileId: tenant.profileId });
 
     return NextResponse.json({ success: true, data, message });
   } catch (error: unknown) {

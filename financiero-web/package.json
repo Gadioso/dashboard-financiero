@@ -16,6 +16,7 @@
     "security:secrets": "node scripts/secret-scan.mjs",
     "data:audit": "node scripts/data-audit.mjs",
     "data:cleanup-suspects": "node scripts/cleanup-suspect-data.mjs",
+    "tenant:bootstrap": "node scripts/bootstrap-private-tenant.mjs",
     "sql:launch": "node scripts/print-launch-sql.mjs",
     "sql:multi-user": "node scripts/print-launch-sql.mjs --multi-user"
   },

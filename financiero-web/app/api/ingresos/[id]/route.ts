@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
 
 type RouteContext = {
   params: Promise<{
@@ -20,17 +21,18 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
 
     const { id } = await context.params;
+    const tenant = getPrivateTenantContext();
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'No proporcionaste el ID del ingreso.' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const deleteQuery = supabase
       .from('ingresos')
       .delete()
       .eq('id', id)
-      .select('id, fecha')
-      .maybeSingle();
+      .select('id, fecha');
+    const { data, error } = await applyProfileFilter(deleteQuery, tenant.profileId).maybeSingle();
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -40,7 +42,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json({ success: false, error: 'No se encontró el ingreso para eliminar.' }, { status: 404 });
     }
 
-    await sincronizarPresupuestoMensual(supabase, new Date(data.fecha));
+    await sincronizarPresupuestoMensual(supabase, new Date(data.fecha), tenant.profileId);
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
