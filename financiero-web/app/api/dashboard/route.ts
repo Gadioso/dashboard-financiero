@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
+import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,12 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const mesActivo = validarMes(url.searchParams.get('mes'));
-    const tenant = getPrivateTenantContext();
+    const tenant = await getRequestTenantContext(request);
+
+    if (!tenant.profileId) {
+      return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
+    }
+
     const inicio2026 = new Date(Date.UTC(2026, 0, 1)).toISOString();
     const fin2026 = new Date(Date.UTC(2027, 0, 1)).toISOString();
     const presupuestosQuery = supabase
@@ -71,6 +76,7 @@ export async function GET(request: Request) {
         acceptsAbonosTarjetaCredito: !abonosTarjetaResult.error,
         abonosTarjetaError: abonosTarjetaResult.error?.message || null,
         profileScoped: Boolean(tenant.profileId),
+        tenantSource: tenant.source,
       },
     });
   } catch (error: unknown) {

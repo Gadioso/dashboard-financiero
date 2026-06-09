@@ -3,7 +3,7 @@ import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { getPrivateTenantContext, withProfile } from '@/lib/tenant-context';
+import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 
 // 2. Inicializar el motor de Google Gemini
 // Recuerda que debes tener tu variable GEMINI_API_KEY en tu archivo .env.local
@@ -17,10 +17,14 @@ export async function POST(request: Request) {
     }
 
     const { texto } = await request.json();
-    const tenant = getPrivateTenantContext();
+    const tenant = await getRequestTenantContext(request);
 
     if (!texto) {
       return NextResponse.json({ success: false, error: 'No proporcionaste ningún texto.' }, { status: 400 });
+    }
+
+    if (!tenant.profileId) {
+      return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
 
     const dataAI = await clasificarMovimientoFinanciero(texto, googleApiKey);

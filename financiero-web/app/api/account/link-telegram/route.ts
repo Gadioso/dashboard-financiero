@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { getRequiredPrivateProfileId } from '@/lib/tenant-context';
+import { getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
 
-    const profileId = getRequiredPrivateProfileId();
+    const tenant = await getRequestTenantContext(request);
+    const profileId = tenant.profileId;
     const body = await request.json().catch(() => ({})) as {
       chatId?: string | number;
       username?: string;
@@ -22,6 +23,10 @@ export async function POST(request: Request) {
 
     if (!chatId) {
       return NextResponse.json({ success: false, error: 'Falta chatId.' }, { status: 400 });
+    }
+
+    if (!profileId) {
+      return NextResponse.json({ success: false, error: 'No pude resolver el perfil autenticado.' }, { status: 401 });
     }
 
     const now = new Date().toISOString();

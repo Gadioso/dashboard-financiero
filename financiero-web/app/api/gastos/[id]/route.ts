@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
+import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-context';
 
 type RouteContext = {
   params: Promise<{
@@ -8,7 +8,7 @@ type RouteContext = {
   }>;
 };
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
     const supabase = getSupabaseServiceClient();
 
@@ -20,10 +20,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const tenant = getPrivateTenantContext();
+    const tenant = await getRequestTenantContext(request);
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'No proporcionaste el ID del gasto.' }, { status: 400 });
+    }
+
+    if (!tenant.profileId) {
+      return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
 
     const deleteQuery = supabase

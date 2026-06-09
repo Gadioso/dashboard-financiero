@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { getPrivateProfileId } from '@/lib/tenant-context';
+import { getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = getSupabaseServiceClient();
 
@@ -12,7 +12,8 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
 
-    const profileId = getPrivateProfileId();
+    const tenant = await getRequestTenantContext(request);
+    const profileId = tenant.profileId;
 
     if (!profileId) {
       return NextResponse.json({
@@ -43,6 +44,7 @@ export async function GET() {
       profile: profileResult.data || null,
       telegramAccounts: telegramResult.data || [],
       gmailIntegrations: gmailResult.data || [],
+      tenantSource: tenant.source,
       errors,
     }, { status: errors.length ? 500 : 200 });
   } catch (error: unknown) {

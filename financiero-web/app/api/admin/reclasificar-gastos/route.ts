@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { clasificarConceptoGastoSantander } from '@/lib/santander-email-parser';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { applyProfileFilter, getPrivateTenantContext } from '@/lib/tenant-context';
+import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +39,12 @@ export async function GET(request: Request) {
     const year = Number(searchParams.get('year') || 2026);
     const start = new Date(Date.UTC(year, 0, 1)).toISOString();
     const end = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
-    const tenant = getPrivateTenantContext();
+    const tenant = await getRequestTenantContext(request);
+
+    if (!tenant.profileId) {
+      return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
+    }
+
     const gastosQuery = supabase
       .from('gastos')
       .select('id, concepto, monto, categoria, subcategoria, origen, fecha')

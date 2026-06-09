@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { getRequiredPrivateProfileId } from '@/lib/tenant-context';
+import { getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
 
-    const profileId = getRequiredPrivateProfileId();
+    const tenant = await getRequestTenantContext(request);
+    const profileId = tenant.profileId;
     const body = await request.json().catch(() => ({})) as {
       email?: string;
       status?: 'active' | 'paused' | 'revoked' | 'error';
@@ -28,6 +29,10 @@ export async function POST(request: Request) {
 
     if (!email) {
       return NextResponse.json({ success: false, error: 'Falta un email válido.' }, { status: 400 });
+    }
+
+    if (!profileId) {
+      return NextResponse.json({ success: false, error: 'No pude resolver el perfil autenticado.' }, { status: 401 });
     }
 
     const { data, error } = await supabase

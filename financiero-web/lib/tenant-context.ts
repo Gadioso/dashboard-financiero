@@ -1,11 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 export type TenantContext = {
   profileId: string | null;
-  source: 'private-env' | 'telegram' | 'email-ingest' | 'anonymous-private';
+  source: 'private-env' | 'supabase-auth' | 'telegram' | 'email-ingest' | 'anonymous-private' | 'anonymous';
+  email?: string | null;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const dashboardAuthCookieName = 'dashboard_auth';
+const supabaseAccessCookieName = 'sb_access_token';
 
 export function normalizeProfileId(value?: string | null) {
   const trimmed = value?.trim();
@@ -40,6 +44,93 @@ export function getPrivateTenantContext(): TenantContext {
     profileId,
     source: profileId ? 'private-env' : 'anonymous-private',
   };
+}
+
+function getCookieValue(request: Request, name: string) {
+  const cookieHeader = request.headers.get('cookie') || '';
+  const cookies = cookieHeader.split(';').map((cookie) => cookie.trim());
+  const match = cookies.find((cookie) => cookie.startsWith(`${name}=`));
+
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
+}
+
+function getBearerToken(request: Request) {
+  const authorization = request.headers.get('authorization') || '';
+
+  if (!authorization.toLowerCase().startsWith('bearer ')) return '';
+
+  return authorization.slice(7).trim();
+}
+
+function isPrivateDashboardRequest(request: Request) {
+  const expectedToken = process.env.DASHBOARD_ACCESS_TOKEN || '';
+  const cookieToken = getCookieValue(request, dashboardAuthCookieName);
+
+  return Boolean(expectedToken && cookieToken === expectedToken);
+}
+
+export function getSupabaseAccessToken(request: Request) {
+  return getBearerToken(request) || getCookieValue(request, supabaseAccessCookieName);
+}
+
+async function ensureProfileForAuthUser({
+  supabase,
+  userId,
+  email,
+}: {
+  supabase: SupabaseClient;
+  userId: string;
+  email?: string | null;
+}) {
+  const profileId = normalizeProfileId(userId);
+
+  if (!profileId) return;
+
+  const { error } = await supabase
+    .from('profiles')
+    .upsert(
+      {
+        id: profileId,
+        email: email || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+
+  if (error) {
+    throw new Error(`No pude asegurar el perfil del usuario autenticado: ${error.message}`);
+  }
+}
+
+export async function getRequestTenantContext(request: Request): Promise<TenantContext> {
+  if (isPrivateDashboardRequest(request)) {
+    return getPrivateTenantContext();
+  }
+
+  const accessToken = getSupabaseAccessToken(request);
+  const supabase = accessToken ? getSupabaseServiceClient() : null;
+
+  if (accessToken && supabase) {
+    const { data, error } = await supabase.auth.getUser(accessToken);
+
+    if (!error && data.user?.id) {
+      const profileId = normalizeProfileId(data.user.id);
+      const email = data.user.email || null;
+
+      if (profileId) {
+        await ensureProfileForAuthUser({ supabase, userId: profileId, email });
+        return { profileId, source: 'supabase-auth', email };
+      }
+    }
+
+    return { profileId: null, source: 'anonymous' };
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    return { profileId: null, source: 'anonymous' };
+  }
+
+  return getPrivateTenantContext();
 }
 
 export async function getTelegramTenantContext({

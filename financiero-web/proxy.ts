@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 const authCookieName = 'dashboard_auth';
+const supabaseAccessCookieName = 'sb_access_token';
 
 function dashboardAuthEnabled() {
   return Boolean(process.env.DASHBOARD_ACCESS_TOKEN) || process.env.NODE_ENV === 'production';
@@ -32,8 +33,13 @@ export function proxy(request: NextRequest) {
 
   const token = process.env.DASHBOARD_ACCESS_TOKEN || '';
   const cookieToken = request.cookies.get(authCookieName)?.value || '';
+  const supabaseAccessToken = request.cookies.get(supabaseAccessCookieName)?.value || '';
 
   if (token && cookieToken === token) {
+    return NextResponse.next();
+  }
+
+  if (supabaseAccessToken) {
     return NextResponse.next();
   }
 
