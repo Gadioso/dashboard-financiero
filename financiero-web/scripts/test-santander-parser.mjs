@@ -118,6 +118,14 @@ El 06/06/2026 a las 20:40:00 hrs.`,
     expected: { concepto: 'UBER TRIP HELP.UBER.COM', monto: 146, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Viajes' },
   },
   {
+    name: 'Insurance is future',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio SEGMONTERREYNYL6 MU con tu tarjeta de TDC terminación **1765, por un monto de $15581.01 MXN.
+El 26/05/2026 a las 17:31:02 hrs.`,
+    expected: { concepto: 'SEGMONTERREYNYL6 MU', monto: 15581.01, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Seguros' },
+  },
+  {
     name: 'Credit card payment',
     raw: `Santander México
 Pago de Tarjeta de Crédito Santander

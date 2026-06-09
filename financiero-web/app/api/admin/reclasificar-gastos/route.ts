@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { categoriaParaGastos } from '@/lib/financial-core';
 import { clasificarConceptoGastoSantander } from '@/lib/santander-email-parser';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
@@ -20,7 +21,7 @@ function esGastoReclasificable(gasto: GastoRow) {
   return (
     gasto.origen === 'Santander_Email' ||
     gasto.subcategoria === 'Santander' ||
-    /\b(oxxo|7\s*eleven|seven\s+eleven|mercado\s*pago|mercadopago|paypal|starbucks|restaurante|taquer|tacos|viaje|hotel|uber|didi)\b/i.test(concepto)
+    /\b(oxxo|7\s*eleven|seven\s+eleven|mercado\s*pago|mercadopago|paypal|starbucks|restaurante|taquer|tacos|viaje|hotel|uber|didi|seguro|segmonterrey\w*|gnp|axa|qualitas|qu[aá]litas|mapfre|metlife|nyl)\b/i.test(concepto)
   );
 }
 
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
       .filter(esGastoReclasificable)
       .map((gasto) => {
         const nueva = clasificarConceptoGastoSantander(gasto.concepto);
+        const categoriaGasto = categoriaParaGastos(nueva.categoria);
 
         return {
           id: gasto.id,
@@ -63,7 +65,7 @@ export async function GET(request: Request) {
             subcategoria: gasto.subcategoria || null,
           },
           nueva: {
-            categoria: nueva.categoria,
+            categoria: categoriaGasto,
             subcategoria: nueva.subcategoria,
             razon: nueva.razon,
           },

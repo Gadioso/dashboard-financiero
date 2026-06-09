@@ -66,6 +66,14 @@ export function clasificarConceptoGastoSantander(concepto: string, texto = '') {
     };
   }
 
+  if (/\b(seguro|seguros|segmonterrey\w*|monterrey\s+new\s+york|gnp|axa|qualitas|qu[aá]litas|mapfre|metlife|nyl)\b/i.test(normalizado)) {
+    return {
+      categoria: 'Futuro' as const,
+      subcategoria: 'Seguros',
+      razon: 'Comercio o concepto identificado como seguro/protección patrimonial.',
+    };
+  }
+
   if (/\b(starbucks|cafe|caf[eé]|restaurante|taquer|tacos|cine|bar|rappi|uber eats|netflix|spotify|concierto|viaje|hotel|muay thai|mercado\s*pago|mercadopago|paypal|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/i.test(normalizado)) {
     return {
       categoria: 'Placeres' as const,
