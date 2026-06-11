@@ -10,12 +10,8 @@ const financialTables = [
 ];
 
 const tableListSql = financialTables.map((table) => `'${table}'`).join(', ');
-
-const nullProfileChecks = financialTables.map((table) => `
-SELECT '${table}' AS table_name, count(*) AS rows_without_profile_id
-FROM public.${table}
-WHERE profile_id IS NULL
-`).join('UNION ALL');
+const allTenantTables = ['profiles', 'telegram_accounts', 'gmail_integrations', ...financialTables];
+const allTenantTablesSql = allTenantTables.map((table) => `'${table}'`).join(', ');
 
 const output = `
 -- Dashboard Financiero SaaS audit SQL
@@ -67,19 +63,48 @@ WHERE schemaname = 'public'
   AND tablename IN ('profiles', 'telegram_accounts', 'gmail_integrations', ${tableListSql})
 ORDER BY tablename, policyname;
 
-${nullProfileChecks};
+CREATE TEMP TABLE IF NOT EXISTS saas_profile_id_audit (
+  table_name text,
+  status text,
+  rows_without_profile_id bigint
+) ON COMMIT DROP;
 
-SELECT
-  'telegram_accounts_without_profile' AS check_name,
-  count(*) AS count
-FROM public.telegram_accounts
-WHERE profile_id IS NULL
-UNION ALL
-SELECT
-  'gmail_integrations_without_profile' AS check_name,
-  count(*) AS count
-FROM public.gmail_integrations
-WHERE profile_id IS NULL;
+TRUNCATE saas_profile_id_audit;
+
+DO $$
+DECLARE
+  table_name text;
+  missing_count bigint;
+BEGIN
+  FOREACH table_name IN ARRAY ARRAY[${allTenantTablesSql}]
+  LOOP
+    IF to_regclass('public.' || table_name) IS NULL THEN
+      INSERT INTO saas_profile_id_audit VALUES (table_name, 'missing_table', NULL);
+    ELSIF table_name = 'profiles' THEN
+      INSERT INTO saas_profile_id_audit VALUES (table_name, 'primary_profile_table', 0);
+    ELSIF NOT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND columns.table_name = table_name
+        AND column_name = 'profile_id'
+    ) THEN
+      INSERT INTO saas_profile_id_audit VALUES (table_name, 'missing_profile_id_column', NULL);
+    ELSE
+      EXECUTE format('SELECT count(*) FROM public.%I WHERE profile_id IS NULL', table_name)
+        INTO missing_count;
+      INSERT INTO saas_profile_id_audit VALUES (
+        table_name,
+        CASE WHEN missing_count = 0 THEN 'ok' ELSE 'has_unscoped_rows' END,
+        missing_count
+      );
+    END IF;
+  END LOOP;
+END $$;
+
+SELECT *
+FROM saas_profile_id_audit
+ORDER BY table_name;
 `.trim();
 
 console.log(output);
