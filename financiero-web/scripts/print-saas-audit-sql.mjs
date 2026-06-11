@@ -73,28 +73,28 @@ TRUNCATE saas_profile_id_audit;
 
 DO $$
 DECLARE
-  table_name text;
+  audit_table_name text;
   missing_count bigint;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY[${allTenantTablesSql}]
+  FOREACH audit_table_name IN ARRAY ARRAY[${allTenantTablesSql}]
   LOOP
-    IF to_regclass('public.' || table_name) IS NULL THEN
-      INSERT INTO saas_profile_id_audit VALUES (table_name, 'missing_table', NULL);
-    ELSIF table_name = 'profiles' THEN
-      INSERT INTO saas_profile_id_audit VALUES (table_name, 'primary_profile_table', 0);
+    IF to_regclass('public.' || audit_table_name) IS NULL THEN
+      INSERT INTO saas_profile_id_audit VALUES (audit_table_name, 'missing_table', NULL);
+    ELSIF audit_table_name = 'profiles' THEN
+      INSERT INTO saas_profile_id_audit VALUES (audit_table_name, 'primary_profile_table', 0);
     ELSIF NOT EXISTS (
       SELECT 1
       FROM information_schema.columns
       WHERE table_schema = 'public'
-        AND columns.table_name = table_name
+        AND columns.table_name = audit_table_name
         AND column_name = 'profile_id'
     ) THEN
-      INSERT INTO saas_profile_id_audit VALUES (table_name, 'missing_profile_id_column', NULL);
+      INSERT INTO saas_profile_id_audit VALUES (audit_table_name, 'missing_profile_id_column', NULL);
     ELSE
-      EXECUTE format('SELECT count(*) FROM public.%I WHERE profile_id IS NULL', table_name)
+      EXECUTE format('SELECT count(*) FROM public.%I WHERE profile_id IS NULL', audit_table_name)
         INTO missing_count;
       INSERT INTO saas_profile_id_audit VALUES (
-        table_name,
+        audit_table_name,
         CASE WHEN missing_count = 0 THEN 'ok' ELSE 'has_unscoped_rows' END,
         missing_count
       );
