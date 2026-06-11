@@ -9,6 +9,7 @@
  * 3. Configurar Script Properties:
  *    - ENDPOINT_URL: https://tu-dominio.com/api/email/santander
  *    - EMAIL_INGEST_SECRET: el mismo secret configurado en Next.js
+ *    - GMAIL_INGEST_EMAIL: email que quedó vinculado en el dashboard (opcional, recomendado)
  * 4. Ejecutar crearTriggerSantanderCadaMinuto una vez para activar la revisión cada minuto.
  */
 
@@ -24,6 +25,14 @@ function getRequiredProperty_(name) {
   }
 
   return value;
+}
+
+function getOptionalProperty_(name) {
+  return PropertiesService.getScriptProperties().getProperty(name) || '';
+}
+
+function getIngestEmail_() {
+  return getOptionalProperty_('GMAIL_INGEST_EMAIL') || Session.getActiveUser().getEmail();
 }
 
 function santanderSearchQuery_() {
@@ -135,6 +144,7 @@ function santanderIngest() {
 
       const payload = {
         gmailMessageId: messageId,
+        ingestEmail: getIngestEmail_(),
         from: message.getFrom(),
         subject: message.getSubject(),
         gmailReceivedAt: message.getDate().toISOString(),

@@ -475,7 +475,20 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const tenant = getEmailIngestTenantContext();
+    const ingestEmail = getStringField(body.ingestEmail) || getStringField(body.gmailAccount) || getStringField(body.email);
+    const tenant = await getEmailIngestTenantContext({ supabase, email: ingestEmail });
+
+    if (!tenant.profileId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Gmail no está vinculado a ningún perfil activo.',
+          action: 'link-gmail',
+        },
+        { status: 409 }
+      );
+    }
+
     const logContext = {
       gmailReceivedAt: getStringField(body.gmailReceivedAt) || getStringField(body.fecha),
       appsScriptDetectedAt: getStringField(body.appsScriptDetectedAt),

@@ -68,11 +68,14 @@ Google Apps Script no puede llamar `http://127.0.0.1:3002`. Necesita una URL pú
 EMAIL_INGEST_SECRET=un-secret-largo-y-aleatorio
 TELEGRAM_BOT_TOKEN=token-del-bot
 TELEGRAM_NOTIFY_CHAT_ID=chat-id-opcional-para-alertas
+EMAIL_INGEST_PROFILE_ID=uuid-del-perfil-legacy-opcional
 ```
 
 El endpoint también usa como fallback `TELEGRAM_WEBHOOK_SECRET`, pero la configuración recomendada es tener `EMAIL_INGEST_SECRET` dedicado en `.env.local` y en producción. Ese mismo valor se pega en Apps Script como `EMAIL_INGEST_SECRET`.
 
-`TELEGRAM_NOTIFY_CHAT_ID` es opcional si ya existe la tabla `telegram_memoria`; en ese caso el endpoint intenta avisar al último chat activo. Para producción estable, configura `TELEGRAM_NOTIFY_CHAT_ID`.
+Para SaaS, el Apps Script debe mandar `ingestEmail` y ese correo debe existir activo en `gmail_integrations`. Mientras Diego siga en modo legacy, `EMAIL_INGEST_PROFILE_ID` puede fijar explícitamente el perfil dueño.
+
+`TELEGRAM_NOTIFY_CHAT_ID` es opcional si ya existe un Telegram vinculado al perfil en `telegram_accounts`; en producción los chats desconocidos se rechazan hasta vincularse.
 
 ## Corrección por Telegram
 
@@ -120,6 +123,7 @@ Pega el SQL completo en Supabase SQL Editor. Incluye origen `Santander_Email`, m
 4. En `Project Settings > Script properties`, agregar:
    - `ENDPOINT_URL`: `https://tu-dominio.com/api/email/santander`
    - `EMAIL_INGEST_SECRET`: el mismo secreto configurado en Next.js
+   - `GMAIL_INGEST_EMAIL`: el correo vinculado en el dashboard, por ejemplo `diegayoso1999@gmail.com`
 5. Ejecutar `diagnosticarSantanderIngest` una vez. Debe imprimir la búsqueda, cantidad de threads y una muestra de correos Santander recientes.
 6. Ejecutar `santanderIngest` una vez y aceptar permisos de Gmail.
 7. Ejecutar `crearTriggerSantanderCadaMinuto` una vez. Esa función borra triggers viejos de `santanderIngest` y crea uno nuevo cada 1 minuto.

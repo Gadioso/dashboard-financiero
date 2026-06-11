@@ -6,17 +6,19 @@ This project still runs safely as Diego's private dashboard by default. The SaaS
 
 - The dashboard remains protected by `DASHBOARD_ACCESS_TOKEN`.
 - Backend routes use `SUPABASE_SERVICE_ROLE_KEY`.
-- If `DASHBOARD_PRIVATE_PROFILE_ID` is empty, existing private rows with `profile_id = null` continue to work.
-- Gmail/Santander and Telegram keep using the same private data path unless a profile id is configured.
+- If `DASHBOARD_PRIVATE_PROFILE_ID` is empty, existing private rows with `profile_id = null` continue to work only in local/private transitional paths.
+- Production webhooks do not silently write to the private data path when they cannot resolve a user profile.
 
 ## Tenant Variables
 
 Use these only after creating an authenticated profile in Supabase Auth:
 
 - `DASHBOARD_PRIVATE_PROFILE_ID`: profile id for the private dashboard/session.
-- `EMAIL_INGEST_PROFILE_ID`: profile id used by the Gmail/Santander Apps Script ingestion. Falls back to `DASHBOARD_PRIVATE_PROFILE_ID`.
+- `EMAIL_INGEST_PROFILE_ID`: explicit profile id used by the legacy Gmail/Santander Apps Script ingestion.
 
-Telegram resolves a profile through `telegram_accounts.chat_id`. If no mapping exists, it falls back to the private profile id.
+Telegram resolves a profile through `telegram_accounts.chat_id`. In production, unknown chats are rejected with a link request instead of falling back to the private profile.
+
+Gmail/Santander resolves a profile through `gmail_integrations.email` when the Apps Script sends `ingestEmail`. If no active Gmail mapping or explicit `EMAIL_INGEST_PROFILE_ID` exists in production, the ingestion is rejected with `409 link-gmail`.
 
 ## Private Account Linking Endpoints
 
@@ -60,6 +62,14 @@ The migration:
 - Adds tenant indexes.
 - Enables RLS and policies using `auth.uid()`.
 - Keeps historical rows nullable until they are assigned to a profile.
+
+Audit the live Supabase project after applying migrations:
+
+```bash
+npm run sql:saas-audit
+```
+
+Paste the output in Supabase SQL Editor. It verifies table existence, `profile_id` columns, RLS, policies, and remaining rows without `profile_id`.
 
 After the Diego profile exists in `auth.users`, backfill historical rows:
 
@@ -118,6 +128,16 @@ After successful apply, set these variables in Vercel Production:
 - Income and expense deletes.
 - Monthly budget sync.
 - Admin reclassification through `/api/admin/reclasificar-gastos`.
+
+## Paso 1 Audit Status
+
+- ✅ Tables and migrations define `profiles`, `telegram_accounts`, `gmail_integrations`, and `profile_id`.
+- ✅ Financial routes use `profile_id` filters before returning or mutating user data.
+- ✅ Login uses Supabase Auth for email/password, Google, and GitHub.
+- ✅ Production unauthenticated API requests return `401` instead of falling into Diego's private profile.
+- ✅ Telegram and Gmail/Santander now require a linked profile before writing production financial rows.
+- ⚠️ Live Supabase RLS must still be confirmed from Supabase SQL Editor with `npm run sql:saas-audit`.
+- ⚠️ `/api/account/status` must be checked after a real Google/GitHub login to confirm current-production `profileScoped: true`.
 
 ## OAuth Login For Commercial SaaS
 

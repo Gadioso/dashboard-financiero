@@ -127,6 +127,17 @@ export async function POST(request: Request) {
     const texto = update.message?.text?.trim();
     const tenant = await getTelegramTenantContext({ supabase, chatId });
 
+    if (!tenant.profileId) {
+      await responderTelegram(
+        chatId,
+        chatId
+          ? `Necesito vincular este Telegram antes de registrar movimientos. Tu chat_id es: ${chatId}`
+          : 'No pude detectar tu chat_id para vincular Telegram.'
+      );
+
+      return NextResponse.json({ success: true, ignored: true, action: 'link-telegram' });
+    }
+
     if (!texto) {
       await responderTelegram(chatId, 'Estoy listo. Puedes decirme "pagué 250 de gasolina" o preguntarme "cómo voy este mes".');
       return NextResponse.json({ success: true, ignored: true });
