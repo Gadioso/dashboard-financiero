@@ -24,20 +24,13 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(`/login?error=Falta configurar Supabase Auth&next=${encodeURIComponent(safeNext)}`, request.url));
   }
 
-  const callbackUrl = new URL('/api/auth/callback', requestUrl.origin);
+  const callbackUrl = new URL('/auth/callback', requestUrl.origin);
   callbackUrl.searchParams.set('next', safeNext);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: callbackUrl.toString(),
-      queryParams:
-        provider === 'google'
-          ? {
-              access_type: 'offline',
-              prompt: 'consent',
-            }
-          : undefined,
     },
   });
 

@@ -127,7 +127,7 @@ The login UI supports Supabase Auth with:
 - Google OAuth through `/api/auth/oauth?provider=google`.
 - GitHub OAuth through `/api/auth/oauth?provider=github`.
 
-Both OAuth providers return to `/api/auth/callback`, exchange the Supabase auth code for a session, set `sb_access_token` and `sb_refresh_token`, and upsert the `profiles` row using `auth.users.id` as the tenant `profile_id`.
+Both OAuth providers return to `/auth/callback`, finalize the Supabase browser session, set `sb_access_token` and `sb_refresh_token` through `/api/auth/callback`, and upsert the `profiles` row using `auth.users.id` as the tenant `profile_id`.
 
 Supabase Dashboard setup:
 
@@ -135,16 +135,17 @@ Supabase Dashboard setup:
 2. Add the production callback URL to Authentication -> URL Configuration -> Redirect URLs:
 
 ```text
-https://<your-domain>/api/auth/callback
+https://<your-domain>/auth/callback
 ```
 
 3. Add the local callback URL while testing:
 
 ```text
-http://localhost:3000/api/auth/callback
+http://localhost:3000/auth/callback
 ```
 
-4. Configure each external provider with the callback URL shown by Supabase for that provider. Google also needs the app origin, for example `https://<your-domain>` and local `http://localhost:3000`.
+4. Configure each external provider with the callback URL shown by Supabase for that provider, for example `https://<project-ref>.supabase.co/auth/v1/callback`. Google also needs the app origin, for example `https://<your-domain>` and local `http://localhost:3000`.
+5. To avoid Google showing the raw Supabase project URL on the consent screen, configure Google Auth Platform branding and later add a Supabase custom auth domain such as `auth.<your-domain>`.
 
 ## What Still Needs Product Work Before Commercial Launch
 

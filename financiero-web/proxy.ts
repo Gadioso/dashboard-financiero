@@ -10,6 +10,7 @@ function dashboardAuthEnabled() {
 function isPublicPath(pathname: string) {
   return (
     pathname === '/login' ||
+    pathname === '/auth/callback' ||
     pathname === '/api/health' ||
     pathname.startsWith('/api/auth/') ||
     pathname.startsWith('/_next/') ||
