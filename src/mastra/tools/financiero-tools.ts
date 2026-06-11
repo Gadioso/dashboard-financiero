@@ -2,10 +2,16 @@ import { createTool } from '@mastra/core/tools';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-const supabaseUrl = 'https://goralfhisudzilfortuk.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const getSupabaseClient = () => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el entorno.');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+};
 
 const transaccionSchema = z.object({
   concepto: z.string().describe('El motivo del gasto o ingreso (ej. Starbucks, Pago de cliente)'),
@@ -14,13 +20,38 @@ const transaccionSchema = z.object({
   bolsa: z.enum(['Vida', 'Placeres', 'Futuro']).describe('La bolsa según la regla de los tres tercios a la que pertenece el movimiento'),
 });
 
+const registrarTransaccionOutputSchema = z.object({
+  status: z.literal('success'),
+  message: z.string(),
+  data: z.array(z.record(z.string(), z.unknown())).nullable(),
+});
+
+const resumenMensualOutputSchema = z.object({
+  status: z.literal('success'),
+  mesActual: z.string(),
+  faseAhorro: z.string(),
+  limitesConfigurados: z.boolean(),
+  presupuesto: z.object({
+    Vida: z.number().nullable(),
+    Placeres: z.number().nullable(),
+    Futuro: z.number().nullable(),
+  }),
+  gastado: z.object({
+    Vida: z.number(),
+    Placeres: z.number(),
+    Futuro: z.number(),
+  }),
+});
+
 // 1. Tool de Registro
 export const registrarTransaccionTool = createTool({
   id: 'registrarTransaccion',
   description: 'Registra un ingreso o gasto en la base de datos financiera de Diego, mapeándolo a la tabla correcta (ingresos o gastos).',
   inputSchema: transaccionSchema,
+  outputSchema: registrarTransaccionOutputSchema,
   execute: async (inputData: z.infer<typeof transaccionSchema>) => {
     const { concepto, monto, tipo, bolsa } = inputData;
+    const supabase = getSupabaseClient();
     let result;
 
     if (tipo === 'gasto') {
@@ -37,7 +68,7 @@ export const registrarTransaccionTool = createTool({
     }
 
     if (result.error) throw new Error(`Error al guardar en Supabase: ${result.error.message}`);
-    return { status: 'success', message: `Movimiento guardado exitosamente`, data: result.data };
+    return { status: 'success' as const, message: `Movimiento guardado exitosamente`, data: result.data };
   },
 });
 
@@ -46,7 +77,9 @@ export const obtenerResumenMensualTool = createTool({
   id: 'obtenerResumenMensual',
   description: 'Consulta el total acumulado de gastos del mes actual y compara contra los límites establecidos en presupuestos_mensuales.',
   inputSchema: z.object({}),
+  outputSchema: resumenMensualOutputSchema,
   execute: async () => {
+    const supabase = getSupabaseClient();
     const ahora = new Date();
     // Primer día del mes actual para buscar en la base de datos (ej: 2026-06-01)
     const año = ahora.getFullYear();
@@ -83,7 +116,7 @@ export const obtenerResumenMensualTool = createTool({
     });
 
     return {
-      status: 'success',
+      status: 'success' as const,
       mesActual: ahora.toLocaleString('es-MX', { month: 'long', year: 'numeric' }),
       faseAhorro: presupuesto?.fase_ahorro || 'No configurada',
       limitesConfigurados: presupuesto ? true : false,

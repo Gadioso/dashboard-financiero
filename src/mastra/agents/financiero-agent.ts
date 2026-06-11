@@ -1,13 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { createClient } from '@supabase/supabase-js';
 import { registrarTransaccionTool, obtenerResumenMensualTool } from '../tools/financiero-tools';
-
-// Conexión limpia leyendo de las variables de entorno
-const envs = (globalThis as any).process?.env || {};
-const supabaseUrl = envs.SUPABASE_URL || '';
-const supabaseServiceKey = envs.SUPABASE_SERVICE_ROLE_KEY || '';
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export const financieroAgent = new Agent({
   name: 'Agente Financiero Proactivo',

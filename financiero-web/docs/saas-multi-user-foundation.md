@@ -119,9 +119,36 @@ After successful apply, set these variables in Vercel Production:
 - Monthly budget sync.
 - Admin reclassification through `/api/admin/reclasificar-gastos`.
 
+## OAuth Login For Commercial SaaS
+
+The login UI supports Supabase Auth with:
+
+- Email and password.
+- Google OAuth through `/api/auth/oauth?provider=google`.
+- GitHub OAuth through `/api/auth/oauth?provider=github`.
+
+Both OAuth providers return to `/api/auth/callback`, exchange the Supabase auth code for a session, set `sb_access_token` and `sb_refresh_token`, and upsert the `profiles` row using `auth.users.id` as the tenant `profile_id`.
+
+Supabase Dashboard setup:
+
+1. Enable Google and GitHub under Authentication -> Providers.
+2. Add the production callback URL to Authentication -> URL Configuration -> Redirect URLs:
+
+```text
+https://<your-domain>/api/auth/callback
+```
+
+3. Add the local callback URL while testing:
+
+```text
+http://localhost:3000/api/auth/callback
+```
+
+4. Configure each external provider with the callback URL shown by Supabase for that provider. Google also needs the app origin, for example `https://<your-domain>` and local `http://localhost:3000`.
+
 ## What Still Needs Product Work Before Commercial Launch
 
-- Real authentication UI and onboarding.
+- Onboarding after first OAuth login to collect preferred name, budget targets, Telegram, and Gmail connection.
 - A user-owned Google/Gmail connection flow instead of one shared Apps Script.
 - Telegram account linking per user.
 - Billing and plan limits.

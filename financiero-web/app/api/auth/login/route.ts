@@ -1,23 +1,7 @@
 import { NextResponse } from 'next/server';
+import { authCookieName, clearAuthCookies, getSafeNext, setSupabaseSessionCookies, upsertAuthProfile } from '@/lib/auth-session';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { getSupabaseAnonClient, getSupabaseServiceClient } from '@/lib/supabase-server';
-
-const authCookieName = 'dashboard_auth';
-const accessCookieName = 'sb_access_token';
-const refreshCookieName = 'sb_refresh_token';
-
-function setSessionCookies(response: NextResponse, accessToken: string, refreshToken: string) {
-  const cookieOptions = {
-    httpOnly: true,
-    sameSite: 'strict' as const,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  };
-
-  response.cookies.set(accessCookieName, accessToken, cookieOptions);
-  response.cookies.set(refreshCookieName, refreshToken, cookieOptions);
-}
+import { getSupabaseAnonClient } from '@/lib/supabase-server';
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
@@ -40,7 +24,7 @@ export async function POST(request: Request) {
     password?: string;
     next?: string;
   };
-  const safeNext = next?.startsWith('/') && !next.startsWith('//') ? next : '/';
+  const safeNext = getSafeNext(next);
   const expectedToken = process.env.DASHBOARD_ACCESS_TOKEN || '';
 
   if (token || (!email && !password)) {
@@ -57,6 +41,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ success: true, next: safeNext, mode: 'private-token' });
 
+    clearAuthCookies(response);
     response.cookies.set(authCookieName, expectedToken, {
       httpOnly: true,
       sameSite: 'strict',
@@ -83,22 +68,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: error?.message || 'No pude iniciar sesión.' }, { status: 401 });
   }
 
-  const service = getSupabaseServiceClient();
-
-  if (service) {
-    await service.from('profiles').upsert(
-      {
-        id: data.user.id,
-        email: data.user.email || String(email || '').trim().toLowerCase(),
-        full_name: data.user.user_metadata?.full_name || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    );
-  }
+  await upsertAuthProfile(data.user, String(email || '').trim().toLowerCase());
 
   const response = NextResponse.json({ success: true, next: safeNext, mode: 'supabase-auth' });
-  setSessionCookies(response, data.session.access_token, data.session.refresh_token);
+  clearAuthCookies(response);
+  setSupabaseSessionCookies(response, data.session.access_token, data.session.refresh_token);
 
   return response;
 }

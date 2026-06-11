@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useState } from 'react';
 function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/';
+  const routeError = searchParams.get('error') || '';
   const [mode, setMode] = useState<'account' | 'private'>('account');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,8 +16,8 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  async function submit(event: FormEvent<HTMLFormElement>, action: 'login' | 'signup' = 'login') {
-    event.preventDefault();
+  async function submit(action: 'login' | 'signup' = 'login', event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setLoading(true);
     setError('');
     setMessage('');
@@ -56,9 +57,15 @@ function LoginForm() {
     }
   }
 
+  function startOAuth(provider: 'google' | 'github') {
+    setLoading(true);
+    setError('');
+    window.location.href = `/api/auth/oauth?provider=${provider}&next=${encodeURIComponent(next)}`;
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] px-4 text-slate-100">
-      <form onSubmit={(event) => submit(event)} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/75 p-6 shadow-2xl shadow-slate-950/60 backdrop-blur">
+      <form onSubmit={(event) => submit('login', event)} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/75 p-6 shadow-2xl shadow-slate-950/60 backdrop-blur">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Acceso financiero</p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Dashboard Financiero</h1>
         <p className="mt-2 text-sm text-slate-400">
@@ -132,8 +139,36 @@ function LoginForm() {
           </label>
         )}
 
-        {error && <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+        {(error || routeError) && <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error || routeError}</p>}
         {message && <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</p>}
+
+        {mode === 'account' && (
+          <>
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-800" />
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">OAuth</span>
+              <div className="h-px flex-1 bg-slate-800" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => startOAuth('google')}
+                disabled={loading}
+                className="rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Google
+              </button>
+              <button
+                type="button"
+                onClick={() => startOAuth('github')}
+                disabled={loading}
+                className="rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                GitHub
+              </button>
+            </div>
+          </>
+        )}
 
         <button
           type="submit"
@@ -145,7 +180,7 @@ function LoginForm() {
         {mode === 'account' && (
           <button
             type="button"
-            onClick={(event) => submit(event as unknown as FormEvent<HTMLFormElement>, 'signup')}
+            onClick={() => submit('signup')}
             disabled={loading || !email.trim() || password.length < 8}
             className="mt-3 w-full rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
