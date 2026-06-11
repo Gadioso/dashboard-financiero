@@ -19,6 +19,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: true,
         configured: false,
+        profileScoped: false,
         profileId: null,
         profile: null,
         telegramAccounts: [],
@@ -40,6 +41,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: errors.length === 0,
       configured: true,
+      profileScoped: errors.length === 0 && profileResult.data?.id === profileId,
       profileId,
       profile: profileResult.data || null,
       telegramAccounts: telegramResult.data || [],
