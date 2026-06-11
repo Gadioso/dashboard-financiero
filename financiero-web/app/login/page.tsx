@@ -8,6 +8,7 @@ function LoginForm() {
   const next = searchParams.get('next') || '/';
   const routeError = searchParams.get('error') || '';
   const [mode, setMode] = useState<'account' | 'private'>('account');
+  const [accountAction, setAccountAction] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -16,7 +17,7 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  async function submit(action: 'login' | 'signup' = 'login', event?: FormEvent<HTMLFormElement>) {
+  async function submit(action: 'login' | 'signup' = accountAction, event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setLoading(true);
     setError('');
@@ -63,9 +64,15 @@ function LoginForm() {
     window.location.href = `/api/auth/oauth?provider=${provider}&next=${encodeURIComponent(next)}`;
   }
 
+  function chooseMode(nextMode: 'account' | 'private') {
+    setMode(nextMode);
+    setError('');
+    setMessage('');
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] px-4 text-slate-100">
-      <form onSubmit={(event) => submit('login', event)} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/75 p-6 shadow-2xl shadow-slate-950/60 backdrop-blur">
+      <form onSubmit={(event) => submit(mode === 'account' ? accountAction : 'login', event)} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/75 p-6 shadow-2xl shadow-slate-950/60 backdrop-blur">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Acceso financiero</p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Dashboard Financiero</h1>
         <p className="mt-2 text-sm text-slate-400">
@@ -75,14 +82,14 @@ function LoginForm() {
         <div className="mt-6 grid grid-cols-2 rounded-xl border border-slate-800 bg-slate-950 p-1">
           <button
             type="button"
-            onClick={() => setMode('account')}
+            onClick={() => chooseMode('account')}
             className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${mode === 'account' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-slate-100'}`}
           >
             Cuenta
           </button>
           <button
             type="button"
-            onClick={() => setMode('private')}
+            onClick={() => chooseMode('private')}
             className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${mode === 'private' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-slate-100'}`}
           >
             Token privado
@@ -91,6 +98,22 @@ function LoginForm() {
 
         {mode === 'account' ? (
           <div className="mt-5 space-y-4">
+            <div className="grid grid-cols-2 rounded-xl border border-slate-800 bg-slate-950 p-1">
+              <button
+                type="button"
+                onClick={() => setAccountAction('login')}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'login' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-100'}`}
+              >
+                Entrar
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountAction('signup')}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'signup' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-100'}`}
+              >
+                Crear cuenta
+              </button>
+            </div>
             <label className="block text-sm font-medium text-slate-300">
               Email
               <input
@@ -113,17 +136,19 @@ function LoginForm() {
                 placeholder="Mínimo 8 caracteres"
               />
             </label>
-            <label className="block text-sm font-medium text-slate-300">
-              Nombre completo
-              <input
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                type="text"
-                autoComplete="name"
-                className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
-                placeholder="Solo para crear cuenta"
-              />
-            </label>
+            {accountAction === 'signup' && (
+              <label className="block text-sm font-medium text-slate-300">
+                Nombre completo
+                <input
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  type="text"
+                  autoComplete="name"
+                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                  placeholder="Tu nombre"
+                />
+              </label>
+            )}
           </div>
         ) : (
           <label className="mt-5 block text-sm font-medium text-slate-300">
@@ -175,18 +200,8 @@ function LoginForm() {
           disabled={loading || (mode === 'private' ? !token.trim() : !email.trim() || password.length < 8)}
           className="mt-5 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? 'Entrando...' : 'Entrar'}
+          {loading ? 'Entrando...' : mode === 'account' && accountAction === 'signup' ? 'Crear cuenta' : 'Entrar'}
         </button>
-        {mode === 'account' && (
-          <button
-            type="button"
-            onClick={() => submit('signup')}
-            disabled={loading || !email.trim() || password.length < 8}
-            className="mt-3 w-full rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Crear cuenta beta
-          </button>
-        )}
       </form>
     </main>
   );

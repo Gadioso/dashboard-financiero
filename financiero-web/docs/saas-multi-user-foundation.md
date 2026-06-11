@@ -175,3 +175,16 @@ http://localhost:3000/auth/callback
 - Billing and plan limits.
 - Admin observability, audit logs, and abuse/rate-limit controls.
 - Production data retention and deletion flows.
+
+## Paso 2 Private Beta Status
+
+- ✅ Login/signup UI separates sign in from account creation and keeps Google/GitHub OAuth available.
+- ✅ `/api/account/status` returns `profileScoped`, linked Telegram/Gmail accounts, and per-profile financial row counts.
+- ✅ Dashboard data is read through profile-scoped API routes.
+- ✅ Supabase RLS and `profile_id` isolation are confirmed for all tenant tables.
+- ✅ Telegram and Gmail/Santander production ingestion require a linked profile before writing.
+- ✅ Verification gates passed locally: `npm run lint`, `npm run build`, `npm run security:secrets`, `npm run test:santander-parser`.
+- ⚠️ Final beta acceptance still needs live checks with two real accounts:
+  - New beta user: `/api/account/status` should show `profileScoped: true` and all `financialCounts` at `0`.
+  - Diego user: `/api/account/status` should show `profileScoped: true` and non-zero counts for his historical data.
+  - Register one test expense/income and confirm only that active user sees it.

@@ -4,6 +4,34 @@ import { getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
+const scopedTables = [
+  'gastos',
+  'ingresos',
+  'presupuestos_mensuales',
+  'fondos_acumulados',
+  'telegram_memoria',
+  'santander_ingest_logs',
+  'classification_preferences',
+  'abonos_tarjeta_credito',
+] as const;
+
+async function countProfileRows(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
+  table: (typeof scopedTables)[number],
+  profileId: string
+) {
+  const { count, error } = await supabase
+    .from(table)
+    .select('*', { count: 'exact', head: true })
+    .eq('profile_id', profileId);
+
+  return {
+    table,
+    count: count || 0,
+    error: error?.message || null,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = getSupabaseServiceClient();
@@ -24,19 +52,26 @@ export async function GET(request: Request) {
         profile: null,
         telegramAccounts: [],
         gmailIntegrations: [],
+        financialCounts: Object.fromEntries(scopedTables.map((table) => [table, 0])),
         message: 'DASHBOARD_PRIVATE_PROFILE_ID no está configurado.',
       });
     }
 
-    const [profileResult, telegramResult, gmailResult] = await Promise.all([
+    const [profileResult, telegramResult, gmailResult, countResults] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
       supabase.from('gmail_integrations').select('id, email, provider, status, watch_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
+      Promise.all(scopedTables.map((table) => countProfileRows(supabase, table, profileId))),
     ]);
 
+    const countErrors = countResults
+      .filter((result) => result.error)
+      .map((result) => `${result.table}: ${result.error}`);
+    const financialCounts = Object.fromEntries(countResults.map((result) => [result.table, result.count]));
     const errors = [profileResult.error, telegramResult.error, gmailResult.error]
       .filter(Boolean)
-      .map((error) => error?.message);
+      .map((error) => error?.message)
+      .concat(countErrors);
 
     return NextResponse.json({
       success: errors.length === 0,
@@ -46,6 +81,7 @@ export async function GET(request: Request) {
       profile: profileResult.data || null,
       telegramAccounts: telegramResult.data || [],
       gmailIntegrations: gmailResult.data || [],
+      financialCounts,
       tenantSource: tenant.source,
       errors,
     }, { status: errors.length ? 500 : 200 });
