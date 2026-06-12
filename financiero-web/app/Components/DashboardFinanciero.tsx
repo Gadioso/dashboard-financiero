@@ -204,7 +204,7 @@ export default function DashboardFinanciero() {
 
         if (mounted) setSantanderStatus(data);
       } catch {
-        if (mounted) setSantanderStatus({ error: 'No pude consultar estado Santander.' });
+        if (mounted) setSantanderStatus({ error: 'No pude consultar estado bancario.' });
       }
     }
 
@@ -356,7 +356,7 @@ export default function DashboardFinanciero() {
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
             Dashboard Financiero
           </h1>
-          <p className="text-slate-400 mt-1">Control mensual, automatización Santander y regla 33/33/33.</p>
+          <p className="text-slate-400 mt-1">Control mensual, automatización bancaria y regla 33/33/33.</p>
         </div>
         <div className="mt-4 flex items-center gap-2 md:mt-0">
           <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-300">
@@ -400,8 +400,8 @@ export default function DashboardFinanciero() {
       <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-5 mb-6 backdrop-blur">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">Estado Gmail / Santander</h2>
-            <p className="text-sm text-slate-400 mt-1">Ingesta de correos Santander hacia Supabase.</p>
+            <h2 className="text-lg font-semibold text-slate-100">Estado Gmail / Banco</h2>
+            <p className="text-sm text-slate-400 mt-1">Ingesta de correos bancarios hacia Supabase.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-4">
             <span className={`rounded-lg border px-3 py-2 ${
@@ -430,7 +430,7 @@ export default function DashboardFinanciero() {
         {santanderStatus?.ingestLogs?.available ? (
           <div className="mt-4 border-t border-white/10 pt-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-slate-200">Última ingesta Santander</h3>
+              <h3 className="text-sm font-semibold text-slate-200">Última ingesta bancaria</h3>
               <span className="text-xs text-slate-500">Últimos {santanderStatus.ingestLogs.logs.length} eventos</span>
             </div>
             {santanderStatus.ingestLogs.error && (
@@ -513,7 +513,7 @@ export default function DashboardFinanciero() {
           <p className="mt-1 text-xs text-amber-100/60">Mes avanzado {avanceMes.toFixed(1)}%</p>
         </div>
         <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-violet-200/80">TDC Santander</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-violet-200/80">Tarjeta de crédito</p>
           <p className={`mt-2 text-2xl font-bold ${deudaTdcEstimadaMes > 0 ? 'text-violet-100' : 'text-emerald-200'}`}>
             ${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}
           </p>
@@ -735,7 +735,7 @@ export default function DashboardFinanciero() {
                   <tr key={abono.id} className="transition-colors hover:bg-violet-400/5">
                     <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(abono.fecha)}</td>
                     <td className="py-3 font-medium text-slate-100">{abono.concepto}</td>
-                    <td className="py-3 text-slate-400">{abono.tarjeta || 'Tarjeta de crédito Santander'}</td>
+                    <td className="py-3 text-slate-400">{abono.tarjeta || 'Tarjeta de crédito'}</td>
                     <td className="py-3 text-slate-400">{nombreOrigen(abono.origen)}</td>
                     <td className="py-3 text-right font-semibold text-violet-200">-${formatearMonto(abono.monto)}</td>
                   </tr>

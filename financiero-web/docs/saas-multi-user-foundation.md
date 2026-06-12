@@ -184,7 +184,8 @@ http://localhost:3000/auth/callback
 - ✅ Supabase RLS and `profile_id` isolation are confirmed for all tenant tables.
 - ✅ Telegram and Gmail/Santander production ingestion require a linked profile before writing.
 - ✅ Verification gates passed locally: `npm run lint`, `npm run build`, `npm run security:secrets`, `npm run test:santander-parser`.
-- ⚠️ Final beta acceptance still needs live checks with two real accounts:
-  - New beta user: `/api/account/status` should show `profileScoped: true` and all `financialCounts` at `0`.
-  - Diego user: `/api/account/status` should show `profileScoped: true` and non-zero counts for his historical data.
-  - Register one test expense/income and confirm only that active user sees it.
+- ✅ Diego user: `/api/account/status` shows `profileScoped: true` and non-zero counts for historical data.
+- ✅ New beta user: `/api/account/status` shows `profileScoped: true`; initial counts start at `0`.
+- ✅ New beta user write test: a manual Oxxo expense appears only for that user and keeps income/budget empty until income exists.
+- ✅ Bank ingest status panel is scoped to the active user and uses neutral bank-facing copy.
+- ⚠️ Final beta acceptance still needs one live income write test on the new beta user to confirm monthly budget recalculation for that profile.
