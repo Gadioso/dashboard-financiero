@@ -46,6 +46,7 @@ export default function OnboardingClient() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [syncingGmail, setSyncingGmail] = useState(false);
   const [fullName, setFullName] = useState('');
   const [monthlyTarget, setMonthlyTarget] = useState('60000');
   const [gmailEmail, setGmailEmail] = useState('');
@@ -169,6 +170,35 @@ export default function OnboardingClient() {
 
   function startGmailOAuth() {
     window.location.href = '/api/account/gmail/oauth/start';
+  }
+
+  async function syncGmailNow() {
+    setSyncingGmail(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch('/api/email/gmail/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setError(data.error || 'No pude sincronizar Gmail/Banco.');
+        return;
+      }
+
+      const totals = data.totals || {};
+      setMessage(
+        `Sincronización lista: ${totals.inserted || 0} nuevos, ${totals.duplicate || 0} duplicados, ${totals.ignored || 0} ignorados.`
+      );
+      await refreshStatus();
+    } catch {
+      setError('No pude conectar con el servidor.');
+    } finally {
+      setSyncingGmail(false);
+    }
   }
 
   return (
@@ -317,6 +347,14 @@ export default function OnboardingClient() {
                 className="mt-5 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {hasGmail ? 'Reconectar Google/Gmail' : 'Conectar Google/Gmail'}
+              </button>
+              <button
+                type="button"
+                onClick={syncGmailNow}
+                disabled={!hasProfile || !hasGmail || syncingGmail}
+                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-300/30 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {syncingGmail ? 'Sincronizando...' : 'Sincronizar Gmail ahora'}
               </button>
             </section>
           </div>
