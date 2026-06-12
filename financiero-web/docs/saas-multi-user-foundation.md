@@ -232,7 +232,8 @@ Configure these production variables:
 Gmail sync details:
 
 - Manual user sync: `POST /api/email/gmail/sync` from an authenticated browser session.
-- Scheduled sync: Vercel Cron calls `GET /api/email/gmail/sync` daily with `Authorization: Bearer <CRON_SECRET>`.
+- Scheduled sync: Vercel Cron calls `GET /api/email/gmail/sync` daily with the `vercel-cron/1.0` user-agent.
+- `CRON_SECRET` is still supported for manual/server-to-server sync calls with `Authorization: Bearer <CRON_SECRET>`.
 - More frequent sync, for example every 10 minutes, requires Vercel Pro or a different queue/worker provider.
 - Default search query: `from:santander newer_than:14d`.
 - Optional variables: `GMAIL_BANK_SEARCH_QUERY` and `GMAIL_SYNC_MAX_MESSAGES`.

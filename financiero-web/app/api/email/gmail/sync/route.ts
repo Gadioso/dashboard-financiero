@@ -76,7 +76,9 @@ function getBearerToken(request: Request) {
 
 function isCronRequest(request: Request) {
   const cronSecret = process.env.CRON_SECRET || '';
+  const userAgent = request.headers.get('user-agent') || '';
 
+  if (userAgent.includes('vercel-cron/1.0')) return true;
   if (!cronSecret) return false;
 
   return getBearerToken(request) === cronSecret;
