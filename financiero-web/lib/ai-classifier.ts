@@ -3,6 +3,7 @@ import {
   type CategoriaFinanciera,
   type ClasificacionMovimiento,
   esComandoAyuda,
+  extraerFechaRelativaMovimiento,
   parsearMovimientoEstructurado,
 } from '@/lib/financial-core';
 
@@ -38,6 +39,7 @@ function validarClasificacion(valor: unknown): ClasificacionMovimiento {
     categoria,
     subcategoria: typeof data.subcategoria === 'string' && data.subcategoria.trim() ? data.subcategoria.trim() : categoria,
     razon: typeof data.razon === 'string' ? data.razon.trim() : 'Clasificación generada por IA.',
+    ...(typeof data.fechaMovimiento === 'string' && data.fechaMovimiento.trim() ? { fechaMovimiento: data.fechaMovimiento.trim() } : {}),
   };
 }
 
@@ -45,7 +47,8 @@ function limpiarConcepto(texto: string) {
   return texto
     .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*k\b/gi, '')
     .replace(/\$?\d+(?:[,.]\d{1,2})?/g, '')
-    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|quincena|efectivo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|de|en|a|al|la|el|un|una|por)\b/gi, ' ')
+    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|quincena|efectivo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|a|al|la|el|un|una|por|para)\b/gi, ' ')
+    .replace(/\b(?:vida|placeres?|futuro)\b\s*$/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -70,8 +73,10 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
   if (!Number.isFinite(monto) || monto <= 0) return null;
 
   const concepto = limpiarConcepto(texto) || 'Movimiento';
+  const fechaRelativa = extraerFechaRelativaMovimiento(texto);
+  const fechaMovimiento = fechaRelativa ? fechaRelativa.toISOString() : undefined;
 
-  if (/\b(reg[ií]strame|registrame|registra|registrar|gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision|efectivo)\b/.test(normalizado) && /\b(ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|efectivo)\b/.test(normalizado)) {
+  if (/\b(reg[ií]strame|registrame|registra|registrar|gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision)\b/.test(normalizado) && /\b(ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance)\b/.test(normalizado)) {
     return {
       concepto,
       monto,
@@ -79,6 +84,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Futuro',
       subcategoria: 'Ingreso',
       razon: 'Clasificado por regla local como ingreso del mes.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -90,6 +96,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Futuro',
       subcategoria: 'Inversion',
       razon: 'Clasificado por regla local de inversión.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -101,6 +108,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Futuro',
       subcategoria: 'Emergencia',
       razon: 'Clasificado por regla local de fondo de emergencia.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -112,6 +120,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Futuro',
       subcategoria: 'Seguros',
       razon: 'Clasificado por regla local de seguros.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -123,10 +132,11 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Vida',
       subcategoria: 'Herramientas Trabajo',
       razon: 'Clasificado por regla local como herramienta mensual de trabajo.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
-  if (/\b(caf[eé]|starbucks|taco|tacos|restaurante|cine|uber eats|rappi|salida|bar|concierto|viaje|hotel|mercado\s*pago|mercadopago|paypal|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/.test(normalizado)) {
+  if (/\b(caf[eé]|starbucks|taco|tacos|restaurante|cine|uber eats|rappi|salida|bar|concierto|viaje|hotel|mercado\s*pago|mercadopago|paypal|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b|hike|senderismo|malinche)\b/.test(normalizado)) {
     return {
       concepto,
       monto,
@@ -134,10 +144,11 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Placeres',
       subcategoria: /\b(caf[eé]|starbucks)\b/.test(normalizado)
         ? 'Cafe'
-        : /\b(viaje|hotel|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b)\b/.test(normalizado)
+        : /\b(viaje|hotel|airbnb|booking|expedia|aerom[eé]xico|volaris|vivaaerobus|uber\b|didi\b|hike|senderismo|malinche)\b/.test(normalizado)
           ? 'Viajes'
           : 'Restaurantes',
       razon: 'Clasificado por regla local de consumo discrecional.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -150,6 +161,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
         categoria: 'Vida',
         subcategoria: 'Costo de Vida',
         razon: 'Clasificado por regla local: OXXO con señal de servicio, salud o gasto necesario.',
+        ...(fechaMovimiento ? { fechaMovimiento } : {}),
       };
     }
 
@@ -160,6 +172,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Placeres',
       subcategoria: 'Otros Placeres',
       razon: 'Clasificado por regla local: OXXO sin señal de necesidad se trata como consumo discrecional.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -171,6 +184,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
       categoria: 'Vida',
       subcategoria: /\b(gasolina|transporte|metro|camion|camión)\b/.test(normalizado) ? 'Transporte' : 'Otros Vida',
       razon: 'Clasificado por regla local de costo de vida.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
 
@@ -194,6 +208,7 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
       categoria: estructurado.categoria,
       subcategoria: estructurado.subcategoria,
       razon: estructurado.razon,
+      ...(extraerFechaRelativaMovimiento(texto) ? { fechaMovimiento: extraerFechaRelativaMovimiento(texto)?.toISOString() } : {}),
     };
   }
 
@@ -244,6 +259,8 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "Mercado Pago, PayPal, restaurants, travel, hotels, Uber/Didi rides, coffee, convenience stores and leisure purchases are Placeres unless the user explicitly says they were for a necessary living expense.",
     "Vida is narrow: gasoline, supermarket/basic groceries, phone, utilities, health, rent, debt, and work/software tools. Do not default ambiguous card purchases to Vida.",
     "If there is no clear amount, use 0. Do not invent an amount.",
+    "If the user says hoy, ayer, anoche, antier or anteayer, include fechaMovimiento as an ISO date for that relative date in America/Mexico_City.",
+    "Do not include relative date words such as ayer or hoy in concepto.",
     "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
     "Return only valid raw JSON matching the output_schema."
   ],
@@ -254,7 +271,8 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "tipo": "gasto | ingreso",
     "categoria": "Vida | Placeres | Futuro",
     "subcategoria": "Spanish subcategory",
-    "razon": "brief Spanish reason"
+    "razon": "brief Spanish reason",
+    "fechaMovimiento": "optional ISO date string when the user gave a relative or explicit date"
   }
 }
 `;

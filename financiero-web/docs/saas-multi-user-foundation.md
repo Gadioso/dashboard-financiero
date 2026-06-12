@@ -187,5 +187,15 @@ http://localhost:3000/auth/callback
 - ✅ Diego user: `/api/account/status` shows `profileScoped: true` and non-zero counts for historical data.
 - ✅ New beta user: `/api/account/status` shows `profileScoped: true`; initial counts start at `0`.
 - ✅ New beta user write test: a manual Oxxo expense appears only for that user and keeps income/budget empty until income exists.
+- ✅ New beta user income test: a manual $10,000 income appears only for that user and recalculates monthly budget thirds.
 - ✅ Bank ingest status panel is scoped to the active user and uses neutral bank-facing copy.
-- ⚠️ Final beta acceptance still needs one live income write test on the new beta user to confirm monthly budget recalculation for that profile.
+
+## Paso 3 Onboarding Status
+
+- ✅ Creating an account already creates or updates `profiles` automatically from Supabase Auth.
+- ✅ `/onboarding` shows a per-user setup checklist.
+- ✅ `/api/account/onboarding` saves name, monthly target, and creates an initial monthly budget scoped by `profile_id`.
+- ✅ Telegram can be linked from onboarding through `/api/account/link-telegram`.
+- ✅ Gmail/Bank can be linked from onboarding through `/api/account/link-gmail`.
+- ✅ The dashboard exposes a configuration link and no longer addresses every user as Diego.
+- ⚠️ Gmail/Bank is still the beta email mapping flow. True one-click Gmail OAuth/watch setup remains product work for the next onboarding iteration.

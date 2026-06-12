@@ -115,6 +115,37 @@ export const aliasCategoria: Record<string, CategoriaFinanciera> = {
 export const categoriaParaGastos = (categoria: CategoriaFinanciera): CategoriaGasto =>
   categoria === 'Futuro' ? 'Seguros' : categoria;
 
+function currentMexicoDateParts() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return {
+    year: Number(values.year),
+    monthIndex: Number(values.month) - 1,
+    day: Number(values.day),
+  };
+}
+
+export function extraerFechaRelativaMovimiento(texto: string) {
+  const normalizado = texto.toLowerCase();
+  let offset: number | null = null;
+
+  if (/\b(?:ayer|anoche)\b/.test(normalizado)) offset = -1;
+  if (/\b(?:hoy)\b/.test(normalizado)) offset = 0;
+  if (/\b(?:antier|anteayer)\b/.test(normalizado)) offset = -2;
+
+  if (offset === null) return null;
+
+  const { year, monthIndex, day } = currentMexicoDateParts();
+
+  return new Date(Date.UTC(year, monthIndex, day + offset, 12));
+}
+
 export const formatoFechaMX = new Intl.DateTimeFormat('es-MX', {
   timeZone: 'America/Mexico_City',
   day: '2-digit',

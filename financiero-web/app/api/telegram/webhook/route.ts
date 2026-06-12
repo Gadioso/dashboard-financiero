@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos } from '@/lib/financial-core';
+import { categoriaParaGastos, extraerFechaRelativaMovimiento } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib/tenant-context';
@@ -29,6 +29,16 @@ type MensajeMemoria = {
     lastExpenseId?: string;
   };
 };
+
+function fechaMovimientoDesdeClasificacion(fechaMovimiento: string | undefined, texto: string) {
+  const fechaClasificada = fechaMovimiento ? new Date(fechaMovimiento) : null;
+
+  if (fechaClasificada && !Number.isNaN(fechaClasificada.getTime())) {
+    return fechaClasificada;
+  }
+
+  return extraerFechaRelativaMovimiento(texto) || new Date();
+}
 
 async function responderTelegram(chatId: number | undefined, texto: string) {
   if (!chatId || !telegramBotToken) return;
@@ -168,14 +178,14 @@ export async function POST(request: Request) {
     }
 
     const clasificacion = respuesta.movement;
+    const fechaMovimiento = fechaMovimientoDesdeClasificacion(clasificacion.fechaMovimiento, texto);
 
     if (clasificacion.tipo === 'ingreso') {
-      const fechaIngreso = new Date();
       const ingresoPayload = withProfile({
         concepto: clasificacion.concepto,
         monto: clasificacion.monto,
         tipo: 'Extra',
-        fecha: fechaIngreso.toISOString(),
+        fecha: fechaMovimiento.toISOString(),
       }, tenant.profileId);
 
       const { data, error } = await supabase
@@ -189,7 +199,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      await sincronizarPresupuestoMensual(supabase, fechaIngreso, tenant.profileId);
+      await sincronizarPresupuestoMensual(supabase, fechaMovimiento, tenant.profileId);
 
       const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 33/33/33.`;
       await responderTelegram(chatId, message);
@@ -206,7 +216,7 @@ export async function POST(request: Request) {
       categoria: categoriaFinal,
       subcategoria: clasificacion.subcategoria,
       origen: 'Telegram',
-      fecha: new Date().toISOString(),
+      fecha: fechaMovimiento.toISOString(),
     }, tenant.profileId);
 
     const { data, error } = await supabase.from('gastos').insert([payload]).select('id, concepto, monto, categoria, subcategoria, origen, fecha').single();

@@ -159,7 +159,7 @@ function normalizarIntentIA(valor: unknown, textoOriginal: string): Intent | nul
 }
 
 function esRegistroExplicito(normalizado: string) {
-  return /\b(?:pagu[eé]|pag[ué]é|gast[eé]|gaste|compr[eé]|compre|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|me\s+pagaron|depositaron|reg[ií]strame|registrame|registra|registrar|agrega|agregar|a[nñ]ade|añade)\b/.test(normalizado);
+  return /\b(?:pagu[eé]|pag[ué]é|gast[eé]|gaste|compr[eé]|compre|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|me\s+pagaron|depositaron|reg[ií]strame|registrame|registra|registrar|agrega|agregar|a[nñ]ade|añade)\b/.test(normalizado);
 }
 
 function protegerIntentAmbiguo(intent: Intent, texto: string): Intent {
@@ -1020,6 +1020,16 @@ async function responderConversacionAbierta({
 
 function completarFollowUpMovimiento(texto: string, memoria: MensajeMemoria[]) {
   const normalizado = texto.trim().toLowerCase();
+  const esSoloCategoria = /^(?:vida|costo\s+de\s+vida|placeres?|placer|futuro|inversi[oó]n|inversion|ahorro|emergencia)$/i.test(normalizado);
+  const ultimoAsistente = [...memoria].reverse().find((mensaje) => mensaje.role === 'assistant');
+
+  if (esSoloCategoria && /\b(?:bolsa|clasificamos|clasificar|registrar correctamente|confirma|confirmas)\b/i.test(ultimoAsistente?.content || '')) {
+    const ultimoUsuario = [...memoria]
+      .reverse()
+      .find((mensaje) => mensaje.role === 'user' && /\d/.test(mensaje.content) && esRegistroExplicito(mensaje.content.toLowerCase()));
+
+    return ultimoUsuario ? `${ultimoUsuario.content} ${texto}` : texto;
+  }
 
   if (!/\b(?:efectivo|cash|tarjeta|santander|transferencia|spei)\b/.test(normalizado) || /\d/.test(normalizado)) {
     return texto;
