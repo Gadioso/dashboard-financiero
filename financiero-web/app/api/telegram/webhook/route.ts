@@ -14,6 +14,11 @@ type TelegramMessage = {
   chat?: {
     id?: number;
   };
+  from?: {
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
   text?: string;
 };
 
@@ -38,6 +43,82 @@ function fechaMovimientoDesdeClasificacion(fechaMovimiento: string | undefined, 
   }
 
   return extraerFechaRelativaMovimiento(texto) || new Date();
+}
+
+function extractTelegramLinkCode(texto?: string | null) {
+  const match = texto?.trim().match(/(?:^\/start\s+|^)(DF-[A-F0-9]{8})\b/i);
+
+  return match?.[1]?.toUpperCase() || null;
+}
+
+function telegramDisplayName(message?: TelegramMessage) {
+  const from = message?.from;
+
+  if (!from) return null;
+
+  return from.username || [from.first_name, from.last_name].filter(Boolean).join(' ').trim() || null;
+}
+
+async function claimTelegramLinkCode({
+  supabase,
+  chatId,
+  code,
+  username,
+}: {
+  supabase: SupabaseClient;
+  chatId?: number;
+  code: string;
+  username?: string | null;
+}) {
+  if (!chatId) return { success: false, message: 'No pude detectar tu chat_id para vincular Telegram.' };
+
+  const { data: linkCode, error: codeError } = await supabase
+    .from('telegram_link_codes')
+    .select('code, profile_id, status, expires_at')
+    .eq('code', code)
+    .maybeSingle();
+
+  if (codeError) {
+    throw new Error(`No pude revisar el código de Telegram: ${codeError.message}`);
+  }
+
+  if (!linkCode || linkCode.status !== 'pending') {
+    return { success: false, message: 'Ese código de Telegram no existe o ya fue usado. Genera uno nuevo en Onboarding.' };
+  }
+
+  if (new Date(linkCode.expires_at).getTime() < Date.now()) {
+    await supabase.from('telegram_link_codes').update({ status: 'expired' }).eq('code', code);
+
+    return { success: false, message: 'Ese código de Telegram expiró. Genera uno nuevo en Onboarding.' };
+  }
+
+  const now = new Date().toISOString();
+  const { error: upsertError } = await supabase
+    .from('telegram_accounts')
+    .upsert(
+      {
+        profile_id: linkCode.profile_id,
+        chat_id: String(chatId),
+        username: username || null,
+        last_seen_at: now,
+      },
+      { onConflict: 'chat_id' }
+    );
+
+  if (upsertError) {
+    throw new Error(`No pude vincular Telegram: ${upsertError.message}`);
+  }
+
+  await supabase
+    .from('telegram_link_codes')
+    .update({
+      status: 'claimed',
+      claimed_chat_id: String(chatId),
+      claimed_at: now,
+    })
+    .eq('code', code);
+
+  return { success: true, message: 'Listo. Telegram quedó conectado a tu dashboard financiero.' };
 }
 
 async function responderTelegram(chatId: number | undefined, texto: string) {
@@ -135,6 +216,20 @@ export async function POST(request: Request) {
     const update = (await request.json()) as TelegramUpdate;
     const chatId = update.message?.chat?.id;
     const texto = update.message?.text?.trim();
+    const linkCode = extractTelegramLinkCode(texto);
+
+    if (linkCode) {
+      const result = await claimTelegramLinkCode({
+        supabase,
+        chatId,
+        code: linkCode,
+        username: telegramDisplayName(update.message),
+      });
+
+      await responderTelegram(chatId, result.message);
+      return NextResponse.json({ success: result.success, action: 'claim-telegram', message: result.message }, { status: result.success ? 200 : 400 });
+    }
+
     const tenant = await getTelegramTenantContext({ supabase, chatId });
 
     if (!tenant.profileId) {

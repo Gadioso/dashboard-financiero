@@ -16,6 +16,7 @@ const migrationSets = {
   ],
   'multi-user': [
     '20260608_multi_user_foundation.sql',
+    '20260612_self_serve_onboarding_integrations.sql',
   ],
 };
 

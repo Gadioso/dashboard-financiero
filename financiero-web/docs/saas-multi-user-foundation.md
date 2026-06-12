@@ -169,9 +169,7 @@ http://localhost:3000/auth/callback
 
 ## What Still Needs Product Work Before Commercial Launch
 
-- Onboarding after first OAuth login to collect preferred name, budget targets, Telegram, and Gmail connection.
-- A user-owned Google/Gmail connection flow instead of one shared Apps Script.
-- Telegram account linking per user.
+- Gmail push/watch renewal jobs and bank-email parsing from user-owned Gmail tokens.
 - Billing and plan limits.
 - Admin observability, audit logs, and abuse/rate-limit controls.
 - Production data retention and deletion flows.
@@ -195,7 +193,35 @@ http://localhost:3000/auth/callback
 - ✅ Creating an account already creates or updates `profiles` automatically from Supabase Auth.
 - ✅ `/onboarding` shows a per-user setup checklist.
 - ✅ `/api/account/onboarding` saves name, monthly target, and creates an initial monthly budget scoped by `profile_id`.
-- ✅ Telegram can be linked from onboarding through `/api/account/link-telegram`.
-- ✅ Gmail/Bank can be linked from onboarding through `/api/account/link-gmail`.
+- ✅ Telegram can be linked self-serve from onboarding with a temporary code sent to the bot.
+- ✅ Gmail/Bank can be connected with Google OAuth from onboarding and stores encrypted user tokens.
 - ✅ The dashboard exposes a configuration link and no longer addresses every user as Diego.
-- ⚠️ Gmail/Bank is still the beta email mapping flow. True one-click Gmail OAuth/watch setup remains product work for the next onboarding iteration.
+- ⚠️ Gmail OAuth now connects the account. The next backend step is creating Gmail `watch` subscriptions and a renewal/ingestion worker so bank emails are processed without Apps Script.
+
+## Self-Serve Integration Setup
+
+Apply the onboarding migration after the multi-user foundation:
+
+```bash
+npm run sql:multi-user
+```
+
+Telegram self-serve linking needs:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `TELEGRAM_BOT_USERNAME`
+
+Gmail OAuth needs a Google OAuth web client with this redirect URL:
+
+```text
+https://<your-domain>/api/account/gmail/oauth/callback
+```
+
+Configure these production variables:
+
+- `GOOGLE_GMAIL_CLIENT_ID`
+- `GOOGLE_GMAIL_CLIENT_SECRET`
+- `GOOGLE_GMAIL_REDIRECT_URI`
+- `GMAIL_OAUTH_STATE_SECRET`
+- `GMAIL_TOKEN_ENCRYPTION_KEY`

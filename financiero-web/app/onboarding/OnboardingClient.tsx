@@ -46,12 +46,12 @@ export default function OnboardingClient() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
-  const [linkingGmail, setLinkingGmail] = useState(false);
   const [fullName, setFullName] = useState('');
   const [monthlyTarget, setMonthlyTarget] = useState('60000');
-  const [telegramChatId, setTelegramChatId] = useState('');
-  const [telegramUsername, setTelegramUsername] = useState('');
   const [gmailEmail, setGmailEmail] = useState('');
+  const [telegramCode, setTelegramCode] = useState('');
+  const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
+  const [telegramExpiresAt, setTelegramExpiresAt] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -70,7 +70,7 @@ export default function OnboardingClient() {
       setStatus(data);
       setFullName(data.profile?.full_name || '');
       setMonthlyTarget(String(data.profile?.monthly_income_target || 60000));
-      setGmailEmail(data.profile?.email || '');
+      setGmailEmail(data.gmailIntegrations?.[0]?.email || data.profile?.email || '');
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
@@ -79,7 +79,14 @@ export default function OnboardingClient() {
   };
 
   useEffect(() => {
-    void Promise.resolve().then(refreshStatus);
+    void Promise.resolve().then(() => {
+      const params = new URLSearchParams(window.location.search);
+      const routeError = params.get('error');
+
+      if (routeError) setError(decodeURIComponent(routeError));
+      if (params.get('gmail') === 'connected') setMessage('Gmail/Banco conectado con Google.');
+      void refreshStatus();
+    });
   }, []);
 
   const monthlyTargetNumber = parseMoney(monthlyTarget);
@@ -132,29 +139,27 @@ export default function OnboardingClient() {
     }
   }
 
-  async function linkTelegram(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function generateTelegramCode() {
     setLinkingTelegram(true);
     setError('');
     setMessage('');
 
     try {
-      const response = await fetch('/api/account/link-telegram', {
+      const response = await fetch('/api/account/telegram-link-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: telegramChatId, username: telegramUsername }),
       });
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setError(data.error || 'No pude conectar Telegram.');
+        setError(data.error || 'No pude generar el código de Telegram.');
         return;
       }
 
-      setMessage('Telegram conectado a esta cuenta.');
-      setTelegramChatId('');
-      setTelegramUsername('');
-      await refreshStatus();
+      setTelegramCode(data.code);
+      setTelegramDeepLink(data.deepLink || null);
+      setTelegramExpiresAt(data.expiresAt || '');
+      setMessage('Código listo. Envíalo al bot de Telegram para vincular tu cuenta.');
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
@@ -162,32 +167,8 @@ export default function OnboardingClient() {
     }
   }
 
-  async function linkGmail(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLinkingGmail(true);
-    setError('');
-    setMessage('');
-
-    try {
-      const response = await fetch('/api/account/link-gmail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: gmailEmail, status: 'active' }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setError(data.error || 'No pude conectar Gmail/Banco.');
-        return;
-      }
-
-      setMessage('Gmail/Banco conectado a esta cuenta.');
-      await refreshStatus();
-    } catch {
-      setError('No pude conectar con el servidor.');
-    } finally {
-      setLinkingGmail(false);
-    }
+  function startGmailOAuth() {
+    window.location.href = '/api/account/gmail/oauth/start';
   }
 
   return (
@@ -289,59 +270,55 @@ export default function OnboardingClient() {
           </form>
 
           <div className="grid gap-6">
-            <form onSubmit={linkTelegram} className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
+            <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
               <h2 className="text-xl font-bold">Telegram</h2>
-              <p className="mt-1 text-sm text-slate-400">Conecta tu chat para recibir avisos y registrar movimientos desde Telegram.</p>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-medium text-slate-300">
-                  Chat ID
-                  <input
-                    value={telegramChatId}
-                    onChange={(event) => setTelegramChatId(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
-                    placeholder="Ej. 945363158"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-slate-300">
-                  Nombre en Telegram
-                  <input
-                    value={telegramUsername}
-                    onChange={(event) => setTelegramUsername(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
-                    placeholder="Opcional"
-                  />
-                </label>
-              </div>
+              <p className="mt-1 text-sm text-slate-400">Genera un código y mándaselo al bot para conectar tu chat sin copiar IDs técnicos.</p>
+              {telegramCode && (
+                <div className="mt-5 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-4">
+                  <p className="text-xs uppercase tracking-wider text-emerald-200/70">Código para Telegram</p>
+                  <p className="mt-2 font-mono text-3xl font-bold text-emerald-100">{telegramCode}</p>
+                  <p className="mt-2 text-sm text-emerald-100/75">
+                    Envíalo al bot tal cual. Expira {telegramExpiresAt ? new Date(telegramExpiresAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'en 15 minutos'}.
+                  </p>
+                  {telegramDeepLink && (
+                    <a
+                      href={telegramDeepLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-300/15"
+                    >
+                      Abrir Telegram
+                    </a>
+                  )}
+                </div>
+              )}
               <button
-                type="submit"
-                disabled={!hasProfile || linkingTelegram || !telegramChatId.trim()}
+                type="button"
+                onClick={generateTelegramCode}
+                disabled={!hasProfile || linkingTelegram}
                 className="mt-5 w-full rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition-colors hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {linkingTelegram ? 'Conectando...' : hasTelegram ? 'Actualizar Telegram' : 'Conectar Telegram'}
+                {linkingTelegram ? 'Generando...' : hasTelegram ? 'Generar otro código' : 'Generar código de Telegram'}
               </button>
-            </form>
+            </section>
 
-            <form onSubmit={linkGmail} className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
+            <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
               <h2 className="text-xl font-bold">Gmail / Banco</h2>
-              <p className="mt-1 text-sm text-slate-400">Esta beta vincula el correo bancario a tu perfil. El flujo de un clic con Gmail API queda como la siguiente mejora.</p>
-              <label className="mt-5 block text-sm font-medium text-slate-300">
-                Correo Gmail que recibe cargos bancarios
-                <input
-                  value={gmailEmail}
-                  onChange={(event) => setGmailEmail(event.target.value)}
-                  type="email"
-                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
-                  placeholder="tu@gmail.com"
-                />
-              </label>
+              <p className="mt-1 text-sm text-slate-400">Conecta Google para autorizar lectura de Gmail y preparar la ingesta automática de cargos bancarios.</p>
+              {gmailEmail && (
+                <p className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                  Gmail conectado: {gmailEmail}
+                </p>
+              )}
               <button
-                type="submit"
-                disabled={!hasProfile || linkingGmail || !gmailEmail.trim()}
+                type="button"
+                onClick={startGmailOAuth}
+                disabled={!hasProfile}
                 className="mt-5 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {linkingGmail ? 'Conectando...' : hasGmail ? 'Actualizar Gmail/Banco' : 'Conectar Gmail/Banco'}
+                {hasGmail ? 'Reconectar Google/Gmail' : 'Conectar Google/Gmail'}
               </button>
-            </form>
+            </section>
           </div>
         </div>
       </div>
