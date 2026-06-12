@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     const [profileResult, telegramResult, gmailResult, countResults] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
-      supabase.from('gmail_integrations').select('id, email, provider, status, watch_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
+      supabase.from('gmail_integrations').select('id, email, provider, status, watch_expires_at, updated_at, connected_at, access_token_encrypted, refresh_token_encrypted').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       Promise.all(scopedTables.map((table) => countProfileRows(supabase, table, profileId))),
     ]);
 
@@ -80,7 +80,16 @@ export async function GET(request: Request) {
       profileId,
       profile: profileResult.data || null,
       telegramAccounts: telegramResult.data || [],
-      gmailIntegrations: gmailResult.data || [],
+      gmailIntegrations: (gmailResult.data || []).map((integration) => ({
+        id: integration.id,
+        email: integration.email,
+        provider: integration.provider,
+        status: integration.status,
+        watch_expires_at: integration.watch_expires_at,
+        updated_at: integration.updated_at,
+        connected_at: integration.connected_at,
+        oauthConnected: Boolean(integration.access_token_encrypted && integration.refresh_token_encrypted),
+      })),
       financialCounts,
       tenantSource: tenant.source,
       errors,

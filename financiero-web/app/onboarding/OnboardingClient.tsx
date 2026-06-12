@@ -15,7 +15,7 @@ type AccountStatus = {
     monthly_income_target?: number | string | null;
   } | null;
   telegramAccounts?: Array<{ id: string; chat_id: string; username?: string | null }>;
-  gmailIntegrations?: Array<{ id: string; email: string; status: string }>;
+  gmailIntegrations?: Array<{ id: string; email: string; status: string; oauthConnected?: boolean; connected_at?: string | null }>;
   financialCounts?: Record<string, number>;
   error?: string;
   errors?: string[];
@@ -56,9 +56,9 @@ export default function OnboardingClient() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const refreshStatus = async () => {
+  const refreshStatus = async ({ keepFeedback = false }: { keepFeedback?: boolean } = {}) => {
     setLoading(true);
-    setError('');
+    if (!keepFeedback) setError('');
 
     try {
       const response = await fetch('/api/account/status', { cache: 'no-store' });
@@ -86,7 +86,7 @@ export default function OnboardingClient() {
 
       if (routeError) setError(decodeURIComponent(routeError));
       if (params.get('gmail') === 'connected') setMessage('Gmail/Banco conectado con Google.');
-      void refreshStatus();
+      void refreshStatus({ keepFeedback: Boolean(routeError || params.get('gmail')) });
     });
   }, []);
 
@@ -95,7 +95,9 @@ export default function OnboardingClient() {
   const hasProfile = Boolean(status?.profileScoped && status.profile?.id);
   const hasInitialBudget = Boolean((status?.financialCounts?.presupuestos_mensuales || 0) > 0);
   const hasTelegram = Boolean((status?.telegramAccounts || []).length > 0);
-  const hasGmail = Boolean((status?.gmailIntegrations || []).some((integration) => integration.status === 'active'));
+  const activeGmailIntegration = (status?.gmailIntegrations || []).find((integration) => integration.status === 'active') || null;
+  const hasGmail = Boolean(activeGmailIntegration);
+  const hasGmailOAuth = Boolean(activeGmailIntegration?.oauthConnected);
   const checklist = useMemo(
     () => [
       { label: 'Cuenta creada', done: hasProfile },
@@ -190,9 +192,16 @@ export default function OnboardingClient() {
       }
 
       const totals = data.totals || {};
-      setMessage(
-        `Sincronización lista: ${totals.inserted || 0} nuevos, ${totals.duplicate || 0} duplicados, ${totals.ignored || 0} ignorados.`
-      );
+      const skippedReason = data.results?.find?.((result: { skipped?: string }) => result.skipped)?.skipped;
+
+      if (skippedReason === 'missing_oauth_tokens' || skippedReason === 'missing_refresh_token') {
+        setError('Gmail está vinculado por email, pero falta reconectarlo con Google para guardar tokens OAuth. Usa "Reconectar Google/Gmail".');
+        return;
+      }
+
+      const failed = totals.failed || 0;
+      const baseMessage = `Sincronización lista: ${totals.inserted || 0} nuevos, ${totals.duplicate || 0} duplicados, ${totals.ignored || 0} ignorados, ${totals.skippedMessages || 0} ya procesados.`;
+      setMessage(failed ? `${baseMessage} Fallaron ${failed}; revisa configuración o permisos.` : baseMessage);
       await refreshStatus();
     } catch {
       setError('No pude conectar con el servidor.');
@@ -337,7 +346,7 @@ export default function OnboardingClient() {
               <p className="mt-1 text-sm text-slate-400">Conecta Google para autorizar lectura de Gmail y preparar la ingesta automática de cargos bancarios.</p>
               {gmailEmail && (
                 <p className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                  Gmail conectado: {gmailEmail}
+                  Gmail {hasGmailOAuth ? 'conectado con OAuth' : 'vinculado, pendiente de OAuth'}: {gmailEmail}
                 </p>
               )}
               <button
@@ -351,7 +360,7 @@ export default function OnboardingClient() {
               <button
                 type="button"
                 onClick={syncGmailNow}
-                disabled={!hasProfile || !hasGmail || syncingGmail}
+                disabled={!hasProfile || !hasGmailOAuth || syncingGmail}
                 className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-300/30 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {syncingGmail ? 'Sincronizando...' : 'Sincronizar Gmail ahora'}
