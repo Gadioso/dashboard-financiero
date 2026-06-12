@@ -196,7 +196,7 @@ http://localhost:3000/auth/callback
 - ✅ Telegram can be linked self-serve from onboarding with a temporary code sent to the bot.
 - ✅ Gmail/Bank can be connected with Google OAuth from onboarding and stores encrypted user tokens.
 - ✅ Gmail/Bank can now be synced from encrypted OAuth tokens through `/api/email/gmail/sync`.
-- ✅ Vercel Cron is configured to call the Gmail sync route every 10 minutes.
+- ✅ Vercel Cron is configured to call the Gmail sync route daily on the current Hobby plan.
 - ✅ The dashboard exposes a configuration link and no longer addresses every user as Diego.
 - ⚠️ Gmail `watch`/Pub/Sub push can still be added later for near-instant ingestion; the current production path is cron/manual sync without Apps Script.
 
@@ -232,7 +232,8 @@ Configure these production variables:
 Gmail sync details:
 
 - Manual user sync: `POST /api/email/gmail/sync` from an authenticated browser session.
-- Scheduled sync: Vercel Cron calls `GET /api/email/gmail/sync` every 10 minutes with `Authorization: Bearer <CRON_SECRET>`.
+- Scheduled sync: Vercel Cron calls `GET /api/email/gmail/sync` daily with `Authorization: Bearer <CRON_SECRET>`.
+- More frequent sync, for example every 10 minutes, requires Vercel Pro or a different queue/worker provider.
 - Default search query: `from:santander newer_than:14d`.
 - Optional variables: `GMAIL_BANK_SEARCH_QUERY` and `GMAIL_SYNC_MAX_MESSAGES`.
 - The sync route reuses `/api/email/santander`, so parsed movements, duplicates, logs, Telegram notifications, and `profile_id` scoping stay in one code path.
