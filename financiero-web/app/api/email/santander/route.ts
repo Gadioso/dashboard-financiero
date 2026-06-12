@@ -8,7 +8,7 @@ import { obtenerSantanderIngestLogsPorPerfil, registrarSantanderIngestLog } from
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { parsearCorreoSantander, tieneSenalSantander } from '@/lib/santander-email-parser';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { applyProfileFilter, getEmailIngestTenantContext, getPrivateTenantContext, withProfile } from '@/lib/tenant-context';
+import { applyProfileFilter, getEmailIngestTenantContext, getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 
 const emailIngestSecret = process.env.EMAIL_INGEST_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -399,14 +399,14 @@ async function bloqueaEscriturasPublicas(supabase: SupabaseClient) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = getSupabaseServiceClient();
 
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Falta configurar llave de Supabase.' }, { status: 500 });
     }
-    const tenant = getPrivateTenantContext();
+    const tenant = await getRequestTenantContext(request);
 
     const [origenSantanderEmail, faseRegla333333, abonosTarjetaCredito, publicWrites] = await Promise.all([
       aceptaOrigenSantanderEmail(supabase),
