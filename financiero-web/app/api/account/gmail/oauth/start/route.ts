@@ -60,10 +60,9 @@ export async function GET(request: Request) {
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', scopes);
   authUrl.searchParams.set('access_type', 'offline');
-  authUrl.searchParams.set('prompt', 'consent');
+  authUrl.searchParams.set('prompt', 'consent select_account');
   authUrl.searchParams.set('include_granted_scopes', 'true');
   authUrl.searchParams.set('state', state);
-  if (tenant.email) authUrl.searchParams.set('login_hint', tenant.email);
 
   const response = NextResponse.redirect(authUrl);
 

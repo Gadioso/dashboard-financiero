@@ -49,7 +49,6 @@ export default function OnboardingClient() {
   const [syncingGmail, setSyncingGmail] = useState(false);
   const [fullName, setFullName] = useState('');
   const [monthlyTarget, setMonthlyTarget] = useState('60000');
-  const [gmailEmail, setGmailEmail] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
   const [telegramExpiresAt, setTelegramExpiresAt] = useState('');
@@ -71,7 +70,6 @@ export default function OnboardingClient() {
       setStatus(data);
       setFullName(data.profile?.full_name || '');
       setMonthlyTarget(String(data.profile?.monthly_income_target || 60000));
-      setGmailEmail(data.gmailIntegrations?.[0]?.email || data.profile?.email || '');
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
@@ -95,9 +93,9 @@ export default function OnboardingClient() {
   const hasProfile = Boolean(status?.profileScoped && status.profile?.id);
   const hasInitialBudget = Boolean((status?.financialCounts?.presupuestos_mensuales || 0) > 0);
   const hasTelegram = Boolean((status?.telegramAccounts || []).length > 0);
-  const activeGmailIntegration = (status?.gmailIntegrations || []).find((integration) => integration.status === 'active') || null;
-  const hasGmail = Boolean(activeGmailIntegration);
-  const hasGmailOAuth = Boolean(activeGmailIntegration?.oauthConnected);
+  const activeGmailIntegrations = (status?.gmailIntegrations || []).filter((integration) => integration.status === 'active');
+  const hasGmail = activeGmailIntegrations.length > 0;
+  const hasGmailOAuth = activeGmailIntegrations.some((integration) => integration.oauthConnected);
   const checklist = useMemo(
     () => [
       { label: 'Cuenta creada', done: hasProfile },
@@ -343,11 +341,15 @@ export default function OnboardingClient() {
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
               <h2 className="text-xl font-bold">Gmail / Banco</h2>
-              <p className="mt-1 text-sm text-slate-400">Conecta Google para autorizar lectura de Gmail y preparar la ingesta automática de cargos bancarios.</p>
-              {gmailEmail && (
-                <p className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                  Gmail {hasGmailOAuth ? 'conectado con OAuth' : 'vinculado, pendiente de OAuth'}: {gmailEmail}
-                </p>
+              <p className="mt-1 text-sm text-slate-400">Conecta uno o varios correos donde recibes avisos bancarios. Puede ser distinto al correo con el que inicias sesión.</p>
+              {activeGmailIntegrations.length > 0 && (
+                <div className="mt-4 grid gap-2">
+                  {activeGmailIntegrations.map((integration) => (
+                    <p key={integration.id} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                      Gmail {integration.oauthConnected ? 'conectado con OAuth' : 'vinculado, pendiente de OAuth'}: {integration.email}
+                    </p>
+                  ))}
+                </div>
               )}
               <button
                 type="button"
@@ -355,7 +357,7 @@ export default function OnboardingClient() {
                 disabled={!hasProfile}
                 className="mt-5 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {hasGmail ? 'Reconectar Google/Gmail' : 'Conectar Google/Gmail'}
+                {hasGmail ? 'Conectar otro Google/Gmail' : 'Conectar Google/Gmail'}
               </button>
               <button
                 type="button"
