@@ -28,6 +28,20 @@ export async function GET(request: Request) {
   const tenant = await getRequestTenantContext(request);
   const clientId = process.env.GOOGLE_GMAIL_CLIENT_ID || '';
   const stateSecret = getStateSecret();
+  const redirectUri = buildRedirectUri(requestUrl.origin);
+
+  if (requestUrl.searchParams.get('debug') === '1') {
+    return NextResponse.json({
+      success: true,
+      authenticated: Boolean(tenant.profileId),
+      clientIdConfigured: Boolean(clientId),
+      clientId,
+      clientIdSuffix: clientId ? clientId.slice(-28) : null,
+      redirectUri,
+      stateSecretConfigured: Boolean(stateSecret),
+      scopes,
+    });
+  }
 
   if (!tenant.profileId) {
     return NextResponse.redirect(new URL('/onboarding?error=gmail-auth-required', request.url));
@@ -42,7 +56,7 @@ export async function GET(request: Request) {
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
   authUrl.searchParams.set('client_id', clientId);
-  authUrl.searchParams.set('redirect_uri', buildRedirectUri(requestUrl.origin));
+  authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', scopes);
   authUrl.searchParams.set('access_type', 'offline');
