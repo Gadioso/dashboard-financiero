@@ -13,6 +13,7 @@ function isPublicPath(pathname: string) {
     pathname === '/auth/callback' ||
     pathname === '/api/health' ||
     pathname.startsWith('/api/auth/') ||
+    pathname.startsWith('/api/account/gmail/oauth/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/favicon.ico'
   );
