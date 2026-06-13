@@ -202,6 +202,10 @@ function LoginForm() {
         >
           {loading ? 'Entrando...' : mode === 'account' && accountAction === 'signup' ? 'Crear cuenta' : 'Entrar'}
         </button>
+        <div className="mt-5 flex justify-center gap-4 text-xs text-slate-500">
+          <a href="/privacy" className="hover:text-slate-300">Privacidad</a>
+          <a href="/terms" className="hover:text-slate-300">Terminos</a>
+        </div>
       </form>
     </main>
   );
