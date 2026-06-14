@@ -24,6 +24,7 @@ const migrationSets = {
   ],
   'open-banking': [
     '20260613_open_banking_foundation.sql',
+    '20260614_add_bank_connection_sync_cursor.sql',
   ],
 };
 

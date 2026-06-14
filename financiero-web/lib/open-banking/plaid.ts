@@ -77,3 +77,71 @@ export async function exchangePlaidPublicToken(publicToken: string) {
     public_token: publicToken,
   });
 }
+
+export type PlaidAccount = {
+  account_id: string;
+  name?: string;
+  official_name?: string | null;
+  type?: string;
+  subtype?: string | null;
+  balances?: {
+    available?: number | null;
+    current?: number | null;
+    iso_currency_code?: string | null;
+    unofficial_currency_code?: string | null;
+  };
+};
+
+export type PlaidTransaction = {
+  transaction_id: string;
+  account_id: string;
+  date?: string;
+  authorized_date?: string | null;
+  datetime?: string | null;
+  authorized_datetime?: string | null;
+  name?: string;
+  merchant_name?: string | null;
+  amount: number;
+  iso_currency_code?: string | null;
+  unofficial_currency_code?: string | null;
+  pending?: boolean;
+  original_description?: string | null;
+  personal_finance_category?: {
+    primary?: string | null;
+    detailed?: string | null;
+    confidence_level?: string | null;
+  } | null;
+};
+
+export type PlaidRemovedTransaction = {
+  transaction_id: string;
+};
+
+export async function syncPlaidTransactions({
+  accessToken,
+  cursor,
+  count = 100,
+}: {
+  accessToken: string;
+  cursor?: string | null;
+  count?: number;
+}) {
+  return plaidPost<{
+    accounts: PlaidAccount[];
+    added: PlaidTransaction[];
+    modified: PlaidTransaction[];
+    removed: PlaidRemovedTransaction[];
+    next_cursor: string;
+    has_more: boolean;
+    request_id: string;
+    transactions_update_status?: string;
+  }>('/transactions/sync', {
+    access_token: accessToken,
+    cursor: cursor || undefined,
+    count,
+    options: {
+      include_original_description: true,
+      days_requested: 90,
+    },
+  });
+}

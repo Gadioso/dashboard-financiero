@@ -96,6 +96,7 @@ export default function OnboardingClient() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [connectingPlaid, setConnectingPlaid] = useState(false);
+  const [syncingBank, setSyncingBank] = useState(false);
   const [syncingGmail, setSyncingGmail] = useState(false);
   const [fullName, setFullName] = useState('');
   const [monthlyTarget, setMonthlyTarget] = useState('60000');
@@ -341,6 +342,32 @@ export default function OnboardingClient() {
     setError('La conexion bancaria para este pais ya esta mapeada internamente, pero todavia falta activar el flujo seguro de inicio de sesion.');
   }
 
+  async function syncBankNow() {
+    setSyncingBank(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch('/api/bank/plaid/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setError(data.error || data.results?.flatMap?.((result: { errors?: string[] }) => result.errors || []).join(' · ') || 'No pude sincronizar el banco.');
+        return;
+      }
+
+      setMessage(`Banco sincronizado: ${data.totals?.insertedOrUpdated || 0} movimientos actualizados.`);
+      await refreshStatus();
+    } catch {
+      setError('No pude conectar con el servidor.');
+    } finally {
+      setSyncingBank(false);
+    }
+  }
+
   async function syncGmailNow() {
     setSyncingGmail(true);
     setError('');
@@ -556,6 +583,14 @@ export default function OnboardingClient() {
                 className="mt-5 w-full rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {connectingPlaid ? 'Abriendo conexion bancaria...' : 'Conectar mi banco'}
+              </button>
+              <button
+                type="button"
+                onClick={syncBankNow}
+                disabled={!hasProfile || !hasBankConnection || syncingBank}
+                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-300/30 hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {syncingBank ? 'Sincronizando banco...' : 'Sincronizar banco ahora'}
               </button>
               <button
                 type="button"
