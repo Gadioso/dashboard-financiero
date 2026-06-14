@@ -347,6 +347,13 @@ export default function DashboardFinanciero() {
     ? ((resumen.gastado.Vida + resumen.gastado.Placeres) / (resumen.presupuesto.Vida + resumen.presupuesto.Placeres)) * 100
     : totalGastadoMes > 0 ? 100 : 0;
   const mesSinIngresosConGastos = resumen.ingresosMes === 0 && totalGastadoMes > 0;
+  const bankStatusReady = Boolean(santanderStatus);
+  const bankConfigReady = Boolean(
+    santanderStatus?.configured?.emailIngestSecret &&
+    santanderStatus.configured.supabase &&
+    santanderStatus.supabaseSchema?.migrationRequired === false &&
+    santanderStatus.supabaseSchema.acceptsAbonosTarjetaCredito
+  );
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] text-slate-100 font-sans p-4 md:p-8">
@@ -407,31 +414,29 @@ export default function DashboardFinanciero() {
       <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-5 mb-6 backdrop-blur">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">Estado Gmail / Banco</h2>
-            <p className="text-sm text-slate-400 mt-1">Ingesta de correos bancarios hacia Supabase.</p>
+            <h2 className="text-lg font-semibold text-slate-100">Estado bancario</h2>
+            <p className="text-sm text-slate-400 mt-1">Conexiones y procesamiento de movimientos bancarios.</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-4">
-            <span className={`rounded-lg border px-3 py-2 ${
-              santanderStatus?.configured?.emailIngestSecret ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-            }`}>
-              Secret {santanderStatus?.configured?.emailIngestSecret ? 'listo' : 'pendiente'}
-            </span>
-            <span className={`rounded-lg border px-3 py-2 ${
-              santanderStatus?.configured?.supabase ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-            }`}>
-              Supabase {santanderStatus?.configured?.supabase ? 'conectado' : 'pendiente'}
-            </span>
-            <span className={`rounded-lg border px-3 py-2 ${
-              santanderStatus?.supabaseSchema?.migrationRequired === false ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-            }`}>
-              Migración {santanderStatus?.supabaseSchema?.migrationRequired === false ? 'aplicada' : 'pendiente'}
-            </span>
-            <span className={`rounded-lg border px-3 py-2 ${
-              santanderStatus?.supabaseSchema?.acceptsAbonosTarjetaCredito ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-            }`}>
-              Abonos TDC {santanderStatus?.supabaseSchema?.acceptsAbonosTarjetaCredito ? 'listos' : 'pendientes'}
-            </span>
-          </div>
+          {bankStatusReady ? (
+            <div className="flex flex-wrap gap-2 text-xs">
+              {bankConfigReady ? (
+                <>
+                  <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-300">
+                    Conexión lista
+                  </span>
+                  <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-300">
+                    Auditoría activa
+                  </span>
+                </>
+              ) : (
+                <span className="rounded-lg border border-slate-700 bg-white/[0.03] px-3 py-2 text-slate-400">
+                  Verificando configuración
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="h-9 w-48 rounded-lg border border-white/10 bg-white/[0.03]" />
+          )}
         </div>
         {santanderStatus?.error && <p className="text-xs text-rose-300 mt-3">{santanderStatus.error}</p>}
         {santanderStatus?.ingestLogs?.available ? (
@@ -486,11 +491,11 @@ export default function DashboardFinanciero() {
               })}
             </div>
           </div>
-        ) : (
+        ) : bankStatusReady && santanderStatus?.ingestLogs?.error ? (
           <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-            Log de ingesta pendiente. Ejecuta la migración `20260607_create_santander_ingest_logs.sql` para ver auditoría de correos procesados.
+            {santanderStatus.ingestLogs.error}
           </p>
-        )}
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-6">
