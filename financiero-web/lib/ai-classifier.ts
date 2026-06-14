@@ -9,6 +9,8 @@ import {
 
 const categoriasValidas = ['Vida', 'Placeres', 'Futuro'];
 const tiposValidos = ['gasto', 'ingreso'];
+const herramientaProductivaRegex =
+  /\b(openai|chatgpt|codex|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/;
 
 function validarClasificacion(valor: unknown): ClasificacionMovimiento {
   const data = valor as Partial<ClasificacionMovimiento>;
@@ -124,14 +126,14 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
     };
   }
 
-  if (/\b(openai|chatgpt|codex|fiverr|opus|google|aws|vercel|github|software|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs)\b/.test(normalizado)) {
+  if (herramientaProductivaRegex.test(normalizado)) {
     return {
       concepto,
       monto,
       tipo: 'gasto',
-      categoria: 'Vida',
-      subcategoria: 'Herramientas Trabajo',
-      razon: 'Clasificado por regla local como herramienta mensual de trabajo.',
+      categoria: 'Futuro',
+      subcategoria: 'Inversion',
+      razon: 'Clasificado por regla local como herramienta/software de inversión productiva.',
       ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
@@ -201,6 +203,18 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
   const estructurado = parsearMovimientoEstructurado(texto);
 
   if (estructurado.ok) {
+    if (estructurado.tipo === 'gasto' && herramientaProductivaRegex.test(estructurado.concepto.toLowerCase())) {
+      return {
+        concepto: estructurado.concepto,
+        monto: estructurado.monto,
+        tipo: 'gasto',
+        categoria: 'Futuro',
+        subcategoria: 'Inversion',
+        razon: 'Clasificado por regla local como herramienta/software de inversión productiva.',
+        ...(extraerFechaRelativaMovimiento(texto) ? { fechaMovimiento: extraerFechaRelativaMovimiento(texto)?.toISOString() } : {}),
+      };
+    }
+
     return {
       concepto: estructurado.concepto,
       monto: estructurado.monto,
@@ -234,9 +248,9 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
   "objective": "Extract exactly one financial movement from the user's natural-language message for Diego's 33/33/33 financial system.",
   "categories": {
     "Vida": {
-      "description": "Required living or operating expenses.",
-      "examples": ["rent", "utilities", "basic groceries", "necessary gas", "basic transport", "health", "debt", "work tools", "software subscriptions"],
-      "subcategories": ["Renta", "Servicios", "Super", "Transporte", "Salud", "Deudas", "Herramientas Trabajo", "Otros Vida"]
+      "description": "Strict required cost of living.",
+      "examples": ["rent", "utilities", "basic groceries", "necessary gas", "basic transport", "health", "debt"],
+      "subcategories": ["Renta", "Servicios", "Super", "Transporte", "Salud", "Deudas", "Otros Vida"]
     },
     "Placeres": {
       "description": "Lifestyle, leisure, optional or discretionary consumption.",
@@ -244,9 +258,9 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
       "subcategories": ["Restaurantes", "Cafe", "Entretenimiento", "Viajes", "Ropa", "Delivery", "Otros Placeres"]
     },
     "Futuro": {
-      "description": "Investing, saving, emergency fund, insurance, patrimonial allocations.",
-      "examples": ["GBM", "CETES", "ETF", "stocks", "emergency fund", "insurance", "savings projects"],
-      "subcategories": ["Inversion", "Emergencia", "Seguros", "Ahorro", "Proyectos", "Otros Futuro"]
+      "description": "Investing, saving, emergency fund, insurance, patrimonial allocations, productive tools and software.",
+      "examples": ["GBM", "CETES", "ETF", "stocks", "emergency fund", "insurance", "OpenAI", "Codex", "cloud/software tools"],
+      "subcategories": ["Inversion", "Emergencia", "Seguros", "Ahorro", "Proyectos", "Herramientas Software", "Otros Futuro"]
     }
   },
   "classification_rules": [
@@ -254,10 +268,10 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "If it mentions CETES, GBM, inversión, invertí, stocks, ETF, crypto or patrimonial allocation, classify as Futuro/Inversion.",
     "If it mentions emergency fund, classify as Futuro/Emergencia.",
     "If it mentions insurance, classify as Futuro/Seguros.",
-    "OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Notion, Zoom, Figma, Canva and similar work/software tools are Vida/Herramientas Trabajo.",
+    "OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Supabase, Cloudflare, Google Cloud, AWS, Notion, Zoom, Figma, Canva and similar work/software/cloud/AI tools are Futuro/Inversion.",
     "OXXO is Placeres/Otros Placeres by default for Diego, unless the text clearly says it was a bill payment, phone top-up, medicine, pharmacy, gas or another necessary service.",
     "Mercado Pago, PayPal, restaurants, travel, hotels, Uber/Didi rides, coffee, convenience stores and leisure purchases are Placeres unless the user explicitly says they were for a necessary living expense.",
-    "Vida is narrow: gasoline, supermarket/basic groceries, phone, utilities, health, rent, debt, and work/software tools. Do not default ambiguous card purchases to Vida.",
+    "Vida is narrow: rent, water, electricity, basic groceries/supermarket, necessary transport/gasoline, phone/internet, health and debt. Do not put software, AI, cloud or work tools in Vida.",
     "If there is no clear amount, use 0. Do not invent an amount.",
     "If the user says hoy, ayer, anoche, antier or anteayer, include fechaMovimiento as an ISO date for that relative date in America/Mexico_City.",
     "Do not include relative date words such as ayer or hoy in concepto.",

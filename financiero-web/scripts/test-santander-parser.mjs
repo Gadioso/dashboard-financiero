@@ -16,7 +16,7 @@ El 01/06/2026 a las 19:18:06 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio OPENAI *CHATGPT SUBSCR con tu tarjeta de TDC terminación **1765, por un monto de $399.00 MXN.
 El 01/06/2026 a las 23:24:52 hrs.`,
-    expected: { concepto: 'OPENAI *CHATGPT SUBSCR', monto: 399, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Herramientas Trabajo' },
+    expected: { concepto: 'OPENAI *CHATGPT SUBSCR', monto: 399, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
   },
   {
     name: 'Telcel life expense',
@@ -32,7 +32,7 @@ El 02/06/2026 a las 10:00:00 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio FIVERR INTERNATIONAL con tu tarjeta de TDC terminación **1765, por un monto de $850.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'FIVERR INTERNATIONAL', monto: 850, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Herramientas Trabajo' },
+    expected: { concepto: 'FIVERR INTERNATIONAL', monto: 850, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
   },
   {
     name: 'Opus work tool',
@@ -40,7 +40,7 @@ El 02/06/2026 a las 10:00:00 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio OPUS CLIP con tu tarjeta de TDC terminación **1765, por un monto de $390.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'OPUS CLIP', monto: 390, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Herramientas Trabajo' },
+    expected: { concepto: 'OPUS CLIP', monto: 390, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
   },
   {
     name: 'Codex work tool',
@@ -48,7 +48,7 @@ El 02/06/2026 a las 10:00:00 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio CODEX con tu tarjeta de TDC terminación **1765, por un monto de $299.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'CODEX', monto: 299, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Herramientas Trabajo' },
+    expected: { concepto: 'CODEX', monto: 299, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
   },
   {
     name: 'Oxxo Jacarandas pleasure expense',

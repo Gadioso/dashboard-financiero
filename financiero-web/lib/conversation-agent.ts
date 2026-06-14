@@ -249,8 +249,8 @@ function detectarFiltroCategoria(texto: string) {
   const normalizado = texto.toLowerCase();
 
   if (normalizado.includes('placer') || /\b(salidas?|restaurantes?|caf[eé]s?|ocio)\b/.test(normalizado)) return 'Placeres';
-  if (/\b(vida|costo de vida|herramientas?|telcel|servicios?|super|s[uú]per)\b/.test(normalizado)) return 'Vida';
-  if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?)\b/.test(normalizado)) return 'Seguros';
+  if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?|herramientas?|software|openai|chatgpt|codex|opus|cloud|claude|github|vercel|supabase)\b/.test(normalizado)) return 'Seguros';
+  if (/\b(vida|costo de vida|telcel|servicios?|super|s[uú]per|renta|luz|agua)\b/.test(normalizado)) return 'Vida';
 
   return null;
 }
@@ -269,7 +269,7 @@ function normalizarCategoriaCorreccion(texto: string) {
     return { categoria: 'Placeres' as const, subcategoria: 'Otros Placeres' };
   }
 
-  if (normalizado.includes('futuro') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia')) {
+  if (normalizado.includes('futuro') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia') || normalizado.includes('herramienta') || normalizado.includes('software')) {
     return { categoria: 'Seguros' as const, subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
   }
 
@@ -996,9 +996,9 @@ async function responderConversacionAbierta({
   ],
   "business_rules": {
     "budget_rule": "Each income month is divided equally into Vida, Placeres and Futuro.",
-    "Vida": "Narrow required cost of living: gasoline, supermarket/basic groceries, phone, utilities, health, rent, debt, and operating/work tools such as Telcel, OpenAI, Codex, Fiverr, Opus, cloud/software tools.",
+    "Vida": "Strict cost of living: rent, water, electricity, basic groceries/supermarket, necessary transport/gasoline, phone/internet, health and debt. Do not put AI, software, cloud or work tools in Vida.",
     "Placeres": "Default for discretionary spending: OXXO/7 Eleven without a clear necessary-service signal, Mercado Pago/PayPal ambiguous purchases, restaurants, coffee, outings, trips, hotels, Uber/Didi rides, delivery and entertainment.",
-    "Futuro": "Investments, GBM, CETES, emergency fund, insurance and patrimonial savings."
+    "Futuro": "Investments, GBM, CETES, emergency fund, insurance, patrimonial savings, AI/software/cloud tools such as OpenAI, Codex, Opus, Claude, GitHub, Vercel and similar productive tools."
   },
   "financial_context": ${JSON.stringify(contexto, null, 2)},
   "recent_chat_memory": ${JSON.stringify(memoria.slice(-8), null, 2)},

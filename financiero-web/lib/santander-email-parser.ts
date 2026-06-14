@@ -104,11 +104,11 @@ export function clasificarConceptoGastoSantander(concepto: string, texto = '') {
     };
   }
 
-  if (/\b(openai|chatgpt|codex|fiverr|opus|google|aws|vercel|github|software|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs)\b/i.test(normalizado)) {
+  if (/\b(openai|chatgpt|codex|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/i.test(normalizado)) {
     return {
-      categoria: 'Vida' as const,
-      subcategoria: 'Herramientas Trabajo',
-      razon: 'Comercio identificado como herramienta operativa/de trabajo.',
+      categoria: 'Futuro' as const,
+      subcategoria: 'Inversion',
+      razon: 'Comercio identificado como herramienta/software de inversión productiva.',
     };
   }
 

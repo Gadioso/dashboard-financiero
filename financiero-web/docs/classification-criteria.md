@@ -4,12 +4,11 @@ El sistema clasifica cada movimiento en una de tres bolsas: `Vida`, `Placeres` o
 
 ## Vida
 
-Gastos necesarios, recurrentes u operativos. Incluye:
+Gastos necesarios y estrictamente de costo de vida. Incluye:
 
 - Servicios: luz, agua, internet, Telcel, AT&T, Movistar, Izzi, Totalplay, Telmex.
 - Transporte necesario: gasolina, metro, camión. Uber/Didi solo cuenta como Vida si Diego lo indica explícitamente como traslado necesario.
 - Salud: doctor, hospital, farmacia, medicina.
-- Herramientas de trabajo: OpenAI, ChatGPT, Codex, Fiverr, Opus, Google, AWS, Vercel, GitHub, Notion, Zoom, Figma, Canva, Claude, Cursor.
 - Super/despensa cuando el concepto indique compra básica.
 
 Vida es una categoría estrecha. Si el comercio es ambiguo y no contiene señal clara de necesidad, no debe caer en Vida.
@@ -31,6 +30,7 @@ Consumo discrecional, estilo de vida, ocio o salidas. Incluye:
 Ahorro, inversión, patrimonio o protección financiera. Incluye:
 
 - GBM, CETES, ETF, acciones, casa de bolsa, crypto/inversiones.
+- Herramientas, software, IA y cloud productivos: OpenAI, ChatGPT, Codex, Fiverr, Opus, Google Cloud, AWS, Vercel, GitHub, Supabase, Cloudflare, Notion, Zoom, Figma, Canva, Claude, Cursor.
 - Fondo de emergencia.
 - Seguros y ahorro patrimonial.
 

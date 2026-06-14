@@ -6,6 +6,8 @@ const mode = process.argv.includes('--multi-user')
   ? 'multi-user'
   : process.argv.includes('--open-banking')
     ? 'open-banking'
+    : process.argv.includes('--classification-rules')
+      ? 'classification-rules'
     : 'private-v1';
 
 const migrationSets = {
@@ -25,6 +27,9 @@ const migrationSets = {
   'open-banking': [
     '20260613_open_banking_foundation.sql',
     '20260614_add_bank_connection_sync_cursor.sql',
+  ],
+  'classification-rules': [
+    '20260614_reclassify_tools_as_investments.sql',
   ],
 };
 

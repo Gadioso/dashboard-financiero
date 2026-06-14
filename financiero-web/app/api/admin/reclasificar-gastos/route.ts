@@ -22,7 +22,7 @@ function esGastoReclasificable(gasto: GastoRow) {
   return (
     gasto.origen === 'Santander_Email' ||
     gasto.subcategoria === 'Santander' ||
-    /\b(oxxo|7\s*eleven|seven\s+eleven|mercado\s*pago|mercadopago|paypal|starbucks|restaurante|taquer|tacos|viaje|hotel|uber|didi|seguro|segmonterrey\w*|gnp|axa|qualitas|qu[aá]litas|mapfre|metlife|nyl)\b/i.test(concepto)
+    /\b(oxxo|7\s*eleven|seven\s+eleven|mercado\s*pago|mercadopago|paypal|starbucks|restaurante|taquer|tacos|viaje|hotel|uber|didi|seguro|segmonterrey\w*|gnp|axa|qualitas|qu[aá]litas|mapfre|metlife|nyl|openai|chatgpt|codex|fiverr|opus|google|aws|vercel|github|software|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/i.test(concepto)
   );
 }
 
