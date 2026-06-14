@@ -39,6 +39,32 @@ async function countProfileRows(
   };
 }
 
+type BankConnectionRow = {
+  id: string;
+  provider: string;
+  institution_name?: string | null;
+  status: string;
+  last_sync_at?: string | null;
+  consent_expires_at?: string | null;
+  updated_at?: string | null;
+};
+
+function dedupeBankConnections(connections: BankConnectionRow[]) {
+  const seen = new Set<string>();
+
+  return connections.filter((connection) => {
+    const key = [
+      connection.provider,
+      connection.institution_name?.trim().toLowerCase() || connection.id,
+      connection.status,
+    ].join(':');
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = getSupabaseServiceClient();
@@ -99,7 +125,7 @@ export async function GET(request: Request) {
         connected_at: integration.connected_at,
         oauthConnected: Boolean(integration.access_token_encrypted && integration.refresh_token_encrypted),
       })),
-      bankConnections: missingOpenBankingTables ? [] : bankConnectionResult.data || [],
+      bankConnections: missingOpenBankingTables ? [] : dedupeBankConnections(bankConnectionResult.data || []),
       financialCounts,
       tenantSource: tenant.source,
       errors,

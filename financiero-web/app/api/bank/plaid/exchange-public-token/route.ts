@@ -14,6 +14,10 @@ type PlaidExchangeBody = {
   };
 };
 
+function hasText(value?: string | null) {
+  return Boolean(value?.trim());
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = getSupabaseServiceClient();
@@ -49,22 +53,40 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    const existing = await supabase
+    const existingByItem = await supabase
       .from('bank_connections')
       .select('id')
       .eq('profile_id', tenant.profileId)
       .eq('provider_item_id', plaid.item_id)
       .maybeSingle();
 
-    if (existing.error) {
-      throw new Error(existing.error.message);
+    if (existingByItem.error) {
+      throw new Error(existingByItem.error.message);
     }
 
-    const result = existing.data?.id
+    const existingByInstitution = !existingByItem.data?.id && hasText(body.institution?.institution_id)
+      ? await supabase
+          .from('bank_connections')
+          .select('id')
+          .eq('profile_id', tenant.profileId)
+          .eq('provider', 'plaid')
+          .eq('institution_id', body.institution?.institution_id || '')
+          .eq('status', 'active')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null, error: null };
+
+    if (existingByInstitution.error) {
+      throw new Error(existingByInstitution.error.message);
+    }
+
+    const existingId = existingByItem.data?.id || existingByInstitution.data?.id;
+    const result = existingId
       ? await supabase
           .from('bank_connections')
           .update(payload)
-          .eq('id', existing.data.id)
+          .eq('id', existingId)
           .eq('profile_id', tenant.profileId)
           .select('id, provider, provider_item_id, institution_name, status')
           .single()
