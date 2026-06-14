@@ -32,6 +32,14 @@ type BankProvider = {
   notes: string;
 };
 
+type BankCountryCode = 'MX' | 'US' | 'CO' | 'BR' | 'CL' | 'PE' | 'AR' | 'OTHER';
+
+type BankCountryOption = {
+  code: BankCountryCode;
+  label: string;
+  providerPreference: string[];
+};
+
 type PlaidHandler = {
   open: () => void;
   exit: () => void;
@@ -53,6 +61,17 @@ const currencyFormatter = new Intl.NumberFormat('es-MX', {
   maximumFractionDigits: 0,
 });
 
+const bankCountryOptions: BankCountryOption[] = [
+  { code: 'MX', label: 'Mexico', providerPreference: ['prometeo', 'belvo', 'finerio'] },
+  { code: 'US', label: 'Estados Unidos', providerPreference: ['plaid'] },
+  { code: 'CO', label: 'Colombia', providerPreference: ['prometeo', 'belvo'] },
+  { code: 'BR', label: 'Brasil', providerPreference: ['belvo', 'prometeo'] },
+  { code: 'CL', label: 'Chile', providerPreference: ['prometeo'] },
+  { code: 'PE', label: 'Peru', providerPreference: ['prometeo'] },
+  { code: 'AR', label: 'Argentina', providerPreference: ['prometeo'] },
+  { code: 'OTHER', label: 'Otro pais', providerPreference: ['prometeo'] },
+];
+
 function formatCurrency(value: number) {
   return `$${currencyFormatter.format(value)} MXN`;
 }
@@ -72,6 +91,7 @@ function statusTone(done: boolean) {
 export default function OnboardingClient() {
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [bankProviders, setBankProviders] = useState<BankProvider[]>([]);
+  const [bankCountry, setBankCountry] = useState<BankCountryCode>('MX');
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
@@ -138,7 +158,16 @@ export default function OnboardingClient() {
   const hasGmailOAuth = activeGmailIntegrations.some((integration) => integration.oauthConnected);
   const hasBankConnection = activeBankConnections.length > 0;
   const hasBankFallback = hasBankConnection || hasGmail;
-  const configuredBankProviders = bankProviders.filter((provider) => provider.configured);
+  const selectedBankCountry = bankCountryOptions.find((country) => country.code === bankCountry) || bankCountryOptions[0];
+  const selectedCountryProvider = selectedBankCountry.providerPreference
+    .map((providerId) => bankProviders.find((provider) => provider.id === providerId && provider.configured))
+    .find(Boolean);
+  const canConnectSelectedCountry = selectedCountryProvider?.id === 'plaid';
+  const selectedCountryStatus = selectedCountryProvider
+    ? canConnectSelectedCountry
+      ? 'Listo para conectar'
+      : 'Estamos activando la conexion bancaria para este pais'
+    : 'Aun no disponible para este pais';
   const checklist = useMemo(
     () => [
       { label: 'Cuenta creada', done: hasProfile },
@@ -226,7 +255,7 @@ export default function OnboardingClient() {
 
       if (existingScript) {
         existingScript.addEventListener('load', () => resolve(), { once: true });
-        existingScript.addEventListener('error', () => reject(new Error('No pude cargar Plaid Link.')), { once: true });
+        existingScript.addEventListener('error', () => reject(new Error('No pude cargar la conexion bancaria.')), { once: true });
         return;
       }
 
@@ -234,7 +263,7 @@ export default function OnboardingClient() {
       script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error('No pude cargar Plaid Link.'));
+      script.onerror = () => reject(new Error('No pude cargar la conexion bancaria.'));
       document.body.appendChild(script);
     });
   }
@@ -252,14 +281,14 @@ export default function OnboardingClient() {
       const tokenData = await tokenResponse.json();
 
       if (!tokenResponse.ok || !tokenData.success || !tokenData.linkToken) {
-        setError(tokenData.error || 'No pude crear la conexión Plaid.');
+        setError('No pude iniciar la conexión bancaria. Intenta de nuevo en unos minutos.');
         return;
       }
 
       await loadPlaidScript();
 
       if (!window.Plaid) {
-        setError('Plaid Link no quedó disponible en el navegador.');
+        setError('No pude abrir la conexión segura del banco.');
         return;
       }
 
@@ -278,11 +307,11 @@ export default function OnboardingClient() {
             const exchangeData = await exchangeResponse.json();
 
             if (!exchangeResponse.ok || !exchangeData.success) {
-              setError(exchangeData.error || 'Plaid autorizo el banco, pero no pude guardar la conexión.');
+              setError(exchangeData.error || 'El banco autorizo la conexion, pero no pude guardarla en tu cuenta.');
               return;
             }
 
-            setMessage('Banco conectado con Plaid sandbox.');
+            setMessage('Banco conectado correctamente.');
             await refreshStatus();
           } finally {
             setConnectingPlaid(false);
@@ -296,10 +325,20 @@ export default function OnboardingClient() {
 
       handler.open();
     } catch (plaidError: unknown) {
-      const plaidMessage = plaidError instanceof Error ? plaidError.message : 'No pude iniciar Plaid.';
+      const plaidMessage = plaidError instanceof Error ? plaidError.message : 'No pude iniciar la conexión bancaria.';
       setError(plaidMessage);
       setConnectingPlaid(false);
     }
+  }
+
+  function connectSelectedBank() {
+    if (selectedCountryProvider?.id === 'plaid') {
+      void connectPlaid();
+      return;
+    }
+
+    setMessage('');
+    setError('La conexion bancaria para este pais ya esta mapeada internamente, pero todavia falta activar el flujo seguro de inicio de sesion.');
   }
 
   async function syncGmailNow() {
@@ -470,33 +509,27 @@ export default function OnboardingClient() {
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
-              <h2 className="text-xl font-bold">Banco / Open Finance</h2>
-              <p className="mt-1 text-sm text-slate-400">La ruta principal sera conectar bancos con proveedores read-only. Gmail queda como respaldo beta para correos bancarios.</p>
-              <div className="mt-4 grid gap-2">
-                {bankProviders.length === 0 && (
-                  <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-400">
-                    Cargando proveedores de Open Banking...
-                  </p>
-                )}
-                {bankProviders.map((provider) => (
-                  <div key={provider.id} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-100">{provider.name}</p>
-                        <p className="mt-1 text-xs text-slate-500">{provider.regions.join(' · ')}</p>
-                      </div>
-                      <span className={`rounded-lg px-3 py-1 text-xs font-semibold ${provider.configured ? 'bg-emerald-400/10 text-emerald-200' : 'bg-amber-400/10 text-amber-100'}`}>
-                        {provider.configured ? 'Sandbox listo' : 'Faltan envs'}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-400">{provider.notes}</p>
-                    {!provider.configured && (
-                      <p className="mt-2 font-mono text-xs text-amber-100/80">
-                        {provider.missingEnvVars.join(', ')}
-                      </p>
-                    )}
-                  </div>
-                ))}
+              <h2 className="text-xl font-bold">Banco</h2>
+              <p className="mt-1 text-sm text-slate-400">Elige tu pais y conecta tu banco. La plataforma selecciona automaticamente la conexion adecuada.</p>
+              <label className="mt-5 block text-sm font-medium text-slate-300">
+                Pais de tu banco
+                <select
+                  value={bankCountry}
+                  onChange={(event) => setBankCountry(event.target.value as BankCountryCode)}
+                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                >
+                  {bankCountryOptions.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-sm font-semibold text-slate-100">{selectedCountryStatus}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Tus credenciales bancarias se ingresan en una ventana segura del proveedor autorizado. El dashboard solo recibe acceso de lectura.
+                </p>
               </div>
               {activeBankConnections.length > 0 && (
                 <div className="mt-4 grid gap-2">
@@ -511,23 +544,18 @@ export default function OnboardingClient() {
                 <div className="mt-4 grid gap-2">
                   {activeGmailIntegrations.map((integration) => (
                     <p key={integration.id} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                      Fallback Gmail {integration.oauthConnected ? 'conectado con OAuth' : 'vinculado, pendiente de OAuth'}: {integration.email}
+                      Correo bancario {integration.oauthConnected ? 'conectado' : 'vinculado, pendiente de autorizacion'}: {integration.email}
                     </p>
                   ))}
                 </div>
               )}
-              {configuredBankProviders.length === 0 && (
-                <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-                  Configura al menos Plaid o Prometeo en variables de entorno para activar el sandbox bancario.
-                </p>
-              )}
               <button
                 type="button"
-                onClick={connectPlaid}
-                disabled={!hasProfile || !bankProviders.some((provider) => provider.id === 'plaid' && provider.configured) || connectingPlaid}
+                onClick={connectSelectedBank}
+                disabled={!hasProfile || !canConnectSelectedCountry || connectingPlaid}
                 className="mt-5 w-full rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {connectingPlaid ? 'Abriendo Plaid...' : 'Conectar banco con Plaid sandbox'}
+                {connectingPlaid ? 'Abriendo conexion bancaria...' : 'Conectar mi banco'}
               </button>
               <button
                 type="button"
@@ -535,7 +563,7 @@ export default function OnboardingClient() {
                 disabled={!hasProfile}
                 className="mt-3 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {hasGmail ? 'Conectar otro Gmail beta' : 'Conectar Gmail beta'}
+                {hasGmail ? 'Conectar otro correo bancario' : 'Conectar correo bancario'}
               </button>
               <button
                 type="button"
