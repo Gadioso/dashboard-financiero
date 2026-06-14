@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const cwd = process.cwd();
-const mode = process.argv.includes('--multi-user') ? 'multi-user' : 'private-v1';
+const mode = process.argv.includes('--multi-user')
+  ? 'multi-user'
+  : process.argv.includes('--open-banking')
+    ? 'open-banking'
+    : 'private-v1';
 
 const migrationSets = {
   'private-v1': [
@@ -17,6 +21,9 @@ const migrationSets = {
   'multi-user': [
     '20260608_multi_user_foundation.sql',
     '20260612_self_serve_onboarding_integrations.sql',
+  ],
+  'open-banking': [
+    '20260613_open_banking_foundation.sql',
   ],
 };
 

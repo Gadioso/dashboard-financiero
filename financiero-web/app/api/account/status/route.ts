@@ -15,9 +15,16 @@ const scopedTables = [
   'abonos_tarjeta_credito',
 ] as const;
 
+const optionalScopedTables = [
+  'bank_connections',
+  'bank_accounts',
+  'bank_transactions_raw',
+  'bank_sync_runs',
+] as const;
+
 async function countProfileRows(
   supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
-  table: (typeof scopedTables)[number],
+  table: (typeof scopedTables)[number] | (typeof optionalScopedTables)[number],
   profileId: string
 ) {
   const { count, error } = await supabase
@@ -57,18 +64,20 @@ export async function GET(request: Request) {
       });
     }
 
-    const [profileResult, telegramResult, gmailResult, countResults] = await Promise.all([
+    const [profileResult, telegramResult, gmailResult, bankConnectionResult, countResults] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
       supabase.from('gmail_integrations').select('id, email, provider, status, watch_expires_at, updated_at, connected_at, access_token_encrypted, refresh_token_encrypted').eq('profile_id', profileId).order('updated_at', { ascending: false }),
-      Promise.all(scopedTables.map((table) => countProfileRows(supabase, table, profileId))),
+      supabase.from('bank_connections').select('id, provider, institution_name, status, last_sync_at, consent_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
+      Promise.all([...scopedTables, ...optionalScopedTables].map((table) => countProfileRows(supabase, table, profileId))),
     ]);
 
     const countErrors = countResults
-      .filter((result) => result.error)
+      .filter((result) => result.error && !optionalScopedTables.includes(result.table as (typeof optionalScopedTables)[number]))
       .map((result) => `${result.table}: ${result.error}`);
     const financialCounts = Object.fromEntries(countResults.map((result) => [result.table, result.count]));
-    const errors = [profileResult.error, telegramResult.error, gmailResult.error]
+    const missingOpenBankingTables = bankConnectionResult.error?.code === '42P01';
+    const errors = [profileResult.error, telegramResult.error, gmailResult.error, missingOpenBankingTables ? null : bankConnectionResult.error]
       .filter(Boolean)
       .map((error) => error?.message)
       .concat(countErrors);
@@ -90,6 +99,7 @@ export async function GET(request: Request) {
         connected_at: integration.connected_at,
         oauthConnected: Boolean(integration.access_token_encrypted && integration.refresh_token_encrypted),
       })),
+      bankConnections: missingOpenBankingTables ? [] : bankConnectionResult.data || [],
       financialCounts,
       tenantSource: tenant.source,
       errors,

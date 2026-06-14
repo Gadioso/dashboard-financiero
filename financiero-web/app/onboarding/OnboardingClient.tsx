@@ -16,10 +16,38 @@ type AccountStatus = {
   } | null;
   telegramAccounts?: Array<{ id: string; chat_id: string; username?: string | null }>;
   gmailIntegrations?: Array<{ id: string; email: string; status: string; oauthConnected?: boolean; connected_at?: string | null }>;
+  bankConnections?: Array<{ id: string; provider: string; institution_name?: string | null; status: string; last_sync_at?: string | null }>;
   financialCounts?: Record<string, number>;
   error?: string;
   errors?: string[];
 };
+
+type BankProvider = {
+  id: string;
+  name: string;
+  regions: string[];
+  configured: boolean;
+  status: string;
+  missingEnvVars: string[];
+  notes: string;
+};
+
+type PlaidHandler = {
+  open: () => void;
+  exit: () => void;
+};
+
+declare global {
+  interface Window {
+    Plaid?: {
+      create: (options: {
+        token: string;
+        onSuccess: (publicToken: string, metadata: { institution?: { institution_id?: string; name?: string } }) => void;
+        onExit?: (error: { error_message?: string } | null) => void;
+      }) => PlaidHandler;
+    };
+  }
+}
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   maximumFractionDigits: 0,
@@ -43,9 +71,11 @@ function statusTone(done: boolean) {
 
 export default function OnboardingClient() {
   const [status, setStatus] = useState<AccountStatus | null>(null);
+  const [bankProviders, setBankProviders] = useState<BankProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [connectingPlaid, setConnectingPlaid] = useState(false);
   const [syncingGmail, setSyncingGmail] = useState(false);
   const [fullName, setFullName] = useState('');
   const [monthlyTarget, setMonthlyTarget] = useState('60000');
@@ -70,6 +100,15 @@ export default function OnboardingClient() {
       setStatus(data);
       setFullName(data.profile?.full_name || '');
       setMonthlyTarget(String(data.profile?.monthly_income_target || 60000));
+
+      if (data.profileScoped) {
+        const providersResponse = await fetch('/api/bank/providers', { cache: 'no-store' });
+        const providersData = await providersResponse.json();
+
+        if (providersResponse.ok && providersData.success) {
+          setBankProviders(providersData.providers || []);
+        }
+      }
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
@@ -94,17 +133,21 @@ export default function OnboardingClient() {
   const hasInitialBudget = Boolean((status?.financialCounts?.presupuestos_mensuales || 0) > 0);
   const hasTelegram = Boolean((status?.telegramAccounts || []).length > 0);
   const activeGmailIntegrations = (status?.gmailIntegrations || []).filter((integration) => integration.status === 'active');
+  const activeBankConnections = (status?.bankConnections || []).filter((connection) => connection.status === 'active');
   const hasGmail = activeGmailIntegrations.length > 0;
   const hasGmailOAuth = activeGmailIntegrations.some((integration) => integration.oauthConnected);
+  const hasBankConnection = activeBankConnections.length > 0;
+  const hasBankFallback = hasBankConnection || hasGmail;
+  const configuredBankProviders = bankProviders.filter((provider) => provider.configured);
   const checklist = useMemo(
     () => [
       { label: 'Cuenta creada', done: hasProfile },
       { label: 'Perfil automático', done: hasProfile && Boolean(status?.profile?.email) },
       { label: 'Presupuesto inicial', done: hasInitialBudget },
       { label: 'Telegram conectado', done: hasTelegram },
-      { label: 'Gmail/Banco conectado', done: hasGmail },
+      { label: 'Banco conectado', done: hasBankFallback },
     ],
-    [hasGmail, hasInitialBudget, hasProfile, hasTelegram, status?.profile?.email]
+    [hasBankFallback, hasInitialBudget, hasProfile, hasTelegram, status?.profile?.email]
   );
   const completed = checklist.filter((item) => item.done).length;
 
@@ -170,6 +213,93 @@ export default function OnboardingClient() {
 
   function startGmailOAuth() {
     window.location.href = '/api/account/gmail/oauth/start';
+  }
+
+  function loadPlaidScript() {
+    return new Promise<void>((resolve, reject) => {
+      if (window.Plaid) {
+        resolve();
+        return;
+      }
+
+      const existingScript = document.querySelector<HTMLScriptElement>('script[src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"]');
+
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(), { once: true });
+        existingScript.addEventListener('error', () => reject(new Error('No pude cargar Plaid Link.')), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('No pude cargar Plaid Link.'));
+      document.body.appendChild(script);
+    });
+  }
+
+  async function connectPlaid() {
+    setConnectingPlaid(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const tokenResponse = await fetch('/api/bank/plaid/link-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const tokenData = await tokenResponse.json();
+
+      if (!tokenResponse.ok || !tokenData.success || !tokenData.linkToken) {
+        setError(tokenData.error || 'No pude crear la conexión Plaid.');
+        return;
+      }
+
+      await loadPlaidScript();
+
+      if (!window.Plaid) {
+        setError('Plaid Link no quedó disponible en el navegador.');
+        return;
+      }
+
+      const handler = window.Plaid.create({
+        token: tokenData.linkToken,
+        onSuccess: async (publicToken, metadata) => {
+          try {
+            const exchangeResponse = await fetch('/api/bank/plaid/exchange-public-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                publicToken,
+                institution: metadata.institution,
+              }),
+            });
+            const exchangeData = await exchangeResponse.json();
+
+            if (!exchangeResponse.ok || !exchangeData.success) {
+              setError(exchangeData.error || 'Plaid autorizo el banco, pero no pude guardar la conexión.');
+              return;
+            }
+
+            setMessage('Banco conectado con Plaid sandbox.');
+            await refreshStatus();
+          } finally {
+            setConnectingPlaid(false);
+          }
+        },
+        onExit: (plaidError) => {
+          if (plaidError?.error_message) setError(plaidError.error_message);
+          setConnectingPlaid(false);
+        },
+      });
+
+      handler.open();
+    } catch (plaidError: unknown) {
+      const plaidMessage = plaidError instanceof Error ? plaidError.message : 'No pude iniciar Plaid.';
+      setError(plaidMessage);
+      setConnectingPlaid(false);
+    }
   }
 
   async function syncGmailNow() {
@@ -340,24 +470,72 @@ export default function OnboardingClient() {
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
-              <h2 className="text-xl font-bold">Gmail / Banco</h2>
-              <p className="mt-1 text-sm text-slate-400">Conecta uno o varios correos donde recibes avisos bancarios. Puede ser distinto al correo con el que inicias sesión.</p>
-              {activeGmailIntegrations.length > 0 && (
+              <h2 className="text-xl font-bold">Banco / Open Finance</h2>
+              <p className="mt-1 text-sm text-slate-400">La ruta principal sera conectar bancos con proveedores read-only. Gmail queda como respaldo beta para correos bancarios.</p>
+              <div className="mt-4 grid gap-2">
+                {bankProviders.length === 0 && (
+                  <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-400">
+                    Cargando proveedores de Open Banking...
+                  </p>
+                )}
+                {bankProviders.map((provider) => (
+                  <div key={provider.id} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">{provider.name}</p>
+                        <p className="mt-1 text-xs text-slate-500">{provider.regions.join(' · ')}</p>
+                      </div>
+                      <span className={`rounded-lg px-3 py-1 text-xs font-semibold ${provider.configured ? 'bg-emerald-400/10 text-emerald-200' : 'bg-amber-400/10 text-amber-100'}`}>
+                        {provider.configured ? 'Sandbox listo' : 'Faltan envs'}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-400">{provider.notes}</p>
+                    {!provider.configured && (
+                      <p className="mt-2 font-mono text-xs text-amber-100/80">
+                        {provider.missingEnvVars.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {activeBankConnections.length > 0 && (
                 <div className="mt-4 grid gap-2">
-                  {activeGmailIntegrations.map((integration) => (
-                    <p key={integration.id} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                      Gmail {integration.oauthConnected ? 'conectado con OAuth' : 'vinculado, pendiente de OAuth'}: {integration.email}
+                  {activeBankConnections.map((connection) => (
+                    <p key={connection.id} className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                      Banco conectado: {connection.institution_name || connection.provider}
                     </p>
                   ))}
                 </div>
               )}
+              {activeGmailIntegrations.length > 0 && (
+                <div className="mt-4 grid gap-2">
+                  {activeGmailIntegrations.map((integration) => (
+                    <p key={integration.id} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                      Fallback Gmail {integration.oauthConnected ? 'conectado con OAuth' : 'vinculado, pendiente de OAuth'}: {integration.email}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {configuredBankProviders.length === 0 && (
+                <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                  Configura al menos Plaid o Prometeo en variables de entorno para activar el sandbox bancario.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={connectPlaid}
+                disabled={!hasProfile || !bankProviders.some((provider) => provider.id === 'plaid' && provider.configured) || connectingPlaid}
+                className="mt-5 w-full rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {connectingPlaid ? 'Abriendo Plaid...' : 'Conectar banco con Plaid sandbox'}
+              </button>
               <button
                 type="button"
                 onClick={startGmailOAuth}
                 disabled={!hasProfile}
-                className="mt-5 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {hasGmail ? 'Conectar otro Google/Gmail' : 'Conectar Google/Gmail'}
+                {hasGmail ? 'Conectar otro Gmail beta' : 'Conectar Gmail beta'}
               </button>
               <button
                 type="button"
