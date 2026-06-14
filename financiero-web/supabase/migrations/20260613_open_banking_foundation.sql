@@ -63,8 +63,8 @@ CREATE TABLE IF NOT EXISTS public.bank_transactions_raw (
   currency text DEFAULT 'MXN',
   raw jsonb NOT NULL DEFAULT '{}'::jsonb,
   normalized_status text NOT NULL DEFAULT 'pending' CHECK (normalized_status IN ('pending', 'ignored', 'classified', 'failed')),
-  gasto_id uuid REFERENCES public.gastos(id) ON DELETE SET NULL,
-  ingreso_id uuid REFERENCES public.ingresos(id) ON DELETE SET NULL,
+  gasto_id bigint REFERENCES public.gastos(id) ON DELETE SET NULL,
+  ingreso_id bigint REFERENCES public.ingresos(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT timezone('utc'::text, now()),
   updated_at timestamptz NOT NULL DEFAULT timezone('utc'::text, now()),
   UNIQUE (connection_id, provider_transaction_id)
