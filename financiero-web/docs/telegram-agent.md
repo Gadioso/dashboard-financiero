@@ -16,6 +16,24 @@ Ejemplos:
 
 El agente clasifica el movimiento en `Vida`, `Placeres` o `Futuro` y lo guarda en la tabla `gastos`.
 
+### Conectar y desconectar Telegram
+
+Para conectar un chat, el usuario genera un código en Onboarding/Configuración y lo manda al bot tal cual:
+
+```text
+DF-03D5D113
+```
+
+También funciona con `/start DF-03D5D113`.
+
+Para revocar la conexión desde Telegram:
+
+```text
+/desconectar
+```
+
+También acepta `desvincular`, `revocar`, `disconnect`, `unlink` o frases como `desconecta este Telegram`. Al desconectar se elimina el vínculo del chat con `profile_id` y se borra la memoria de ese chat; el bot deja de registrar movimientos hasta que el usuario genere y envíe un nuevo código.
+
 ### Registrar ingresos
 
 Ejemplos:

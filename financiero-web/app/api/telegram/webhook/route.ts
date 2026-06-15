@@ -59,6 +59,13 @@ function telegramDisplayName(message?: TelegramMessage) {
   return from.username || [from.first_name, from.last_name].filter(Boolean).join(' ').trim() || null;
 }
 
+function esComandoDesconexionTelegram(texto?: string | null) {
+  if (!texto) return false;
+
+  return /^\/?(desconectar|desvincular|revocar|disconnect|unlink)(?:\s+telegram)?$/i.test(texto.trim()) ||
+    /\b(?:desconecta|desvincula|revoca)\s+(?:este\s+)?telegram\b/i.test(texto);
+}
+
 async function claimTelegramLinkCode({
   supabase,
   chatId,
@@ -132,6 +139,45 @@ async function responderTelegram(chatId: number | undefined, texto: string) {
       text: texto,
     }),
   });
+}
+
+async function desconectarTelegram({
+  supabase,
+  chatId,
+  profileId,
+}: {
+  supabase: SupabaseClient;
+  chatId?: number;
+  profileId?: string | null;
+}) {
+  if (!chatId || !profileId) {
+    return {
+      success: false,
+      message: 'No encontré una conexión activa para este Telegram.',
+    };
+  }
+
+  const chatIdText = String(chatId);
+  const { error: accountError } = await supabase
+    .from('telegram_accounts')
+    .delete()
+    .eq('chat_id', chatIdText)
+    .eq('profile_id', profileId);
+
+  if (accountError) {
+    throw new Error(`No pude desconectar Telegram: ${accountError.message}`);
+  }
+
+  await supabase
+    .from('telegram_memoria')
+    .delete()
+    .eq('chat_id', chatIdText)
+    .eq('profile_id', profileId);
+
+  return {
+    success: true,
+    message: 'Listo. Este Telegram quedó desconectado de tu dashboard. Para volver a usarlo, genera un nuevo código en Configuración y mándamelo por aquí.',
+  };
 }
 
 async function leerMemoriaChat(supabase: SupabaseClient, chatId: number | undefined, profileId?: string | null): Promise<MensajeMemoria[]> {
@@ -246,6 +292,12 @@ export async function POST(request: Request) {
     if (!texto) {
       await responderTelegram(chatId, 'Estoy listo. Puedes decirme "pagué 250 de gasolina" o preguntarme "cómo voy este mes".');
       return NextResponse.json({ success: true, ignored: true });
+    }
+
+    if (esComandoDesconexionTelegram(texto)) {
+      const result = await desconectarTelegram({ supabase, chatId, profileId: tenant.profileId });
+      await responderTelegram(chatId, result.message);
+      return NextResponse.json({ success: result.success, action: 'disconnect-telegram', message: result.message });
     }
 
     if (/^\/?mi[_\s-]?id$/i.test(texto)) {
