@@ -158,6 +158,15 @@ Haz compras mayores de $2,500 y difiere a MSI con tu Tarjeta de Crédito Santand
 Conoce los beneficios de tu banco Santander.`,
     expected: null,
   },
+  {
+    name: 'HTML marketing statement is not a credit card payment',
+    raw: `Santander México
+Si no puedes ver este correo abrelo en tu navegador.
+Junio 2026. Hola Diego, si est&aacute;s pensando en hacer crecer tu negocio,
+aprovecha una línea de crédito por $500,000.00 para tu Tarjeta de Crédito Santander.
+Consulta términos y condiciones.`,
+    expected: null,
+  },
 ];
 
 const results = cases.map((testCase) => {

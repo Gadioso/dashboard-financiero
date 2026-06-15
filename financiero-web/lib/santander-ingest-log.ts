@@ -117,10 +117,18 @@ export async function obtenerSantanderIngestLogs(supabase: SupabaseClient) {
 type SantanderIngestLogRow = {
   id: string;
   status?: SantanderIngestLogStatus | null;
+  concepto?: string | null;
+  reason?: string | null;
   gasto_id?: string | null;
   ingreso_id?: string | null;
   abono_tarjeta_id?: string | null;
 };
+
+function pareceCorreoPromocionalOGuardadoRoto(log: SantanderIngestLogRow) {
+  const texto = `${log.concepto || ''} ${log.reason || ''}`;
+
+  return /(&[a-z]+;|tu\s+navegador|si\s+est(?:ás|&aacute;s)\s+pensando|junio\s+20\d{2}|haz\s+compras|compras\s+mayores|difiere|msi|terminales?\s+clip)/i.test(texto);
+}
 
 async function rowExists({
   supabase,
@@ -162,6 +170,7 @@ async function filtrarLogsVisibles({
 
   for (const log of logs) {
     if (log.status !== 'inserted') continue;
+    if (pareceCorreoPromocionalOGuardadoRoto(log)) continue;
 
     const exists = await rowExists({ supabase, table: 'gastos', id: log.gasto_id, profileId }) ||
       await rowExists({ supabase, table: 'ingresos', id: log.ingreso_id, profileId }) ||

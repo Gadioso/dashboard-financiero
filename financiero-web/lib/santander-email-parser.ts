@@ -21,7 +21,7 @@ function esTextoInformativoSantander(concepto: string) {
 }
 
 function esTextoPromocionalSantander(texto: string) {
-  return /\b(msi|meses\s+sin\s+intereses|difiere|diferir|haz\s+compras|compras\s+mayores|promoci[oó]n|oferta|beneficio|bonificaci[oó]n|descuento|participa|contrata|terminales?\s+clip)\b/i.test(texto) &&
+  return /(&[a-z]+;|tu\s+navegador|si\s+est(?:ás|&aacute;s)\s+pensando|junio\s+20\d{2}|\b(msi|meses\s+sin\s+intereses|difiere|diferir|haz\s+compras|compras\s+mayores|promoci[oó]n|oferta|beneficio|bonificaci[oó]n|descuento|participa|contrata|terminales?\s+clip)\b)/i.test(texto) &&
     !/\b(te\s+informamos\s+que\s+se\s+ha\s+realizado\s+una\s+compra|se\s+realiz[oó]\s+una\s+compra|compra\s+en\s+el\s+comercio|cargo\s+realizado|retiro\s+realizado|transferencia\s+recibida|spei\s+recibido)\b/i.test(texto);
 }
 
