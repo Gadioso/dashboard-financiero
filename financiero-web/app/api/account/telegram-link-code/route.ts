@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -69,6 +70,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: lastError?.message || 'No pude crear el código.' }, { status: 500 });
     }
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'telegram.link_code.created',
+      resourceType: 'telegram_link_codes',
+      metadata: { expiresAt: inserted.expires_at },
+    });
+
     const botUsername = process.env.TELEGRAM_BOT_USERNAME || '';
 
     return NextResponse.json({
@@ -79,6 +90,14 @@ export async function POST(request: Request) {
       deepLink: botUsername ? `https://t.me/${botUsername}?start=${encodeURIComponent(inserted.code)}` : null,
     });
   } catch (error: unknown) {
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'telegram.link_code.create',
+      error,
+      severity: error instanceof BillingLimitError ? 'warning' : 'error',
+    });
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     const status = error instanceof BillingLimitError ? error.status : 500;
     return NextResponse.json({ success: false, error: message }, { status });

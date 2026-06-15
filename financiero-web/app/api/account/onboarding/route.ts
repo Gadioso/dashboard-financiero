@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { calcularPresupuestoTresTercios } from '@/lib/financial-core';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 
@@ -125,6 +126,21 @@ export async function POST(request: Request) {
       }
     }
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'onboarding.save',
+      resourceType: 'profile',
+      resourceId: tenant.profileId,
+      metadata: {
+        budgetCreated,
+        initializeBudget: Boolean(body.initializeBudget),
+        monthlyIncomeTarget,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       profile,
@@ -135,6 +151,13 @@ export async function POST(request: Request) {
       tenantSource: tenant.source,
     });
   } catch (error: unknown) {
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'onboarding.save',
+      error,
+    });
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

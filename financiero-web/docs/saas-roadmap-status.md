@@ -73,12 +73,17 @@ Estado: base implementada.
 
 ## Paso 7: Seguridad y operacion
 
-Estado: parcial.
+Estado: base implementada.
 
 - Rate limit base.
 - Secret scan.
 - RLS.
-- Pendiente: auditoria de acciones, alertas, backups, exportacion/borrado de datos y rotacion formal de secrets.
+- Auditoria de acciones por usuario en `audit_events`.
+- Logs de errores por usuario en `error_events`.
+- Exportacion JSON por usuario en `GET /api/account/export`.
+- Borrado de datos por usuario en `DELETE /api/account/data`.
+- Checklist operativo de backups/restore y rotacion de secrets.
+- Pendiente: alertas automaticas, log drain/Sentry y simulacro periodico de restore.
 
 ## Paso 8: Escala
 

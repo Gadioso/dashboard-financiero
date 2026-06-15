@@ -10,7 +10,9 @@ const mode = process.argv.includes('--multi-user')
       ? 'classification-rules'
       : process.argv.includes('--billing')
         ? 'billing'
-    : 'private-v1';
+        : process.argv.includes('--operations')
+          ? 'operations'
+          : 'private-v1';
 
 const migrationSets = {
   'private-v1': [
@@ -35,6 +37,9 @@ const migrationSets = {
   ],
   'billing': [
     '20260615_billing_foundation.sql',
+  ],
+  'operations': [
+    '20260615_operational_security_foundation.sql',
   ],
 };
 

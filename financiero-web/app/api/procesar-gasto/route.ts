@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 
@@ -65,13 +66,46 @@ export async function POST(request: Request) {
     }
 
     if (queryResult.error) {
+      await logErrorEvent({
+        supabase,
+        request,
+        profileId: tenant.profileId,
+        actorEmail: tenant.email,
+        action: 'movement.create_ai',
+        error: queryResult.error,
+        code: 'movement_insert_failed',
+        metadata: { tipo: dataAI.tipo },
+      });
       return NextResponse.json({ success: false, error: queryResult.error.message }, { status: 500 });
     }
+
+    const inserted = Array.isArray(queryResult.data) ? queryResult.data[0] as { id?: string | number } | undefined : null;
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'movement.create_ai',
+      resourceType: dataAI.tipo === 'gasto' ? 'gastos' : 'ingresos',
+      resourceId: inserted?.id || null,
+      metadata: {
+        tipo: dataAI.tipo,
+        categoria: dataAI.categoria,
+        subcategoria: dataAI.subcategoria,
+        amount: Number(dataAI.monto),
+      },
+    });
 
     return NextResponse.json({ success: true, data: dataAI });
 
   } catch (error: unknown) {
-    console.error('Error en la API de procesamiento:', error);
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'movement.create_ai',
+      error,
+    });
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

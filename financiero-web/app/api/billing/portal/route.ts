@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAppBaseUrl, getStripeClient } from '@/lib/stripe-server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,9 +44,26 @@ export async function POST(request: Request) {
       return_url: `${getAppBaseUrl(request)}/`,
     });
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'billing.portal.opened',
+      resourceType: 'stripe_customer',
+      resourceId: data.stripe_customer_id,
+    });
+
     return NextResponse.json({ success: true, url: session.url });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'No pude abrir el portal de facturación.';
+    await logErrorEvent({
+      supabase: getSupabaseServiceClient(),
+      request,
+      action: 'billing.portal.open',
+      error,
+      code: 'billing_portal_failed',
+    });
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

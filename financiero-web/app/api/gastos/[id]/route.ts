@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -38,6 +39,16 @@ export async function DELETE(request: Request, context: RouteContext) {
     const { data, error } = await applyProfileFilter(deleteQuery, tenant.profileId).maybeSingle();
 
     if (error) {
+      await logErrorEvent({
+        supabase,
+        request,
+        profileId: tenant.profileId,
+        actorEmail: tenant.email,
+        action: 'expense.delete',
+        error,
+        code: 'expense_delete_failed',
+        metadata: { id },
+      });
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
@@ -45,9 +56,25 @@ export async function DELETE(request: Request, context: RouteContext) {
       return NextResponse.json({ success: false, error: 'No se encontró el gasto para eliminar.' }, { status: 404 });
     }
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'expense.delete',
+      resourceType: 'gastos',
+      resourceId: data.id,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    console.error('Error eliminando gasto:', error);
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'expense.delete',
+      error,
+    });
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -76,11 +77,39 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      await logErrorEvent({
+        supabase,
+        request,
+        profileId,
+        actorEmail: tenant.email,
+        action: 'telegram.link',
+        error,
+        code: 'telegram_link_failed',
+      });
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId,
+      actorEmail: tenant.email,
+      action: 'telegram.link',
+      resourceType: 'telegram_accounts',
+      resourceId: data.id,
+      metadata: { chatLinked: Boolean(data.chat_id), username: data.username || null },
+    });
+
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'telegram.link',
+      error,
+      severity: error instanceof BillingLimitError ? 'warning' : 'error',
+    });
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     const status = error instanceof BillingLimitError ? error.status : 500;
     return NextResponse.json({ success: false, error: message }, { status });

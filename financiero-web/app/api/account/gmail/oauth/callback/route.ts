@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 import { NextResponse } from 'next/server';
 import { assertBillingLimit } from '@/lib/billing';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { encryptSecret } from '@/lib/secret-box';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { normalizeProfileId } from '@/lib/tenant-context';
@@ -171,9 +172,28 @@ export async function GET(request: Request) {
 
     if (error) throw new Error(error.message);
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: parsedState.profileId,
+      actorEmail: gmailEmail,
+      action: 'gmail.oauth.connected',
+      resourceType: 'gmail_integrations',
+      metadata: { email: normalizedEmail, scope: token.scope || null },
+    });
+
     return response;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido.';
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'gmail.oauth.callback',
+      error,
+      code: 'gmail_oauth_callback_failed',
+      severity: 'warning',
+    });
 
     return NextResponse.redirect(new URL(`/onboarding?error=${encodeURIComponent(message)}`, request.url));
   }

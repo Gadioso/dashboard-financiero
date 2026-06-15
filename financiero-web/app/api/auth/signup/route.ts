@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { clearAuthCookies, getSafeNext, setSupabaseSessionCookies, upsertAuthProfile } from '@/lib/auth-session';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { getSupabaseAnonClient } from '@/lib/supabase-server';
+import { getSupabaseAnonClient, getSupabaseServiceClient } from '@/lib/supabase-server';
 
 function normalizeEmail(value?: string | null) {
   const email = value?.trim().toLowerCase();
@@ -10,6 +11,7 @@ function normalizeEmail(value?: string | null) {
 }
 
 export async function POST(request: Request) {
+  const serviceSupabase = getSupabaseServiceClient();
   const ip = getClientIp(request);
   const rateLimit = checkRateLimit({
     key: `auth-signup:${ip}`,
@@ -56,6 +58,15 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    await logErrorEvent({
+      supabase: serviceSupabase,
+      request,
+      actorEmail: email,
+      action: 'auth.signup',
+      error,
+      code: 'auth_signup_failed',
+      severity: 'warning',
+    });
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });
   }
 
@@ -79,6 +90,17 @@ export async function POST(request: Request) {
     clearAuthCookies(response);
     setSupabaseSessionCookies(response, data.session.access_token, data.session.refresh_token);
   }
+
+  await logAuditEvent({
+    supabase: serviceSupabase,
+    request,
+    profileId: userId || null,
+    actorEmail: email,
+    action: 'auth.signup',
+    resourceType: 'profile',
+    resourceId: userId || null,
+    metadata: { needsEmailConfirmation: !data.session },
+  });
 
   return response;
 }

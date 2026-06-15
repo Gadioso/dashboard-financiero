@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAppBaseUrl, getPremiumPriceId, getStripeClient } from '@/lib/stripe-server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,9 +100,30 @@ export async function POST(request: Request) {
       },
     });
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'billing.checkout.created',
+      resourceType: 'stripe_checkout_session',
+      resourceId: session.id,
+      metadata: {
+        customerId,
+        plan: 'premium',
+      },
+    });
+
     return NextResponse.json({ success: true, url: session.url });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'No pude crear checkout.';
+    await logErrorEvent({
+      supabase: getSupabaseServiceClient(),
+      request,
+      action: 'billing.checkout.create',
+      error,
+      code: 'billing_checkout_failed',
+    });
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

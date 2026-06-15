@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { decryptBankSecret } from '@/lib/open-banking/bank-secret-box';
 import { PlaidTransaction, syncPlaidTransactions } from '@/lib/open-banking/plaid';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
@@ -303,12 +304,33 @@ export async function POST(request: Request) {
       { accounts: 0, added: 0, modified: 0, removed: 0, insertedOrUpdated: 0 }
     );
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: 'bank.sync',
+      resourceType: 'bank_connections',
+      metadata: {
+        connections: connections.length,
+        failed,
+        totals,
+      },
+    });
+
     return NextResponse.json({
       success: failed === 0,
       results,
       totals,
     }, { status: failed ? 207 : 200 });
   } catch (error: unknown) {
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'bank.sync',
+      error,
+    });
     const message = error instanceof Error ? error.message : 'No pude sincronizar el banco.';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

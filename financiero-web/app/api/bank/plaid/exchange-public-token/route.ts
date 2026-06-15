@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
+import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { encryptBankSecret } from '@/lib/open-banking/bank-secret-box';
 import { exchangePlaidPublicToken } from '@/lib/open-banking/plaid';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
@@ -119,6 +120,20 @@ export async function POST(request: Request) {
       throw new Error(result.error.message);
     }
 
+    await logAuditEvent({
+      supabase,
+      request,
+      profileId: tenant.profileId,
+      actorEmail: tenant.email,
+      action: existingId ? 'bank.connection.updated' : 'bank.connection.created',
+      resourceType: 'bank_connections',
+      resourceId: result.data.id,
+      metadata: {
+        provider: 'plaid',
+        institutionName: body.institution?.name || null,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       provider: 'plaid',
@@ -126,6 +141,14 @@ export async function POST(request: Request) {
       requestId: plaid.request_id,
     });
   } catch (error: unknown) {
+    const supabase = getSupabaseServiceClient();
+    await logErrorEvent({
+      supabase,
+      request,
+      action: 'bank.connection.exchange_token',
+      error,
+      severity: error instanceof BillingLimitError ? 'warning' : 'error',
+    });
     const message = error instanceof Error ? error.message : 'No pude guardar la conexion Plaid.';
     const status = error instanceof BillingLimitError ? error.status : 500;
     return NextResponse.json({ success: false, error: message }, { status });

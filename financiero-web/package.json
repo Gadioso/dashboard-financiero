@@ -22,6 +22,7 @@
     "sql:open-banking": "node scripts/print-launch-sql.mjs --open-banking",
     "sql:classification-rules": "node scripts/print-launch-sql.mjs --classification-rules",
     "sql:billing": "node scripts/print-launch-sql.mjs --billing",
+    "sql:operations": "node scripts/print-launch-sql.mjs --operations",
     "sql:saas-audit": "node scripts/print-saas-audit-sql.mjs"
   },
   "dependencies": {
