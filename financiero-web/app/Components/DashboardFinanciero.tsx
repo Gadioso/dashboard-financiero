@@ -82,6 +82,29 @@ type SantanderStatus = {
   error?: string;
 };
 
+type BillingStatus = {
+  configured: boolean;
+  plan: 'free' | 'beta' | 'premium';
+  status: string;
+  active: boolean;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  stripeCustomerId: string | null;
+  limits?: {
+    bankConnections: number;
+    gmailIntegrations: number;
+    telegramAccounts: number;
+    bankSyncLookbackDays: number;
+  };
+  error?: string;
+};
+
+type AccountStatus = {
+  success: boolean;
+  billing?: BillingStatus;
+  error?: string;
+};
+
 const mesActualKey = mesKeyDesdeFecha(new Date());
 
 function formatearDuracionMs(value?: number | null) {
@@ -112,6 +135,8 @@ export default function DashboardFinanciero() {
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const cerrarSesion = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -198,18 +223,25 @@ export default function DashboardFinanciero() {
   useEffect(() => {
     let mounted = true;
 
-    async function fetchSantanderStatus() {
+    async function fetchAccountAndBankStatus() {
       try {
-        const response = await fetch('/api/email/santander');
-        const data = await response.json();
+        const [bankResponse, accountResponse] = await Promise.all([
+          fetch('/api/email/santander'),
+          fetch('/api/account/status'),
+        ]);
+        const bankData = await bankResponse.json();
+        const accountData = (await accountResponse.json()) as AccountStatus;
 
-        if (mounted) setSantanderStatus(data);
+        if (mounted) {
+          setSantanderStatus(bankData);
+          if (accountData.billing) setBillingStatus(accountData.billing);
+        }
       } catch {
         if (mounted) setSantanderStatus({ error: 'No pude consultar estado bancario.' });
       }
     }
 
-    void fetchSantanderStatus();
+    void fetchAccountAndBankStatus();
 
     return () => {
       mounted = false;
@@ -256,6 +288,48 @@ export default function DashboardFinanciero() {
     } finally {
       setProcesando(false);
       setTimeout(() => setMensajeStatus(''), 5000);
+    }
+  };
+
+  const abrirCheckoutBilling = async () => {
+    setBillingLoading(true);
+    setMensajeStatus('Abriendo checkout...');
+
+    try {
+      const response = await fetch('/api/billing/checkout', { method: 'POST' });
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.url) {
+        setMensajeStatus(`Error billing: ${data.error || 'No pude crear checkout.'}`);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setMensajeStatus('No pude abrir Stripe Checkout.');
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const abrirPortalBilling = async () => {
+    setBillingLoading(true);
+    setMensajeStatus('Abriendo portal de facturación...');
+
+    try {
+      const response = await fetch('/api/billing/portal', { method: 'POST' });
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.url) {
+        setMensajeStatus(`Error billing: ${data.error || 'No pude abrir el portal.'}`);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setMensajeStatus('No pude abrir el portal de facturación.');
+    } finally {
+      setBillingLoading(false);
     }
   };
 
@@ -354,6 +428,13 @@ export default function DashboardFinanciero() {
     santanderStatus.supabaseSchema?.migrationRequired === false &&
     santanderStatus.supabaseSchema.acceptsAbonosTarjetaCredito
   );
+  const planLabel = billingStatus?.plan === 'premium'
+    ? 'Premium'
+    : billingStatus?.plan === 'free'
+      ? 'Gratis'
+      : 'Beta';
+  const billingConfigured = Boolean(billingStatus?.configured);
+  const premiumActive = Boolean(billingStatus?.active && billingStatus.plan === 'premium');
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] text-slate-100 font-sans p-4 md:p-8">
@@ -367,6 +448,34 @@ export default function DashboardFinanciero() {
           <p className="text-slate-400 mt-1">Control mensual, automatización bancaria y regla 33/33/33.</p>
         </div>
         <div className="mt-4 flex items-center gap-2 md:mt-0">
+          <div className={`rounded-xl border px-3 py-2 text-sm font-medium ${
+            premiumActive
+              ? 'border-violet-400/30 bg-violet-400/10 text-violet-200'
+              : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+          }`}>
+            Plan {planLabel}
+          </div>
+          {billingConfigured && (
+            premiumActive ? (
+              <button
+                type="button"
+                onClick={abrirPortalBilling}
+                disabled={billingLoading}
+                className="rounded-xl border border-violet-400/25 bg-violet-400/10 px-3 py-2 text-sm font-medium text-violet-200 transition-colors hover:border-violet-300/40 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Facturación
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={abrirCheckoutBilling}
+                disabled={billingLoading}
+                className="rounded-xl border border-violet-400/25 bg-violet-400/10 px-3 py-2 text-sm font-medium text-violet-200 transition-colors hover:border-violet-300/40 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Mejorar plan
+              </button>
+            )
+          )}
           <Link
             href="/onboarding"
             className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-200 transition-colors hover:border-cyan-300/40 hover:bg-cyan-400/15"

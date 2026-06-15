@@ -49,17 +49,27 @@ Estado: beta/fallback.
 
 ## Paso 5: Telegram multiusuario
 
-Estado: funcional.
+Estado: listo.
 
 - `telegram_chat_id` vinculado a `profile_id`.
 - Registro en perfil correcto.
 - Memoria separada.
 - Link code self-serve.
-- Pendiente: comandos de desconexion.
+- Comandos de desconexion/revocacion.
 
 ## Paso 6: Billing y planes
 
-Estado: pendiente.
+Estado: base implementada.
+
+- Stripe Checkout para suscripcion premium.
+- Stripe Customer Portal.
+- Webhook de suscripciones.
+- Tablas `billing_customers` y `billing_subscriptions` con RLS.
+- Estado de plan en `/api/account/status`.
+- Badge y acciones de plan en dashboard.
+- Limites por plan para nuevas conexiones de banco, Gmail y Telegram.
+- Bloqueo de cupo con respuesta 402 en endpoints de conexion.
+- Pendiente: crear producto/precio real en Stripe, configurar webhook, correr `sql:billing` y activar variables de produccion.
 
 ## Paso 7: Seguridad y operacion
 

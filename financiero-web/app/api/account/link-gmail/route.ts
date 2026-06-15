@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -35,6 +36,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'No pude resolver el perfil autenticado.' }, { status: 401 });
     }
 
+    const existingIntegration = await supabase
+      .from('gmail_integrations')
+      .select('id')
+      .eq('profile_id', profileId)
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existingIntegration.error) {
+      return NextResponse.json({ success: false, error: existingIntegration.error.message }, { status: 500 });
+    }
+
+    if (!existingIntegration.data?.id) {
+      const { count, error: countError } = await supabase
+        .from('gmail_integrations')
+        .select('id', { count: 'exact', head: true })
+        .eq('profile_id', profileId)
+        .eq('status', 'active');
+
+      if (countError) {
+        return NextResponse.json({ success: false, error: countError.message }, { status: 500 });
+      }
+
+      await assertBillingLimit({
+        supabase,
+        profileId,
+        resource: 'gmailIntegrations',
+        currentCount: count || 0,
+      });
+    }
+
     const { data, error } = await supabase
       .from('gmail_integrations')
       .upsert(
@@ -57,6 +88,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const status = error instanceof BillingLimitError ? error.status : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

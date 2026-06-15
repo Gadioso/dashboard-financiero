@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
 import { encryptBankSecret } from '@/lib/open-banking/bank-secret-box';
 import { exchangePlaidPublicToken } from '@/lib/open-banking/plaid';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
@@ -82,6 +83,24 @@ export async function POST(request: Request) {
     }
 
     const existingId = existingByItem.data?.id || existingByInstitution.data?.id;
+
+    if (!existingId) {
+      const { count, error: countError } = await supabase
+        .from('bank_connections')
+        .select('id', { count: 'exact', head: true })
+        .eq('profile_id', tenant.profileId)
+        .eq('status', 'active');
+
+      if (countError) throw new Error(countError.message);
+
+      await assertBillingLimit({
+        supabase,
+        profileId: tenant.profileId,
+        resource: 'bankConnections',
+        currentCount: count || 0,
+      });
+    }
+
     const result = existingId
       ? await supabase
           .from('bank_connections')
@@ -108,6 +127,7 @@ export async function POST(request: Request) {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'No pude guardar la conexion Plaid.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const status = error instanceof BillingLimitError ? error.status : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -29,6 +30,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'No pude resolver el perfil autenticado.' }, { status: 401 });
     }
 
+    const existingAccount = await supabase
+      .from('telegram_accounts')
+      .select('id, profile_id')
+      .eq('chat_id', chatId)
+      .maybeSingle();
+
+    if (existingAccount.error) {
+      return NextResponse.json({ success: false, error: existingAccount.error.message }, { status: 500 });
+    }
+
+    const linksNewChat = !existingAccount.data?.id || existingAccount.data.profile_id !== profileId;
+
+    if (linksNewChat) {
+      const { count, error: countError } = await supabase
+        .from('telegram_accounts')
+        .select('id', { count: 'exact', head: true })
+        .eq('profile_id', profileId);
+
+      if (countError) {
+        return NextResponse.json({ success: false, error: countError.message }, { status: 500 });
+      }
+
+      await assertBillingLimit({
+        supabase,
+        profileId,
+        resource: 'telegramAccounts',
+        currentCount: count || 0,
+      });
+    }
+
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from('telegram_accounts')
@@ -51,6 +82,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const status = error instanceof BillingLimitError ? error.status : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

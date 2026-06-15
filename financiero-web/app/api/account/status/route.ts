@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSafeBillingStatus } from '@/lib/billing';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -90,11 +91,12 @@ export async function GET(request: Request) {
       });
     }
 
-    const [profileResult, telegramResult, gmailResult, bankConnectionResult, countResults] = await Promise.all([
+    const [profileResult, telegramResult, gmailResult, bankConnectionResult, billingResult, countResults] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
       supabase.from('gmail_integrations').select('id, email, provider, status, watch_expires_at, updated_at, connected_at, access_token_encrypted, refresh_token_encrypted').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       supabase.from('bank_connections').select('id, provider, institution_name, status, last_sync_at, consent_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
+      getSafeBillingStatus({ supabase, profileId }),
       Promise.all([...scopedTables, ...optionalScopedTables].map((table) => countProfileRows(supabase, table, profileId))),
     ]);
 
@@ -126,6 +128,7 @@ export async function GET(request: Request) {
         oauthConnected: Boolean(integration.access_token_encrypted && integration.refresh_token_encrypted),
       })),
       bankConnections: missingOpenBankingTables ? [] : dedupeBankConnections(bankConnectionResult.data || []),
+      billing: billingResult,
       financialCounts,
       tenantSource: tenant.source,
       errors,

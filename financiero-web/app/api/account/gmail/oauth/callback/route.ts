@@ -1,5 +1,6 @@
 import { createHmac } from 'crypto';
 import { NextResponse } from 'next/server';
+import { assertBillingLimit } from '@/lib/billing';
 import { encryptSecret } from '@/lib/secret-box';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { normalizeProfileId } from '@/lib/tenant-context';
@@ -118,6 +119,33 @@ export async function GET(request: Request) {
 
     if (!gmailEmail) throw new Error('Google no devolvió el correo de Gmail.');
 
+    const normalizedEmail = gmailEmail.toLowerCase();
+    const existingIntegration = await supabase
+      .from('gmail_integrations')
+      .select('id')
+      .eq('profile_id', parsedState.profileId)
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (existingIntegration.error) throw new Error(existingIntegration.error.message);
+
+    if (!existingIntegration.data?.id) {
+      const { count, error: countError } = await supabase
+        .from('gmail_integrations')
+        .select('id', { count: 'exact', head: true })
+        .eq('profile_id', parsedState.profileId)
+        .eq('status', 'active');
+
+      if (countError) throw new Error(countError.message);
+
+      await assertBillingLimit({
+        supabase,
+        profileId: parsedState.profileId,
+        resource: 'gmailIntegrations',
+        currentCount: count || 0,
+      });
+    }
+
     const now = new Date();
     const expiresAt = token.expires_in ? new Date(now.getTime() + token.expires_in * 1000).toISOString() : null;
 
@@ -126,7 +154,7 @@ export async function GET(request: Request) {
       .upsert(
         {
           profile_id: parsedState.profileId,
-          email: gmailEmail.toLowerCase(),
+          email: normalizedEmail,
           provider: 'gmail',
           status: 'active',
           history_id: gmailProfile.historyId || null,

@@ -21,6 +21,7 @@
     "sql:multi-user": "node scripts/print-launch-sql.mjs --multi-user",
     "sql:open-banking": "node scripts/print-launch-sql.mjs --open-banking",
     "sql:classification-rules": "node scripts/print-launch-sql.mjs --classification-rules",
+    "sql:billing": "node scripts/print-launch-sql.mjs --billing",
     "sql:saas-audit": "node scripts/print-saas-audit-sql.mjs"
   },
   "dependencies": {
@@ -28,7 +29,8 @@
     "@supabase/supabase-js": "^2.106.2",
     "next": "16.2.7",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "stripe": "^22.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

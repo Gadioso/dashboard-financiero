@@ -12,6 +12,9 @@ const requiredEnv = {
   telegramNotifyChat: 'TELEGRAM_NOTIFY_CHAT_ID',
   emailIngest: 'EMAIL_INGEST_SECRET',
   gemini: 'GEMINI_API_KEY',
+  stripeSecret: 'STRIPE_SECRET_KEY',
+  stripeWebhook: 'STRIPE_WEBHOOK_SECRET',
+  stripePremiumPrice: 'STRIPE_PRICE_PREMIUM_MONTHLY',
 };
 
 function envConfigured() {

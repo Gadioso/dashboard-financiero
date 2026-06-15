@@ -8,6 +8,8 @@ const mode = process.argv.includes('--multi-user')
     ? 'open-banking'
     : process.argv.includes('--classification-rules')
       ? 'classification-rules'
+      : process.argv.includes('--billing')
+        ? 'billing'
     : 'private-v1';
 
 const migrationSets = {
@@ -30,6 +32,9 @@ const migrationSets = {
   ],
   'classification-rules': [
     '20260614_reclassify_tools_as_investments.sql',
+  ],
+  'billing': [
+    '20260615_billing_foundation.sql',
   ],
 };
 

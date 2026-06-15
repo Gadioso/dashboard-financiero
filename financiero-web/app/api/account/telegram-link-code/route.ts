@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
+import { assertBillingLimit, BillingLimitError } from '@/lib/billing';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
@@ -22,6 +23,22 @@ export async function POST(request: Request) {
     if (!tenant.profileId) {
       return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
+
+    const { count, error: countError } = await supabase
+      .from('telegram_accounts')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_id', tenant.profileId);
+
+    if (countError) {
+      return NextResponse.json({ success: false, error: countError.message }, { status: 500 });
+    }
+
+    await assertBillingLimit({
+      supabase,
+      profileId: tenant.profileId,
+      resource: 'telegramAccounts',
+      currentCount: count || 0,
+    });
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     let code = createCode();
@@ -63,6 +80,7 @@ export async function POST(request: Request) {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const status = error instanceof BillingLimitError ? error.status : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }
