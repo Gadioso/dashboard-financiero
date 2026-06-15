@@ -150,6 +150,14 @@ Puedes consultar tus movimientos de forma gratuita las veces que quieras:
 • Desde tu cuenta`,
     expected: null,
   },
+  {
+    name: 'MSI promo is not a movement',
+    raw: `Santander México
+Terminales Clip
+Haz compras mayores de $2,500 y difiere a MSI con tu Tarjeta de Crédito Santander.
+Conoce los beneficios de tu banco Santander.`,
+    expected: null,
+  },
 ];
 
 const results = cases.map((testCase) => {

@@ -20,6 +20,11 @@ function esTextoInformativoSantander(concepto: string) {
   return /\b(puedes consultar tus movimientos|desde tu celular|superm[oó]vil|consulta tus movimientos|servicio de alertas)\b/i.test(concepto);
 }
 
+function esTextoPromocionalSantander(texto: string) {
+  return /\b(msi|meses\s+sin\s+intereses|difiere|diferir|haz\s+compras|compras\s+mayores|promoci[oó]n|oferta|beneficio|bonificaci[oó]n|descuento|participa|contrata|terminales?\s+clip)\b/i.test(texto) &&
+    !/\b(te\s+informamos\s+que\s+se\s+ha\s+realizado\s+una\s+compra|se\s+realiz[oó]\s+una\s+compra|compra\s+en\s+el\s+comercio|cargo\s+realizado|retiro\s+realizado|transferencia\s+recibida|spei\s+recibido)\b/i.test(texto);
+}
+
 function extraerMonto(texto: string) {
   const montoMatch = texto.match(/\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/);
 
@@ -133,6 +138,8 @@ export function parsearCorreoSantander(raw: string): ClasificacionMovimiento | n
   const monto = extraerMonto(texto);
 
   if (!tieneSenalSantander(texto)) return null;
+
+  if (esTextoPromocionalSantander(texto)) return null;
 
   if (!Number.isFinite(monto) || monto <= 0) return null;
 

@@ -114,14 +114,75 @@ export async function obtenerSantanderIngestLogs(supabase: SupabaseClient) {
   return obtenerSantanderIngestLogsPorPerfil(supabase, null);
 }
 
+type SantanderIngestLogRow = {
+  id: string;
+  status?: SantanderIngestLogStatus | null;
+  gasto_id?: string | null;
+  ingreso_id?: string | null;
+  abono_tarjeta_id?: string | null;
+};
+
+async function rowExists({
+  supabase,
+  table,
+  id,
+  profileId,
+}: {
+  supabase: SupabaseClient;
+  table: 'gastos' | 'ingresos' | 'abonos_tarjeta_credito';
+  id?: string | null;
+  profileId?: string | null;
+}) {
+  if (!id) return false;
+
+  const query = supabase
+    .from(table)
+    .select('id')
+    .eq('id', id)
+    .limit(1);
+  const { data, error } = await applyProfileFilter(query, profileId).maybeSingle();
+
+  if (error) return false;
+
+  return Boolean(data?.id);
+}
+
+async function filtrarLogsVisibles({
+  supabase,
+  logs,
+  profileId,
+  limit,
+}: {
+  supabase: SupabaseClient;
+  logs: SantanderIngestLogRow[];
+  profileId?: string | null;
+  limit: number;
+}) {
+  const visibles = [];
+
+  for (const log of logs) {
+    if (log.status !== 'inserted') continue;
+
+    const exists = await rowExists({ supabase, table: 'gastos', id: log.gasto_id, profileId }) ||
+      await rowExists({ supabase, table: 'ingresos', id: log.ingreso_id, profileId }) ||
+      await rowExists({ supabase, table: 'abonos_tarjeta_credito', id: log.abono_tarjeta_id, profileId });
+
+    if (exists) visibles.push(log);
+    if (visibles.length >= limit) break;
+  }
+
+  return visibles;
+}
+
 export async function obtenerSantanderIngestLogsPorPerfil(supabase: SupabaseClient, profileId?: string | null) {
   const selectBase = 'id, created_at, gmail_message_id, subject, status, reason, movimiento_tipo, gasto_id, ingreso_id, abono_tarjeta_id, concepto, monto, categoria, subcategoria, telegram_notified, error';
   const selectWithLatency = `${selectBase}, gmail_received_at, apps_script_detected_at, backend_received_at, telegram_sent_at, ingest_latency_ms, telegram_latency_ms`;
+  const visibleLimit = 6;
   const query = supabase
     .from('santander_ingest_logs')
     .select(selectWithLatency)
     .order('created_at', { ascending: false })
-    .limit(12);
+    .limit(40);
   const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) {
@@ -130,13 +191,18 @@ export async function obtenerSantanderIngestLogsPorPerfil(supabase: SupabaseClie
         .from('santander_ingest_logs')
         .select(selectBase)
         .order('created_at', { ascending: false })
-        .limit(12);
+        .limit(40);
       const fallback = await applyProfileFilter(fallbackQuery, profileId);
 
       if (!fallback.error) {
         return {
           available: true,
-          logs: fallback.data || [],
+          logs: await filtrarLogsVisibles({
+            supabase,
+            logs: fallback.data || [],
+            profileId,
+            limit: visibleLimit,
+          }),
           error: 'Ejecuta la migración de latencia para ver tiempos Gmail/App Script/Telegram.',
         };
       }
@@ -151,7 +217,12 @@ export async function obtenerSantanderIngestLogsPorPerfil(supabase: SupabaseClie
 
   return {
     available: true,
-    logs: data || [],
+    logs: await filtrarLogsVisibles({
+      supabase,
+      logs: data || [],
+      profileId,
+      limit: visibleLimit,
+    }),
     error: null,
   };
 }

@@ -552,53 +552,55 @@ export default function DashboardFinanciero() {
           <div className="mt-4 border-t border-white/10 pt-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-slate-200">Última ingesta bancaria</h3>
-              <span className="text-xs text-slate-500">Últimos {santanderStatus.ingestLogs.logs.length} eventos</span>
+              <span className="text-xs text-slate-500">
+                {santanderStatus.ingestLogs.logs.length
+                  ? `Últimos ${santanderStatus.ingestLogs.logs.length} movimientos`
+                  : 'Sin movimientos visibles'}
+              </span>
             </div>
             {santanderStatus.ingestLogs.error && (
               <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
                 {santanderStatus.ingestLogs.error}
               </p>
             )}
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {santanderStatus.ingestLogs.logs.slice(0, 6).map((log) => {
-                const ingestLatency = formatearDuracionMs(log.ingest_latency_ms);
-                const telegramLatency = formatearDuracionMs(log.telegram_latency_ms);
+            {santanderStatus.ingestLogs.logs.length ? (
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {santanderStatus.ingestLogs.logs.slice(0, 6).map((log) => {
+                  const ingestLatency = formatearDuracionMs(log.ingest_latency_ms);
+                  const telegramLatency = formatearDuracionMs(log.telegram_latency_ms);
 
-                return (
-                  <div key={log.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs text-slate-400">{formatearFecha(log.created_at)}</p>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        log.status === 'inserted'
-                          ? 'bg-emerald-400/10 text-emerald-300'
-                          : log.status === 'duplicate'
-                            ? 'bg-cyan-400/10 text-cyan-300'
-                            : log.status === 'error'
-                              ? 'bg-rose-400/10 text-rose-300'
-                              : 'bg-amber-400/10 text-amber-300'
-                      }`}>
-                        {log.status}
-                      </span>
+                  return (
+                    <div key={log.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs text-slate-400">{formatearFecha(log.created_at)}</p>
+                        <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                          registrado
+                        </span>
+                      </div>
+                      <p className="mt-2 truncate text-sm font-medium text-slate-100">{log.concepto || 'Movimiento bancario'}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
+                        {log.categoria ? `${nombreBolsa(log.categoria)}${log.subcategoria ? ` / ${log.subcategoria}` : ''}` : 'Sin categoría'}
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                        <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-slate-400">
+                          Ingesta {ingestLatency || 'pendiente'}
+                        </span>
+                        <span className={`rounded-lg border px-2 py-1 ${
+                          log.telegram_notified ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-white/[0.03] text-slate-500'
+                        }`}>
+                          Telegram {telegramLatency || (log.telegram_notified ? 'ok' : 'sin aviso')}
+                        </span>
+                      </div>
                     </div>
-                    <p className="mt-2 truncate text-sm font-medium text-slate-100">{log.concepto || log.reason || 'Sin concepto'}</p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
-                      {log.categoria ? `${nombreBolsa(log.categoria)}${log.subcategoria ? ` / ${log.subcategoria}` : ''}` : log.reason || 'Sin categoría'}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                      <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-slate-400">
-                        Ingesta {ingestLatency || 'pendiente'}
-                      </span>
-                      <span className={`rounded-lg border px-2 py-1 ${
-                        log.telegram_notified ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-white/[0.03] text-slate-500'
-                      }`}>
-                        Telegram {telegramLatency || (log.telegram_notified ? 'ok' : 'sin aviso')}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-sm text-slate-400">
+                No hay movimientos bancarios recientes para mostrar.
+              </p>
+            )}
           </div>
         ) : bankStatusReady && santanderStatus?.ingestLogs?.error ? (
           <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
