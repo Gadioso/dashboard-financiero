@@ -32,6 +32,19 @@ function isAuthorizedOpsRequest(request: Request) {
   return getBearerToken(request) === cronSecret;
 }
 
+function logUnauthorizedOpsRequest(request: Request) {
+  const authorization = request.headers.get('authorization') || '';
+  const cronSecret = process.env.CRON_SECRET || '';
+
+  console.warn('ops.error_alerts_unauthorized', {
+    cronSecretConfigured: Boolean(cronSecret),
+    cronSecretLength: cronSecret.length,
+    authorizationHeaderPresent: Boolean(authorization),
+    authorizationPrefixOk: authorization.toLowerCase().startsWith('bearer '),
+    bearerLength: getBearerToken(request).length,
+  });
+}
+
 function formatAlertMessage(events: ErrorEventRow[]) {
   const critical = events.filter((event) => event.severity === 'critical').length;
   const errors = events.filter((event) => event.severity === 'error').length;
@@ -84,6 +97,7 @@ export async function GET(request: Request) {
 
   try {
     if (!isAuthorizedOpsRequest(request)) {
+      logUnauthorizedOpsRequest(request);
       return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
 
