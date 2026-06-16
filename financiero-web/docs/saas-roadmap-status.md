@@ -82,8 +82,9 @@ Estado: base implementada.
 - Logs de errores por usuario en `error_events`.
 - Exportacion JSON por usuario en `GET /api/account/export`.
 - Borrado de datos por usuario en `DELETE /api/account/data`.
+- Monitor de errores y alertas Telegram en `GET /api/ops/error-alerts`.
 - Checklist operativo de backups/restore y rotacion de secrets.
-- Pendiente: alertas automaticas, log drain/Sentry y simulacro periodico de restore.
+- Pendiente: log drain/Sentry y simulacro periodico de restore.
 
 ## Paso 8: Escala
 

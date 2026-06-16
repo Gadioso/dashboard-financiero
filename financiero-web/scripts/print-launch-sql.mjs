@@ -40,6 +40,7 @@ const migrationSets = {
   ],
   'operations': [
     '20260615_operational_security_foundation.sql',
+    '20260616_error_event_alerts.sql',
   ],
 };
 

@@ -14,6 +14,7 @@ Esto crea:
 
 - `audit_events`: acciones relevantes por usuario.
 - `error_events`: errores operativos por usuario.
+- `error_events.alerted_at`: marca de alerta enviada para no repetir avisos.
 - RLS de lectura para que cada usuario vea solo sus propios eventos.
 
 Las escrituras las hacen los endpoints con service role. Si la migracion no existe todavia, la app no se cae; solo omite escribir esos eventos hasta que corras el SQL.
@@ -46,7 +47,25 @@ Los errores quedan en `error_events` con:
 - `severity`: `warning`, `error` o `critical`
 - metadata sin secretos
 
-Siguiente mejora recomendada: conectar alertas automaticas con Sentry, Vercel Log Drains o un job que revise `error_events` criticos.
+## Alertas automaticas
+
+Endpoint protegido:
+
+```http
+GET /api/ops/error-alerts
+Authorization: Bearer <CRON_SECRET>
+```
+
+Tambien puede correr desde Vercel Cron. Revisa errores `error` y `critical` sin `resolved_at` y sin `alerted_at`. Si hay eventos nuevos, manda resumen a Telegram usando:
+
+```bash
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_NOTIFY_CHAT_ID=...
+```
+
+Cuando Telegram responde OK, marca esos eventos con `alerted_at` para evitar avisos repetidos.
+
+Siguiente mejora recomendada: conectar Sentry o Vercel Log Drains para stack traces y alertas fuera de la base de datos.
 
 ## Exportacion de datos
 
@@ -117,4 +136,5 @@ Paso 7 queda en base operativa cuando:
 - Build, lint y secret scan pasan.
 - Exportacion y borrado responden solo con sesion autenticada.
 - Hay checklist de backup/restore y rotacion documentado.
-- Queda programada la siguiente mejora de alertas automaticas.
+- Hay monitor de errores automatico en `/api/ops/error-alerts`.
+- Queda programada la siguiente mejora de Sentry/log drain y simulacro de restore.

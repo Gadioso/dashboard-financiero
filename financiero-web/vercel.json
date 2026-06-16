@@ -3,6 +3,10 @@
     {
       "path": "/api/email/gmail/sync",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/ops/error-alerts",
+      "schedule": "15 13 * * *"
     }
   ]
 }

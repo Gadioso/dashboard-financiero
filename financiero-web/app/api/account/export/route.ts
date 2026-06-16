@@ -24,7 +24,7 @@ const exportTables = [
   { key: 'billing_customers', table: 'billing_customers', select: 'profile_id, stripe_customer_id, email, created_at, updated_at', single: true },
   { key: 'billing_subscriptions', table: 'billing_subscriptions', select: '*' },
   { key: 'audit_events', table: 'audit_events', select: 'id, profile_id, action, resource_type, resource_id, request_method, request_path, metadata, created_at' },
-  { key: 'error_events', table: 'error_events', select: 'id, profile_id, action, request_method, request_path, message, code, severity, metadata, resolved_at, created_at' },
+  { key: 'error_events', table: 'error_events', select: 'id, profile_id, action, request_method, request_path, message, code, severity, metadata, alerted_at, resolved_at, created_at' },
 ] as const;
 
 function missingOptionalTable(error: { code?: string; message?: string } | null) {
