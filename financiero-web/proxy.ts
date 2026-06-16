@@ -30,8 +30,31 @@ function isTrustedWebhook(request: NextRequest) {
   return false;
 }
 
+function getBearerToken(request: NextRequest) {
+  const authorization = request.headers.get('authorization') || '';
+
+  if (!authorization.toLowerCase().startsWith('bearer ')) return '';
+
+  return authorization.slice(7).trim();
+}
+
+function isTrustedServerToServer(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const cronSecret = process.env.CRON_SECRET || '';
+
+  if (!cronSecret) return false;
+  if (pathname !== '/api/email/gmail/sync' && pathname !== '/api/ops/error-alerts') return false;
+
+  return getBearerToken(request) === cronSecret;
+}
+
 export function proxy(request: NextRequest) {
-  if (!dashboardAuthEnabled() || isPublicPath(request.nextUrl.pathname) || isTrustedWebhook(request)) {
+  if (
+    !dashboardAuthEnabled() ||
+    isPublicPath(request.nextUrl.pathname) ||
+    isTrustedWebhook(request) ||
+    isTrustedServerToServer(request)
+  ) {
     return NextResponse.next();
   }
 
