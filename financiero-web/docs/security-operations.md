@@ -65,6 +65,8 @@ TELEGRAM_NOTIFY_CHAT_ID=...
 
 Cuando Telegram responde OK, marca esos eventos con `alerted_at` para evitar avisos repetidos.
 
+Vercel Cron debe enviar `Authorization: Bearer <CRON_SECRET>`. No se confia en `user-agent` para autorizar tareas programadas.
+
 Siguiente mejora recomendada: conectar Sentry o Vercel Log Drains para stack traces y alertas fuera de la base de datos.
 
 ## Exportacion de datos
