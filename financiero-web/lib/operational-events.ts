@@ -68,6 +68,32 @@ function isMissingOperationalTable(error: { message?: string; code?: string } | 
   return error?.code === '42P01' || /schema cache|Could not find|does not exist/i.test(error?.message || '');
 }
 
+async function captureOperationalError({
+  request,
+  profileId,
+  action,
+  error,
+  code,
+  severity,
+}: Pick<ErrorEventInput, 'request' | 'profileId' | 'action' | 'error' | 'code' | 'severity'>) {
+  if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) return;
+
+  const Sentry = await import('@sentry/nextjs');
+  const capturedError = error instanceof Error ? error : new Error(String(error || 'Error desconocido.'));
+
+  Sentry.withScope((scope) => {
+    scope.setLevel(severity === 'critical' ? 'fatal' : severity || 'error');
+    if (action) scope.setTag('operation.action', action);
+    if (code) scope.setTag('operation.code', code);
+    if (profileId) scope.setTag('profile.id', profileId);
+    scope.setContext('request', {
+      method: request?.method || null,
+      path: requestPath(request),
+    });
+    Sentry.captureException(capturedError);
+  });
+}
+
 export async function logAuditEvent({
   supabase,
   request,
@@ -104,6 +130,8 @@ export async function logErrorEvent({
   severity = 'error',
   metadata,
 }: ErrorEventInput) {
+  await captureOperationalError({ request, profileId, action, error, code, severity });
+
   if (!supabase) return;
 
   const message = error instanceof Error ? error.message : String(error || 'Error desconocido.');

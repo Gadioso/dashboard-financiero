@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,4 +36,13 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const sentryConfigured = Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN);
+
+export default sentryConfigured
+  ? withSentryConfig(nextConfig, {
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      silent: !process.env.CI,
+    })
+  : nextConfig;

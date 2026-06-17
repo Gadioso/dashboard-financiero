@@ -83,8 +83,10 @@ Estado: base implementada.
 - Exportacion JSON por usuario en `GET /api/account/export`.
 - Borrado de datos por usuario en `DELETE /api/account/data`.
 - Monitor de errores y alertas Telegram en `GET /api/ops/error-alerts`.
+- Integracion Sentry opcional para cliente, server, edge y errores manejados.
+- Verificador de restore seguro para staging con `npm run restore:verify`.
 - Checklist operativo de backups/restore y rotacion de secrets.
-- Pendiente: log drain/Sentry y simulacro periodico de restore.
+- Pendiente: activar variables de Sentry y ejecutar el primer restore real en staging.
 
 ## Paso 8: Escala
 
