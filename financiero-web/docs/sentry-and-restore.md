@@ -18,6 +18,17 @@ NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.05
 
 `SENTRY_AUTH_TOKEN` se usa durante build para subir source maps. Debe existir solo en Vercel y nunca en git.
 
+Prueba extremo a extremo, protegida por `CRON_SECRET`:
+
+```bash
+curl -s -X POST https://dashboard-financiero-chi.vercel.app/api/ops/sentry-test \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"confirmation":"SENTRY_TEST"}'
+```
+
+La respuesta incluye un `eventId`. El evento debe aparecer en Sentry como `Dashboard Financiero Sentry integration test`.
+
 Privacidad:
 
 - `sendDefaultPii` está desactivado.

@@ -43,7 +43,11 @@ function isTrustedServerToServer(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET || '';
 
   if (!cronSecret) return false;
-  if (pathname !== '/api/email/gmail/sync' && pathname !== '/api/ops/error-alerts') return false;
+  if (
+    pathname !== '/api/email/gmail/sync' &&
+    pathname !== '/api/ops/error-alerts' &&
+    pathname !== '/api/ops/sentry-test'
+  ) return false;
 
   return getBearerToken(request) === cronSecret;
 }
