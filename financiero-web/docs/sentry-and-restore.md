@@ -46,6 +46,8 @@ En `.env.restore.local`:
 STAGING_SUPABASE_URL=...
 STAGING_SUPABASE_SERVICE_ROLE_KEY=...
 PRODUCTION_SUPABASE_URL=...
+PRODUCTION_DATABASE_URL=...
+STAGING_DATABASE_URL=...
 ```
 
 Después de restaurar el backup en staging:
@@ -60,3 +62,11 @@ El script:
 - Comprueba tablas críticas.
 - Reporta conteos sin imprimir filas financieras.
 - Deja una lista de validaciones manuales de login, dashboard y escritura.
+
+## Ejecucion 2026-06-18
+
+- Se genero un dump logico privado de roles, esquema y datos fuera del repositorio.
+- Se restauro en una transaccion sobre un proyecto staging separado.
+- `npm run restore:verify` confirmo las 13 tablas criticas.
+- Los conteos de produccion y staging coincidieron, incluyendo `auth.users`.
+- Los proveedores OAuth y sus callbacks deben configurarse manualmente si se quiere probar login en staging.

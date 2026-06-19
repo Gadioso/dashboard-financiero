@@ -73,7 +73,7 @@ Estado: base implementada.
 
 ## Paso 7: Seguridad y operacion
 
-Estado: base implementada.
+Estado: base operativa completada.
 
 - Rate limit base.
 - Secret scan.
@@ -84,9 +84,10 @@ Estado: base implementada.
 - Borrado de datos por usuario en `DELETE /api/account/data`.
 - Monitor de errores y alertas Telegram en `GET /api/ops/error-alerts`.
 - Integracion Sentry opcional para cliente, server, edge y errores manejados.
+- Sentry activo y verificado extremo a extremo en produccion.
 - Verificador de restore seguro para staging con `npm run restore:verify`.
 - Checklist operativo de backups/restore y rotacion de secrets.
-- Pendiente: activar variables de Sentry y ejecutar el primer restore real en staging.
+- Primer restore logico real ejecutado y verificado en staging el 2026-06-18.
 
 ## Paso 8: Escala
 

@@ -106,6 +106,15 @@ Checklist minimo:
 5. Hacer simulacro trimestral: restaurar backup, correr `npm run data:audit` y validar login + dashboard.
 6. Documentar fecha, backup usado, responsable y resultado del simulacro.
 
+Ultimo simulacro:
+
+- Fecha: 2026-06-18.
+- Metodo: dump logico de roles, esquema y datos con Supabase CLI; restore transaccional con `psql`.
+- Destino: proyecto Supabase staging separado.
+- Resultado: correcto. Coincidieron los conteos de 13 tablas criticas y `auth.users`.
+- Produccion: usada solo como origen de lectura y verificada saludable despues del ejercicio.
+- Pendiente manual de staging: configurar proveedores OAuth antes de probar login externo en ese entorno.
+
 ## Rotacion de secrets
 
 Checklist por secret:
@@ -139,4 +148,4 @@ Paso 7 queda en base operativa cuando:
 - Exportacion y borrado responden solo con sesion autenticada.
 - Hay checklist de backup/restore y rotacion documentado.
 - Hay monitor de errores automatico en `/api/ops/error-alerts`.
-- Queda programada la siguiente mejora de Sentry/log drain y simulacro de restore.
+- Sentry recibe eventos reales de produccion y el restore drill tiene una ejecucion exitosa documentada.
