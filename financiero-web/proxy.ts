@@ -26,6 +26,7 @@ function isTrustedWebhook(request: NextRequest) {
 
   if (pathname === '/api/telegram/webhook') return true;
   if (pathname === '/api/email/santander' && request.method === 'POST') return true;
+  if (pathname === '/api/billing/webhook' && request.method === 'POST') return true;
 
   return false;
 }
