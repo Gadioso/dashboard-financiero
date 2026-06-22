@@ -23,7 +23,8 @@ export type BillingStatus = {
   error?: string;
 };
 
-const activeSubscriptionStatuses = new Set(['active', 'trialing']);
+const activeSubscriptionStatusList = ['active', 'trialing'];
+const activeSubscriptionStatuses = new Set(activeSubscriptionStatusList);
 
 export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
   free: {
@@ -81,13 +82,27 @@ export async function getBillingStatus({
     .eq('profile_id', profileId)
     .maybeSingle();
 
-  const { data: subscription } = await supabase
+  const subscriptionFields = 'plan, status, current_period_end, cancel_at_period_end';
+  const { data: activeSubscription } = await supabase
     .from('billing_subscriptions')
-    .select('plan, status, current_period_end, cancel_at_period_end')
+    .select(subscriptionFields)
     .eq('profile_id', profileId)
+    .in('status', activeSubscriptionStatusList)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const { data: latestSubscription } = activeSubscription
+    ? { data: null }
+    : await supabase
+        .from('billing_subscriptions')
+        .select(subscriptionFields)
+        .eq('profile_id', profileId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+  const subscription = activeSubscription || latestSubscription;
 
   if (!subscription) {
     return {
