@@ -31,6 +31,7 @@ const migrationSets = {
   'open-banking': [
     '20260613_open_banking_foundation.sql',
     '20260614_add_bank_connection_sync_cursor.sql',
+    '20260622_bank_transaction_classification_queue.sql',
   ],
   'classification-rules': [
     '20260614_reclassify_tools_as_investments.sql',

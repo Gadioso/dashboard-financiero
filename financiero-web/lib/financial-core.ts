@@ -302,6 +302,7 @@ export function nombreOrigen(origen: string, subcategoria?: string | null) {
   if (origen === 'Supabase') return 'Supabase';
   if (origen === 'Telegram') return 'Telegram';
   if (origen === 'Web') return 'Web';
+  if (origen === 'Banco') return 'Banco';
 
   return origen;
 }

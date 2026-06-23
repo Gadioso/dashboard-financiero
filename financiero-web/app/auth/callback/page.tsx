@@ -62,8 +62,11 @@ function CallbackHandler() {
   }, [searchParams]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
-      <p className="text-sm text-slate-400">{message}</p>
+    <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
+      <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+        <p className="mt-4 text-sm font-semibold text-slate-600">{message}</p>
+      </section>
     </main>
   );
 }
@@ -72,8 +75,11 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
-          <p className="text-sm text-slate-400">Completando acceso...</p>
+        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
+          <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+            <div className="mx-auto grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+            <p className="mt-4 text-sm font-semibold text-slate-600">Completando acceso...</p>
+          </section>
         </main>
       }
     >

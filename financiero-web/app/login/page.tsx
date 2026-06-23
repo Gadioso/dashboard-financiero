@@ -71,26 +71,60 @@ function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] px-4 text-slate-100">
-      <form onSubmit={(event) => submit(mode === 'account' ? accountAction : 'login', event)} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/75 p-6 shadow-2xl shadow-slate-950/60 backdrop-blur">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Acceso financiero</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Dashboard Financiero</h1>
-        <p className="mt-2 text-sm text-slate-400">
+    <main className="grid min-h-screen bg-[#f5f7fb] text-slate-950 lg:grid-cols-[1fr_480px]">
+      <section className="hidden border-r border-slate-200 bg-white p-10 lg:flex lg:flex-col lg:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+            <div>
+              <p className="text-base font-bold leading-tight">Dashboard</p>
+              <p className="text-base font-bold leading-tight">Financiero</p>
+            </div>
+          </div>
+          <div className="mt-20 max-w-xl">
+            <h1 className="text-5xl font-bold tracking-tight text-slate-950">Control financiero claro para todos tus movimientos.</h1>
+            <p className="mt-5 text-base leading-7 text-slate-500">
+              Entra para ver tu balance, registrar movimientos con IA y mantener separadas tus bolsas Vida, Placeres y Futuro.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {['33/33/33', 'Banco', 'IA'].map((item) => (
+            <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-bold text-slate-900">{item}</p>
+              <p className="mt-1 text-xs text-slate-500">Activo</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="flex min-h-screen items-center justify-center px-4 py-10">
+      <form onSubmit={(event) => submit(mode === 'account' ? accountAction : 'login', event)} className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-6 flex items-center gap-3 lg:hidden">
+          <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+          <div>
+            <p className="font-bold leading-tight">Dashboard</p>
+            <p className="font-bold leading-tight">Financiero</p>
+          </div>
+        </div>
+        <p className="text-sm font-semibold text-blue-700">Acceso financiero</p>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Iniciar sesión</h1>
+        <p className="mt-2 text-sm text-slate-500">
           Entra con tu cuenta para consultar solo tus datos. El token privado queda como acceso de emergencia.
         </p>
 
-        <div className="mt-6 grid grid-cols-2 rounded-xl border border-slate-800 bg-slate-950 p-1">
+        <div className="mt-6 grid grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
           <button
             type="button"
             onClick={() => chooseMode('account')}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${mode === 'account' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-slate-100'}`}
+            className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${mode === 'account' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
           >
             Cuenta
           </button>
           <button
             type="button"
             onClick={() => chooseMode('private')}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${mode === 'private' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-slate-100'}`}
+            className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${mode === 'private' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
           >
             Token privado
           </button>
@@ -98,88 +132,88 @@ function LoginForm() {
 
         {mode === 'account' ? (
           <div className="mt-5 space-y-4">
-            <div className="grid grid-cols-2 rounded-xl border border-slate-800 bg-slate-950 p-1">
+            <div className="grid grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
                 onClick={() => setAccountAction('login')}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'login' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-100'}`}
+                className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'login' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
               >
                 Entrar
               </button>
               <button
                 type="button"
                 onClick={() => setAccountAction('signup')}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'signup' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-100'}`}
+                className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
               >
                 Crear cuenta
               </button>
             </div>
-            <label className="block text-sm font-medium text-slate-300">
+            <label className="block text-sm font-medium text-slate-600">
               Email
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
                 autoComplete="email"
-                className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
                 placeholder="tu@email.com"
               />
             </label>
-            <label className="block text-sm font-medium text-slate-300">
+            <label className="block text-sm font-medium text-slate-600">
               Contraseña
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
                 autoComplete="current-password"
-                className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
                 placeholder="Mínimo 8 caracteres"
               />
             </label>
             {accountAction === 'signup' && (
-              <label className="block text-sm font-medium text-slate-300">
+              <label className="block text-sm font-medium text-slate-600">
                 Nombre completo
                 <input
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
                   type="text"
                   autoComplete="name"
-                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
                   placeholder="Tu nombre"
                 />
               </label>
             )}
           </div>
         ) : (
-          <label className="mt-5 block text-sm font-medium text-slate-300">
+          <label className="mt-5 block text-sm font-medium text-slate-600">
             Token de acceso
             <input
               value={token}
               onChange={(event) => setToken(event.target.value)}
               type="password"
               autoComplete="current-password"
-              className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+              className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
               placeholder="DASHBOARD_ACCESS_TOKEN"
             />
           </label>
         )}
 
-        {(error || routeError) && <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error || routeError}</p>}
-        {message && <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{message}</p>}
+        {(error || routeError) && <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error || routeError}</p>}
+        {message && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
 
         {mode === 'account' && (
           <>
             <div className="my-5 flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-800" />
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">OAuth</span>
-              <div className="h-px flex-1 bg-slate-800" />
+              <div className="h-px flex-1 bg-slate-200" />
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">OAuth</span>
+              <div className="h-px flex-1 bg-slate-200" />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => startOAuth('google')}
                 disabled={loading}
-                className="rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Google
               </button>
@@ -187,7 +221,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => startOAuth('github')}
                 disabled={loading}
-                className="rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 GitHub
               </button>
@@ -198,15 +232,16 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading || (mode === 'private' ? !token.trim() : !email.trim() || password.length < 8)}
-          className="mt-5 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? 'Entrando...' : mode === 'account' && accountAction === 'signup' ? 'Crear cuenta' : 'Entrar'}
         </button>
         <div className="mt-5 flex justify-center gap-4 text-xs text-slate-500">
-          <a href="/privacy" className="hover:text-slate-300">Privacidad</a>
-          <a href="/terms" className="hover:text-slate-300">Terminos</a>
+          <a href="/privacy" className="hover:text-blue-700">Privacidad</a>
+          <a href="/terms" className="hover:text-blue-700">Terminos</a>
         </div>
       </form>
+      </section>
     </main>
   );
 }
@@ -215,8 +250,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
-          <p className="text-sm text-slate-400">Cargando acceso...</p>
+        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
+          <p className="text-sm text-slate-500">Cargando acceso...</p>
         </main>
       }
     >

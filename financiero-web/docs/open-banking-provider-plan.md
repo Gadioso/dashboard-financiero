@@ -64,5 +64,7 @@ Todas usan `profile_id` y RLS con `auth.uid()`.
 3. Motor comun:
    - normalizar montos y fechas
    - deduplicar por `connection_id + provider_transaction_id`
-   - mandar transacciones nuevas al clasificador actual
+   - mandar transacciones nuevas al clasificador actual con `POST /api/bank/transactions/classify`
    - crear `gastos` / `ingresos` con `profile_id`
+   - procesar en lotes chicos con `BANK_CLASSIFICATION_BATCH_SIZE` para backpressure
+   - auditar conteos de procesadas, clasificadas, fallidas y pendientes restantes

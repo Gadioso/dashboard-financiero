@@ -84,8 +84,8 @@ function parseMoney(value: string) {
 
 function statusTone(done: boolean) {
   return done
-    ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200'
-    : 'border-amber-400/25 bg-amber-400/10 text-amber-100';
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
 export default function OnboardingClient() {
@@ -405,34 +405,37 @@ export default function OnboardingClient() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] px-4 py-8 text-slate-100">
+    <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-slate-950">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+        <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-300">Onboarding</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">Configura tu dashboard</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">
+            <div className="flex items-center gap-3">
+              <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+              <p className="text-sm font-bold text-slate-900">Dashboard Financiero</p>
+            </div>
+            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Configura tu dashboard</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-500">
               Deja lista tu cuenta, presupuesto inicial e integraciones para que tus movimientos queden separados de cualquier otro usuario.
             </p>
           </div>
           <Link
             href="/"
-            className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-400/40 hover:text-emerald-200"
+            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
           >
             Ver dashboard
           </Link>
         </header>
 
-        {error && <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">{error}</p>}
-        {message && <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">{message}</p>}
+        {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
+        {message && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
 
         {!loading && !hasProfile && (
-          <section className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-5">
-            <h2 className="text-lg font-semibold text-amber-100">Necesitas iniciar sesión</h2>
-            <p className="mt-1 text-sm text-amber-100/75">Entra con Google, GitHub o email para crear tu perfil automáticamente.</p>
+          <section className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+            <h2 className="text-lg font-semibold text-amber-900">Necesitas iniciar sesión</h2>
+            <p className="mt-1 text-sm text-amber-700">Entra con Google, GitHub o email para crear tu perfil automáticamente.</p>
             <Link
               href="/login?next=/onboarding"
-              className="mt-4 inline-flex rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400"
+              className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
             >
               Ir a login
             </Link>
@@ -441,54 +444,54 @@ export default function OnboardingClient() {
 
         <section className="grid gap-3 md:grid-cols-5">
           {checklist.map((item) => (
-            <div key={item.label} className={`rounded-2xl border p-4 ${statusTone(item.done)}`}>
+            <div key={item.label} className={`rounded-lg border p-4 shadow-sm ${statusTone(item.done)}`}>
               <p className="text-2xl font-bold">{item.done ? 'OK' : 'Pendiente'}</p>
               <p className="mt-1 text-sm font-semibold">{item.label}</p>
             </div>
           ))}
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-xl font-bold">Estado de configuración</h2>
-              <p className="text-sm text-slate-400">{loading ? 'Leyendo tu cuenta...' : `${completed} de ${checklist.length} pasos listos`}</p>
+              <h2 className="text-xl font-bold text-slate-950">Estado de configuración</h2>
+              <p className="text-sm text-slate-500">{loading ? 'Leyendo tu cuenta...' : `${completed} de ${checklist.length} pasos listos`}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-slate-400">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
               Perfil: {status?.profileId || 'sin sesión'}
             </div>
           </div>
         </section>
 
         <div className="grid gap-6 xl:grid-cols-2">
-          <form onSubmit={saveProfile} className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
-            <h2 className="text-xl font-bold">Perfil y presupuesto</h2>
-            <p className="mt-1 text-sm text-slate-400">El presupuesto inicial se divide en Vida, Placeres y Futuro.</p>
+          <form onSubmit={saveProfile} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-950">Perfil y presupuesto</h2>
+            <p className="mt-1 text-sm text-slate-500">El presupuesto inicial se divide en Vida, Placeres y Futuro.</p>
             <div className="mt-5 grid gap-4">
-              <label className="block text-sm font-medium text-slate-300">
+              <label className="block text-sm font-medium text-slate-600">
                 Nombre
                 <input
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
                   placeholder="Tu nombre"
                 />
               </label>
-              <label className="block text-sm font-medium text-slate-300">
+              <label className="block text-sm font-medium text-slate-600">
                 Meta mensual inicial
                 <input
                   value={monthlyTarget}
                   onChange={(event) => setMonthlyTarget(event.target.value)}
                   inputMode="decimal"
-                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
                   placeholder="60000"
                 />
               </label>
               <div className="grid gap-3 sm:grid-cols-3">
                 {['Vida', 'Placeres', 'Futuro'].map((label) => (
-                  <div key={label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                    <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
-                    <p className="mt-1 text-lg font-bold text-slate-100">{formatCurrency(third)}</p>
+                  <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">{label}</p>
+                    <p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(third)}</p>
                   </div>
                 ))}
               </div>
@@ -496,21 +499,21 @@ export default function OnboardingClient() {
             <button
               type="submit"
               disabled={!hasProfile || savingProfile}
-              className="mt-5 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {savingProfile ? 'Guardando...' : hasInitialBudget ? 'Guardar perfil' : 'Crear presupuesto inicial'}
             </button>
           </form>
 
           <div className="grid gap-6">
-            <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
-              <h2 className="text-xl font-bold">Telegram</h2>
-              <p className="mt-1 text-sm text-slate-400">Genera un código y mándaselo al bot para conectar tu chat sin copiar IDs técnicos.</p>
+            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-950">Telegram</h2>
+              <p className="mt-1 text-sm text-slate-500">Genera un código y mándaselo al bot para conectar tu chat sin copiar IDs técnicos.</p>
               {telegramCode && (
-                <div className="mt-5 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-4">
-                  <p className="text-xs uppercase tracking-wider text-emerald-200/70">Código para Telegram</p>
-                  <p className="mt-2 font-mono text-3xl font-bold text-emerald-100">{telegramCode}</p>
-                  <p className="mt-2 text-sm text-emerald-100/75">
+                <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-xs font-semibold text-emerald-700">Código para Telegram</p>
+                  <p className="mt-2 font-mono text-3xl font-bold text-emerald-900">{telegramCode}</p>
+                  <p className="mt-2 text-sm text-emerald-700">
                     Envíalo al bot tal cual. Expira {telegramExpiresAt ? new Date(telegramExpiresAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'en 15 minutos'}.
                   </p>
                   {telegramDeepLink && (
@@ -518,7 +521,7 @@ export default function OnboardingClient() {
                       href={telegramDeepLink}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-3 inline-flex rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-300/15"
+                      className="mt-3 inline-flex rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
                     >
                       Abrir Telegram
                     </a>
@@ -529,21 +532,21 @@ export default function OnboardingClient() {
                 type="button"
                 onClick={generateTelegramCode}
                 disabled={!hasProfile || linkingTelegram}
-                className="mt-5 w-full rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition-colors hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {linkingTelegram ? 'Generando...' : hasTelegram ? 'Generar otro código' : 'Generar código de Telegram'}
               </button>
             </section>
 
-            <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
-              <h2 className="text-xl font-bold">Banco</h2>
-              <p className="mt-1 text-sm text-slate-400">Elige tu pais y conecta tu banco. La plataforma selecciona automaticamente la conexion adecuada.</p>
-              <label className="mt-5 block text-sm font-medium text-slate-300">
+            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-950">Banco</h2>
+              <p className="mt-1 text-sm text-slate-500">Elige tu pais y conecta tu banco. La plataforma selecciona automaticamente la conexion adecuada.</p>
+              <label className="mt-5 block text-sm font-medium text-slate-600">
                 Pais de tu banco
                 <select
                   value={bankCountry}
                   onChange={(event) => setBankCountry(event.target.value as BankCountryCode)}
-                  className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition-colors focus:border-emerald-500"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
                 >
                   {bankCountryOptions.map((country) => (
                     <option key={country.code} value={country.code}>
@@ -552,8 +555,8 @@ export default function OnboardingClient() {
                   ))}
                 </select>
               </label>
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <p className="text-sm font-semibold text-slate-100">{selectedCountryStatus}</p>
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-semibold text-slate-900">{selectedCountryStatus}</p>
                 <p className="mt-1 text-xs text-slate-500">
                   Tus credenciales bancarias se ingresan en una ventana segura del proveedor autorizado. El dashboard solo recibe acceso de lectura.
                 </p>
@@ -561,7 +564,7 @@ export default function OnboardingClient() {
               {activeBankConnections.length > 0 && (
                 <div className="mt-4 grid gap-2">
                   {activeBankConnections.map((connection) => (
-                    <p key={connection.id} className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                    <p key={connection.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                       Banco conectado: {connection.institution_name || connection.provider}
                     </p>
                   ))}
@@ -570,7 +573,7 @@ export default function OnboardingClient() {
               {activeGmailIntegrations.length > 0 && (
                 <div className="mt-4 grid gap-2">
                   {activeGmailIntegrations.map((integration) => (
-                    <p key={integration.id} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                    <p key={integration.id} className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
                       Correo bancario {integration.oauthConnected ? 'conectado' : 'vinculado, pendiente de autorizacion'}: {integration.email}
                     </p>
                   ))}
@@ -580,7 +583,7 @@ export default function OnboardingClient() {
                 type="button"
                 onClick={connectSelectedBank}
                 disabled={!hasProfile || !canConnectSelectedCountry || connectingPlaid}
-                className="mt-5 w-full rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {connectingPlaid ? 'Abriendo conexion bancaria...' : 'Conectar mi banco'}
               </button>
@@ -588,7 +591,7 @@ export default function OnboardingClient() {
                 type="button"
                 onClick={syncBankNow}
                 disabled={!hasProfile || !hasBankConnection || syncingBank}
-                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-300/30 hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {syncingBank ? 'Sincronizando banco...' : 'Sincronizar banco ahora'}
               </button>
@@ -596,7 +599,7 @@ export default function OnboardingClient() {
                 type="button"
                 onClick={startGmailOAuth}
                 disabled={!hasProfile}
-                className="mt-3 w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {hasGmail ? 'Conectar otro correo bancario' : 'Conectar correo bancario'}
               </button>
@@ -604,7 +607,7 @@ export default function OnboardingClient() {
                 type="button"
                 onClick={syncGmailNow}
                 disabled={!hasProfile || !hasGmailOAuth || syncingGmail}
-                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-300/30 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {syncingGmail ? 'Sincronizando...' : 'Sincronizar Gmail ahora'}
               </button>

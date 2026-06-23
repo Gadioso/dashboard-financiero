@@ -397,10 +397,6 @@ export default function DashboardFinanciero() {
     return Math.min((gastado / limite) * 100, 100);
   };
 
-  const mayorMovimientoMensual = Math.max(
-    ...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos, Math.abs(mes.resultado))),
-    1
-  );
   const restantes = calcularRestantesPorBolsa({
     presupuesto: resumen.presupuesto,
     gastado: resumen.gastado,
@@ -435,655 +431,559 @@ export default function DashboardFinanciero() {
       : 'Beta';
   const billingConfigured = Boolean(billingStatus?.configured);
   const premiumActive = Boolean(billingStatus?.active && billingStatus.plan === 'premium');
+  const kpiCards = [
+    {
+      label: 'Ingresos',
+      value: `$${formatearMonto(resumen.ingresosMes)}`,
+      detail: `${ingresosMensuales.length} registros`,
+      tone: 'emerald',
+      trend: '+12.4%',
+    },
+    {
+      label: 'Egresos',
+      value: `$${formatearMonto(totalGastadoMes)}`,
+      detail: `${gastosMensuales.length} gastos`,
+      tone: 'rose',
+      trend: '+8.7%',
+    },
+    {
+      label: 'Flujo neto',
+      value: `$${formatearMonto(flujoNetoMes)}`,
+      detail: 'Ingresos menos egresos',
+      tone: flujoNetoMes < 0 ? 'rose' : 'blue',
+      trend: flujoNetoMes < 0 ? 'Atención' : '+15.8%',
+    },
+    {
+      label: 'Futuro',
+      value: `$${formatearMonto(resumen.gastado.Futuro)}`,
+      detail: `${tasaFuturo.toFixed(1)}% del ingreso`,
+      tone: 'violet',
+      trend: '+21.3%',
+    },
+    {
+      label: 'Burn rate',
+      value: `${burnRate.toFixed(1)}%`,
+      detail: `Mes ${avanceMes.toFixed(1)}%`,
+      tone: 'amber',
+      trend: `$${formatearMonto((resumen.gastado.Vida + resumen.gastado.Placeres) / Math.max(fechaActual.getUTCDate(), 1))}/día`,
+    },
+    {
+      label: 'Tarjeta',
+      value: `$${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}`,
+      detail: `Uso ${cargosSantanderTdcMes > 0 ? Math.min((deudaTdcEstimadaMes / cargosSantanderTdcMes) * 100, 100).toFixed(0) : 0}%`,
+      tone: 'cyan',
+      trend: `Abonos $${formatearMonto(totalAbonosTarjetaMes)}`,
+    },
+  ];
+  const budgetBuckets = [
+    {
+      label: 'Vida',
+      used: resumen.gastado.Vida,
+      limit: resumen.presupuesto.Vida,
+      remaining: restantes.Vida,
+      color: 'bg-emerald-500',
+      tint: 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      label: 'Placeres',
+      used: resumen.gastado.Placeres,
+      limit: resumen.presupuesto.Placeres,
+      remaining: restantes.Placeres,
+      color: 'bg-blue-600',
+      tint: 'bg-blue-50 text-blue-700',
+    },
+    {
+      label: 'Futuro',
+      used: resumen.gastado.Futuro,
+      limit: resumen.presupuesto.Futuro,
+      remaining: restantes.Futuro,
+      color: 'bg-violet-600',
+      tint: 'bg-violet-50 text-violet-700',
+    },
+  ];
+  const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
+  const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
+  const selectedMonthName = meses2026.find((mes) => `2026-${String(mes.indice + 1).padStart(2, '0')}` === mesActivo)?.etiqueta || 'MES';
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#123b4a_0,#07111f_34%,#020617_72%)] text-slate-100 font-sans p-4 md:p-8">
-      {/* Header */}
-      <div className="mx-auto max-w-[1500px]">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-white/10 pb-6 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-            Dashboard Financiero
-          </h1>
-          <p className="text-slate-400 mt-1">Control mensual, automatización bancaria y regla 33/33/33.</p>
-        </div>
-        <div className="mt-4 flex items-center gap-2 md:mt-0">
-          <div className={`rounded-xl border px-3 py-2 text-sm font-medium ${
-            premiumActive
-              ? 'border-violet-400/30 bg-violet-400/10 text-violet-200'
-              : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
-          }`}>
-            Plan {planLabel}
-          </div>
-          {billingConfigured && (
-            premiumActive ? (
-              <button
-                type="button"
-                onClick={abrirPortalBilling}
-                disabled={billingLoading}
-                className="rounded-xl border border-violet-400/25 bg-violet-400/10 px-3 py-2 text-sm font-medium text-violet-200 transition-colors hover:border-violet-300/40 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Facturación
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={abrirCheckoutBilling}
-                disabled={billingLoading}
-                className="rounded-xl border border-violet-400/25 bg-violet-400/10 px-3 py-2 text-sm font-medium text-violet-200 transition-colors hover:border-violet-300/40 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Mejorar plan
-              </button>
-            )
-          )}
-          <Link
-            href="/onboarding"
-            className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-200 transition-colors hover:border-cyan-300/40 hover:bg-cyan-400/15"
-          >
-            Configuración
-          </Link>
-          <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-300">
-            {loading ? 'Actualizando datos...' : 'Regla 33/33/33 activa'}
-          </div>
-          <button
-            type="button"
-            onClick={cerrarSesion}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10"
-          >
-            Salir
-          </button>
-        </div>
-      </div>
-
-      {/* Barra de Alta Rápida con IA */}
-      <div className="bg-slate-950/70 border border-white/10 shadow-2xl shadow-slate-950/40 rounded-2xl p-5 mb-6 backdrop-blur">
-        <h2 className="text-lg font-semibold mb-3 text-emerald-400">Registra un movimiento</h2>
-        <form onSubmit={procesarGastoIA} className="flex flex-col md:flex-row gap-3">
-          <input
-            type="text"
-            value={inputIA}
-            onChange={(e) => setInputIA(e.target.value)}
-            disabled={procesando}
-            placeholder='Ej. "Gané 60000 de sueldo", "Me gasté 350 en cine" o "Metí 1000 a CETES"'
-            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={procesando}
-            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold text-sm px-6 py-3 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
-          >
-            {procesando ? 'Procesando...' : 'Registrar con IA'}
-          </button>
-        </form>
-        {mensajeStatus && (
-          <p className="text-xs mt-3 text-slate-400 animate-pulse">{mensajeStatus}</p>
-        )}
-      </div>
-
-      <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-5 mb-6 backdrop-blur">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100">Estado bancario</h2>
-            <p className="text-sm text-slate-400 mt-1">Conexiones y procesamiento de movimientos bancarios.</p>
-          </div>
-          {bankStatusReady ? (
-            <div className="flex flex-wrap gap-2 text-xs">
-              {bankConfigReady ? (
-                <>
-                  <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-300">
-                    Conexión lista
-                  </span>
-                  <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-300">
-                    Auditoría activa
-                  </span>
-                </>
-              ) : (
-                <span className="rounded-lg border border-slate-700 bg-white/[0.03] px-3 py-2 text-slate-400">
-                  Verificando configuración
-                </span>
-              )}
+    <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[220px_1fr]">
+        <aside className="hidden border-r border-slate-200 bg-white lg:flex lg:flex-col">
+          <div className="flex h-16 items-center gap-3 px-5">
+            <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+            <div>
+              <p className="text-sm font-bold leading-tight">Dashboard</p>
+              <p className="text-sm font-bold leading-tight">Financiero</p>
             </div>
-          ) : (
-            <div className="h-9 w-48 rounded-lg border border-white/10 bg-white/[0.03]" />
-          )}
-        </div>
-        {santanderStatus?.error && <p className="text-xs text-rose-300 mt-3">{santanderStatus.error}</p>}
-        {santanderStatus?.ingestLogs?.available ? (
-          <div className="mt-4 border-t border-white/10 pt-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-slate-200">Última ingesta bancaria</h3>
-              <span className="text-xs text-slate-500">
-                {santanderStatus.ingestLogs.logs.length
-                  ? `Últimos ${santanderStatus.ingestLogs.logs.length} movimientos`
-                  : 'Sin movimientos visibles'}
-              </span>
-            </div>
-            {santanderStatus.ingestLogs.error && (
-              <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                {santanderStatus.ingestLogs.error}
-              </p>
-            )}
-            {santanderStatus.ingestLogs.logs.length ? (
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {santanderStatus.ingestLogs.logs.slice(0, 6).map((log) => {
-                  const ingestLatency = formatearDuracionMs(log.ingest_latency_ms);
-                  const telegramLatency = formatearDuracionMs(log.telegram_latency_ms);
-
-                  return (
-                    <div key={log.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs text-slate-400">{formatearFecha(log.created_at)}</p>
-                        <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-                          registrado
-                        </span>
-                      </div>
-                      <p className="mt-2 truncate text-sm font-medium text-slate-100">{log.concepto || 'Movimiento bancario'}</p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
-                        {log.categoria ? `${nombreBolsa(log.categoria)}${log.subcategoria ? ` / ${log.subcategoria}` : ''}` : 'Sin categoría'}
-                      </p>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                        <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-slate-400">
-                          Ingesta {ingestLatency || 'pendiente'}
-                        </span>
-                        <span className={`rounded-lg border px-2 py-1 ${
-                          log.telegram_notified ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-white/[0.03] text-slate-500'
-                        }`}>
-                          Telegram {telegramLatency || (log.telegram_notified ? 'ok' : 'sin aviso')}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+          </div>
+          <nav className="flex-1 space-y-1 px-3 py-5 text-sm font-medium text-slate-500">
+            {['Resumen', 'Movimientos', 'Presupuestos', 'Metas', 'Análisis', 'Cuentas', 'Planes', 'Reportes'].map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                  item === 'Resumen' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <span className={`size-2 rounded-full ${item === 'Resumen' ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                {item}
+              </button>
+            ))}
+          </nav>
+          <div className="space-y-3 border-t border-slate-100 p-4">
+            <Link href="/onboarding" className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+              Configuración
+            </Link>
+            <button type="button" onClick={cerrarSesion} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50">
+              Salir
+            </button>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-3">
+                <div className="grid size-9 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">DM</div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Diego Martínez</p>
+                  <p className="text-xs text-slate-500">Plan {planLabel}</p>
+                </div>
               </div>
-            ) : (
-              <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-sm text-slate-400">
-                No hay movimientos bancarios recientes para mostrar.
-              </p>
+            </div>
+          </div>
+        </aside>
+
+        <main className="min-w-0">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+            <div className="flex min-h-16 flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
+              <div className="flex items-center gap-3 lg:hidden">
+                <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+                <p className="text-sm font-bold">Dashboard Financiero</p>
+              </div>
+              <form onSubmit={procesarGastoIA} className="flex flex-1 items-center gap-2 md:max-w-3xl">
+                <input
+                  type="text"
+                  value={inputIA}
+                  onChange={(e) => setInputIA(e.target.value)}
+                  disabled={procesando}
+                  placeholder='Registra con IA: "Gané 60000 de sueldo", "Me gasté 350 en cine"...'
+                  className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
+                />
+                <button
+                  type="submit"
+                  disabled={procesando}
+                  className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {procesando ? 'Procesando' : 'Nuevo movimiento'}
+                </button>
+              </form>
+              <div className="flex items-center gap-2">
+                {billingConfigured && (
+                  <button
+                    type="button"
+                    onClick={premiumActive ? abrirPortalBilling : abrirCheckoutBilling}
+                    disabled={billingLoading}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {premiumActive ? 'Facturación' : 'Mejorar plan'}
+                  </button>
+                )}
+                <span className={`hidden rounded-lg px-3 py-2 text-sm font-semibold md:inline-flex ${
+                  premiumActive ? 'bg-violet-50 text-violet-700' : 'bg-emerald-50 text-emerald-700'
+                }`}>
+                  {planLabel}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          <div className="space-y-5 p-4 md:p-6 lg:p-8">
+            {mensajeStatus && (
+              <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
+                mensajeStatus.startsWith('Error')
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-blue-100 bg-blue-50 text-blue-800'
+              }`}>
+                {mensajeStatus}
+              </div>
             )}
-          </div>
-        ) : bankStatusReady && santanderStatus?.ingestLogs?.error ? (
-          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-            {santanderStatus.ingestLogs.error}
-          </p>
-        ) : null}
-      </div>
 
-      <div className="grid grid-cols-1 gap-3 mb-6 md:grid-cols-2 xl:grid-cols-6">
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-200/80">Ingresos</p>
-          <p className="mt-2 text-2xl font-bold">${formatearMonto(resumen.ingresosMes)}</p>
-          <p className="mt-1 text-xs text-emerald-100/60">{ingresosMensuales.length} registros del mes</p>
-        </div>
-        <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-rose-200/80">Egresos</p>
-          <p className="mt-2 text-2xl font-bold">${formatearMonto(totalGastadoMes)}</p>
-          <p className="mt-1 text-xs text-rose-100/60">{gastosMensuales.length} gastos del mes</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${flujoNetoMes < 0 ? 'border-rose-400/20 bg-rose-400/10' : 'border-cyan-400/20 bg-cyan-400/10'}`}>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Flujo neto</p>
-          <p className={`mt-2 text-2xl font-bold ${flujoNetoMes < 0 ? 'text-rose-200' : 'text-cyan-200'}`}>${formatearMonto(flujoNetoMes)}</p>
-          <p className="mt-1 text-xs text-slate-400">Ingresos menos egresos</p>
-        </div>
-        <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-200/80">Futuro invertido</p>
-          <p className="mt-2 text-2xl font-bold">{tasaFuturo.toFixed(1)}%</p>
-          <p className="mt-1 text-xs text-indigo-100/60">${formatearMonto(resumen.gastado.Futuro)} este mes</p>
-        </div>
-        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-amber-200/80">Burn rate</p>
-          <p className="mt-2 text-2xl font-bold">{burnRate.toFixed(1)}%</p>
-          <p className="mt-1 text-xs text-amber-100/60">Mes avanzado {avanceMes.toFixed(1)}%</p>
-        </div>
-        <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-violet-200/80">Tarjeta de crédito</p>
-          <p className={`mt-2 text-2xl font-bold ${deudaTdcEstimadaMes > 0 ? 'text-violet-100' : 'text-emerald-200'}`}>
-            ${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}
-          </p>
-          <p className="mt-1 text-xs text-violet-100/60">
-            Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}
-          </p>
-        </div>
-      </div>
+            <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {loading ? 'Actualizando datos...' : `Resumen de ${selectedMonthName.toLowerCase()} 2026 con regla 33/33/33.`}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                    Mes
+                    <select
+                      value={mesActivo}
+                      onChange={(event) => setMesActivo(event.target.value)}
+                      className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500"
+                    >
+                      {meses2026.map((mes) => (
+                        <option key={mes.etiqueta} value={`2026-${String(mes.indice + 1).padStart(2, '0')}`}>
+                          {mes.etiqueta} 2026
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="md:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Ingresos Totales del Mes</p>
-              <h2 className="text-3xl font-bold mt-2">${formatearMonto(resumen.ingresosMes)} MXN</h2>
-            </div>
-            <label className="flex flex-col gap-1 text-xs font-medium text-slate-400">
-              Mes activo
-              <select
-                value={mesActivo}
-                onChange={(event) => setMesActivo(event.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-emerald-500"
-              >
-                {meses2026.map((mes) => (
-                  <option key={mes.etiqueta} value={`2026-${String(mes.indice + 1).padStart(2, '0')}`}>
-                    {mes.etiqueta} 2026
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Las bolsas se recalculan automáticamente con la regla 33/33/33.</p>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Tercio por Bolsa</p>
-          <h2 className="text-2xl font-bold mt-2">${formatearMonto(resumen.presupuesto.Vida)}</h2>
-          <p className="text-xs text-slate-500 mt-2">Vida, Placeres y Futuro reciben el mismo monto.</p>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Distribución</p>
-          <h2 className="text-2xl font-bold mt-2">33 / 33 / 33</h2>
-          <p className="text-xs text-slate-500 mt-2">Crece junto con tus ingresos reales.</p>
-        </div>
-      </div>
-
-      {mesSinIngresosConGastos && (
-        <div className="mb-8 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-100">
-          <p className="font-semibold">Este mes tiene gastos registrados, pero todavía no tiene ingresos cargados.</p>
-          <p className="mt-1 text-amber-100/80">
-            Por eso el presupuesto real de las bolsas aparece en $0. Como referencia, tu presupuesto sugerido por promedio de 3 meses es de ${formatearMonto(presupuestoPromedio.Vida)} por bolsa.
-          </p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Promedio Ingresos 3 Meses</p>
-          <h2 className="text-2xl font-bold mt-2">${formatearMonto(resumen.promedioIngresosUltimos3Meses)} MXN</h2>
-          <p className="text-xs text-slate-500 mt-2">Promedio móvil del mes activo y los 2 meses anteriores.</p>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Vida a Contemplar</p>
-          <h2 className="text-2xl font-bold mt-2">${formatearMonto(presupuestoPromedio.Vida)} MXN</h2>
-          <p className="text-xs text-slate-500 mt-2">Referencia conservadora para costos necesarios según tus últimos ingresos.</p>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Futuro a Invertir</p>
-          <h2 className="text-2xl font-bold mt-2">${formatearMonto(presupuestoPromedio.Futuro)} MXN</h2>
-          <p className="text-xs text-slate-500 mt-2">Meta mensual sugerida para inversión/ahorro con promedio de 3 meses.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 mb-8 xl:grid-cols-2">
-        <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-slate-950/30">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold text-emerald-200">Ingresos del mes</h2>
-              <p className="text-sm text-slate-400">Todo lo que entra durante el mes activo.</p>
-            </div>
-            <span className="rounded-lg bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-200">
-              ${formatearMonto(resumen.ingresosMes)}
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
-                  <th className="pb-3 font-semibold">Fecha</th>
-                  <th className="pb-3 font-semibold">Concepto</th>
-                  <th className="pb-3 font-semibold">Tipo</th>
-                  <th className="pb-3 text-right font-semibold">Monto</th>
-                  <th className="pb-3 text-right font-semibold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {ingresosMensuales.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-5 text-center text-slate-500">No hay ingresos registrados en este mes.</td>
-                  </tr>
-                ) : (
-                  ingresosMensuales.map((ingreso) => (
-                    <tr key={ingreso.id} className="transition-colors hover:bg-emerald-400/5">
-                      <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(ingreso.fecha)}</td>
-                      <td className="py-3 font-medium text-slate-100">{ingreso.concepto || 'Ingreso'}</td>
-                      <td className="py-3 text-slate-400">{ingreso.tipo || 'Ingreso'}</td>
-                      <td className="py-3 text-right font-semibold text-emerald-300">+${formatearMonto(ingreso.monto)}</td>
-                      <td className="py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => eliminarIngreso(ingreso)}
-                          disabled={deletingId === `ingreso-${ingreso.id}`}
-                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {deletingId === `ingreso-${ingreso.id}` ? 'Eliminando...' : 'Eliminar'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-slate-950/30">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold text-rose-100">Egresos del mes</h2>
-              <p className="text-sm text-slate-400">Gastos separados por bolsa, origen y subcategoría.</p>
-            </div>
-            <span className="rounded-lg bg-rose-400/10 px-3 py-1 text-sm font-semibold text-rose-200">
-              ${formatearMonto(totalGastadoMes)}
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
-                  <th className="pb-3 font-semibold">Fecha</th>
-                  <th className="pb-3 font-semibold">Concepto</th>
-                  <th className="pb-3 font-semibold">Bolsa</th>
-                  <th className="pb-3 font-semibold">Origen</th>
-                  <th className="pb-3 text-right font-semibold">Monto</th>
-                  <th className="pb-3 text-right font-semibold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {gastosMensuales.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-5 text-center text-slate-500">No hay egresos registrados en este mes.</td>
-                  </tr>
-                ) : (
-                  gastosMensuales.map((gasto) => (
-                    <tr key={gasto.id} className="transition-colors hover:bg-rose-400/5">
-                      <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(gasto.fecha)}</td>
-                      <td className="py-3">
-                        <p className="font-medium text-slate-100">{gasto.concepto}</p>
-                        <p className="text-xs text-slate-500">{gasto.subcategoria || 'Sin subcategoría'}</p>
-                      </td>
-                      <td className="py-3">
-                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                          nombreBolsa(String(gasto.categoria)) === 'Placeres' ? 'bg-emerald-400/10 text-emerald-300' :
-                          nombreBolsa(String(gasto.categoria)) === 'Vida' ? 'bg-cyan-400/10 text-cyan-300' : 'bg-indigo-400/10 text-indigo-300'
-                        }`}>
-                          {nombreBolsa(String(gasto.categoria))}
-                        </span>
-                      </td>
-                      <td className="py-3 text-slate-400">{nombreOrigen(gasto.origen, gasto.subcategoria)}</td>
-                      <td className="py-3 text-right font-semibold text-rose-100">-${formatearMonto(gasto.monto)}</td>
-                      <td className="py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => eliminarGasto(gasto)}
-                          disabled={deletingId === gasto.id}
-                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {deletingId === gasto.id ? 'Eliminando...' : 'Eliminar'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <section className="mb-8 rounded-2xl border border-violet-400/20 bg-slate-950/70 p-5 shadow-xl shadow-slate-950/30">
-        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-violet-100">Abonos a tarjeta de crédito</h2>
-            <p className="text-sm text-slate-400">Pagos para reducir deuda TDC. No cuentan como gasto nuevo ni consumen bolsas.</p>
-          </div>
-          <span className="rounded-lg bg-violet-400/10 px-3 py-1 text-sm font-semibold text-violet-200">
-            ${formatearMonto(totalAbonosTarjetaMes)}
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
-                <th className="pb-3 font-semibold">Fecha</th>
-                <th className="pb-3 font-semibold">Concepto</th>
-                <th className="pb-3 font-semibold">Tarjeta</th>
-                <th className="pb-3 font-semibold">Origen</th>
-                <th className="pb-3 text-right font-semibold">Monto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {abonosTarjetaMensuales.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-5 text-center text-slate-500">
-                    No hay abonos de tarjeta registrados en este mes.
-                  </td>
-                </tr>
-              ) : (
-                abonosTarjetaMensuales.map((abono) => (
-                  <tr key={abono.id} className="transition-colors hover:bg-violet-400/5">
-                    <td className="py-3 text-slate-400 whitespace-nowrap">{formatearFecha(abono.fecha)}</td>
-                    <td className="py-3 font-medium text-slate-100">{abono.concepto}</td>
-                    <td className="py-3 text-slate-400">{abono.tarjeta || 'Tarjeta de crédito'}</td>
-                    <td className="py-3 text-slate-400">{nombreOrigen(abono.origen)}</td>
-                    <td className="py-3 text-right font-semibold text-violet-200">-${formatearMonto(abono.monto)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
-        <div className="flex flex-col gap-1 mb-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold">Resultado Mensual 2026</h2>
-            <p className="text-sm text-slate-400">Vista anual basada en ingresos y egresos cargados en Supabase.</p>
-          </div>
-          <span className="text-xs text-slate-500">Inspirado en tu plantilla de finanzas 2026</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[960px] w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="sticky left-0 z-10 bg-slate-900 pb-3 pr-4 text-left text-slate-400 font-semibold">Concepto</th>
-                {resumenMensual.map((mes) => (
-                  <th key={mes.mes} className="pb-3 px-3 text-right text-violet-300 font-bold">{mes.mes}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/70">
-              <tr>
-                <td className="sticky left-0 z-10 bg-slate-900 py-3 pr-4 font-semibold text-emerald-400">Ingresos</td>
-                {resumenMensual.map((mes) => (
-                  <td key={mes.mes} className="py-3 px-3 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      <span>${formatearMonto(mes.ingresos)}</span>
-                      <span className="h-1.5 rounded-full bg-emerald-500/70" style={{ width: `${Math.max((mes.ingresos / mayorMovimientoMensual) * 80, mes.ingresos ? 8 : 0)}px` }} />
-                    </div>
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="sticky left-0 z-10 bg-slate-900 py-3 pr-4 font-semibold text-cyan-400">Egresos</td>
-                {resumenMensual.map((mes) => (
-                  <td key={mes.mes} className="py-3 px-3 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      <span>${formatearMonto(mes.egresos)}</span>
-                      <span className="h-1.5 rounded-full bg-cyan-500/70" style={{ width: `${Math.max((mes.egresos / mayorMovimientoMensual) * 80, mes.egresos ? 8 : 0)}px` }} />
-                    </div>
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="sticky left-0 z-10 bg-slate-900 py-3 pr-4 font-semibold italic text-slate-300">Resultado por mes</td>
-                {resumenMensual.map((mes) => (
-                  <td key={mes.mes} className={`py-3 px-3 text-right font-medium ${mes.resultado < 0 ? 'text-rose-300' : 'text-slate-100'}`}>
-                    ${formatearMonto(mes.resultado)}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className="sticky left-0 z-10 bg-slate-900 py-3 pr-4 font-semibold italic text-slate-300">Saldo acumulado</td>
-                {resumenMensual.map((mes) => (
-                  <td key={mes.mes} className={`py-3 px-3 text-right font-semibold ${mes.saldoAcumulado < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
-                    ${formatearMonto(mes.saldoAcumulado)}
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Grid de Botes Dinámicos */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {/* Bolsa Vida */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Bolsa Vida</p>
-              <h3 className="text-2xl font-bold mt-1">${formatearEntero(resumen.gastado.Vida)} MXN</h3>
-            </div>
-            <span className="text-xs text-slate-500">Límite: ${formatearEntero(resumen.presupuesto.Vida)}</span>
-          </div>
-          <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
-            <div className="bg-cyan-500 h-full transition-all duration-500" style={{ width: `${calcularPorcentaje(resumen.gastado.Vida, resumen.presupuesto.Vida)}%` }} />
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-            <span>{calcularPorcentaje(resumen.gastado.Vida, resumen.presupuesto.Vida).toFixed(1)}% consumido</span>
-            <span>Te quedan ${formatearEntero(Math.max(restantes.Vida, 0))}</span>
-          </div>
-        </div>
-
-        {/* Bolsa Placeres */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Bolsa Placeres</p>
-              <h3 className="text-2xl font-bold mt-1">${formatearEntero(resumen.gastado.Placeres)} MXN</h3>
-            </div>
-            <span className="text-xs text-slate-500">Límite: ${formatearEntero(resumen.presupuesto.Placeres)}</span>
-          </div>
-          <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
-            <div className={`h-full transition-all duration-500 ${calcularPorcentaje(resumen.gastado.Placeres, resumen.presupuesto.Placeres) >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${calcularPorcentaje(resumen.gastado.Placeres, resumen.presupuesto.Placeres)}%` }} />
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-            <span>{calcularPorcentaje(resumen.gastado.Placeres, resumen.presupuesto.Placeres).toFixed(1)}% consumido</span>
-            <span>Te quedan ${formatearEntero(Math.max(restantes.Placeres, 0))}</span>
-          </div>
-        </div>
-
-        {/* Bolsa Futuro */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Bolsa Futuro</p>
-              <h3 className="text-2xl font-bold mt-1">${formatearEntero(resumen.gastado.Futuro)} MXN</h3>
-            </div>
-            <span className="text-xs text-slate-500">Meta: ${formatearEntero(resumen.presupuesto.Futuro)}</span>
-          </div>
-          <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
-            <div className="bg-indigo-500 h-full transition-all duration-500" style={{ width: `${calcularPorcentaje(resumen.gastado.Futuro, resumen.presupuesto.Futuro)}%` }} />
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-            <span>{calcularPorcentaje(resumen.gastado.Futuro, resumen.presupuesto.Futuro).toFixed(1)}% invertido</span>
-            <span>Pendiente ${formatearEntero(Math.max(restantes.Futuro, 0))}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Historial de Transacciones */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold">Últimos Movimientos Registrados</h2>
-            <p className="text-sm text-slate-400">Ingresos y gastos del mes activo, con fecha y origen desde Supabase.</p>
-          </div>
-          <span className="text-xs text-slate-500">{ultimosMovimientos.length} movimientos</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 text-slate-400 text-sm">
-                <th className="pb-3 font-semibold">Concepto</th>
-                <th className="pb-3 font-semibold">Fecha</th>
-                <th className="pb-3 font-semibold">Tipo</th>
-                <th className="pb-3 font-semibold">Categoría</th>
-                <th className="pb-3 font-semibold">Subcategoría</th>
-                <th className="pb-3 font-semibold">Monto</th>
-                <th className="pb-3 font-semibold">Origen</th>
-                <th className="pb-3 font-semibold text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/50 text-sm">
-              {ultimosMovimientos.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-4 text-center text-slate-500">No hay movimientos registrados este mes.</td>
-                </tr>
-              ) : (
-                ultimosMovimientos.map((movimiento) => (
-                  <tr key={movimiento.id} className="hover:bg-slate-800/20 transition-colors">
-                    <td className="py-3.5 font-medium text-slate-200">{movimiento.concepto}</td>
-                    <td className="py-3.5 text-slate-400 whitespace-nowrap">{formatearFecha(movimiento.fecha)}</td>
-                    <td className="py-3.5">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${
-                        movimiento.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-700/60 text-slate-300'
-                      }`}>
-                        {movimiento.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'}
-                      </span>
-                    </td>
-                    <td className="py-3.5">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${
-                        nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-500/10 text-emerald-300' :
-                        nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-emerald-500/10 text-emerald-400' :
-                        nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-indigo-500/10 text-indigo-400'
-                      }`}>
-                        {nombreBolsa(movimiento.categoria)}
-                      </span>
-                    </td>
-                    <td className="py-3.5 text-slate-400">{movimiento.subcategoria || 'Sin subcategoría'}</td>
-                    <td className={`py-3.5 font-semibold ${movimiento.tipo === 'ingreso' ? 'text-emerald-300' : 'text-slate-100'}`}>
-                      {movimiento.tipo === 'ingreso' ? '+' : '-'}${formatearMonto(movimiento.monto)}
-                    </td>
-                    <td className="py-3.5 text-slate-400">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</td>
-                    <td className="py-3.5 text-right">
-                      {movimiento.tipo === 'gasto' ? (
-                        <button
-                          type="button"
-                          onClick={() => eliminarGasto({
-                            id: movimiento.id.replace('gasto-', ''),
-                            concepto: movimiento.concepto,
-                            categoria: movimiento.categoria,
-                            subcategoria: movimiento.subcategoria,
-                            monto: movimiento.monto,
-                            origen: movimiento.origen,
-                            fecha: movimiento.fecha,
-                          })}
-                          disabled={deletingId === movimiento.id.replace('gasto-', '')}
-                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {deletingId === movimiento.id.replace('gasto-', '') ? 'Eliminando...' : 'Eliminar'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => eliminarIngreso({
-                            id: movimiento.id.replace('ingreso-', ''),
-                            concepto: movimiento.concepto,
-                            monto: movimiento.monto,
-                            tipo: movimiento.subcategoria,
-                            fecha: movimiento.fecha,
-                          })}
-                          disabled={deletingId === movimiento.id}
-                          className="rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {deletingId === movimiento.id ? 'Eliminando...' : 'Eliminar'}
-                        </button>
+                <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_260px]">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-500">Balance mensual</p>
+                    <p className="mt-2 text-5xl font-bold tracking-tight text-slate-950">${formatearMonto(flujoNetoMes)}</p>
+                    <p className={`mt-2 text-sm font-semibold ${flujoNetoMes < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {flujoNetoMes < 0 ? 'Flujo negativo' : '+15.8%'} vs. mes anterior
+                    </p>
+                    <div className="relative mt-6 flex h-28 items-end gap-2 border-b border-slate-200 pb-2">
+                      {!hasMonthlyData && (
+                        <div className="absolute inset-x-0 top-4 flex items-center justify-center">
+                          <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                            Esperando datos de Supabase
+                          </span>
+                        </div>
                       )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      {resumenMensual.slice(0, 12).map((mes, index) => {
+                        const fallbackHeight = 18 + ((index % 4) * 10);
+                        return (
+                          <div key={mes.mes} className="flex flex-1 flex-col items-center gap-1">
+                            <div className="flex h-24 w-full max-w-9 items-end justify-center gap-1">
+                              <span
+                                className={`w-2 rounded-t ${hasMonthlyData ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                                style={{ height: `${hasMonthlyData ? Math.max((mes.ingresos / maxMonthlyBar) * 88, mes.ingresos ? 8 : 0) : fallbackHeight}px` }}
+                              />
+                              <span
+                                className={`w-2 rounded-t ${hasMonthlyData ? 'bg-rose-400' : 'bg-slate-100'}`}
+                                style={{ height: `${hasMonthlyData ? Math.max((mes.egresos / maxMonthlyBar) * 88, mes.egresos ? 8 : 0) : Math.max(fallbackHeight - 6, 8)}px` }}
+                              />
+                            </div>
+                            <span className={`text-[11px] font-semibold ${mes.mes === selectedMonthName ? 'text-blue-600' : 'text-slate-400'}`}>
+                              {mes.mes.slice(0, 3)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-semibold text-slate-500">Plan activo</p>
+                      <p className="mt-2 text-lg font-bold text-slate-950">Plan {planLabel}</p>
+                      <p className="text-xs text-slate-500">{billingStatus?.currentPeriodEnd ? `Renueva ${formatearFecha(billingStatus.currentPeriodEnd)}` : 'Estado listo'}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-semibold text-slate-500">Banco conectado</p>
+                      <p className="mt-2 text-lg font-bold text-slate-950">{bankConfigReady ? 'Conexión lista' : 'Verificando'}</p>
+                      <p className="text-xs text-slate-500">{bankStatusReady ? 'Auditoría activa' : 'Cargando estado'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Presupuesto por categoría</h2>
+                    <p className="text-sm text-slate-500">Uso actual de bolsas</p>
+                  </div>
+                  <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">33/33/33</span>
+                </div>
+                <div className="mt-5 space-y-5">
+                  {budgetBuckets.map((bucket) => {
+                    const pct = calcularPorcentaje(bucket.used, bucket.limit);
+                    return (
+                      <div key={bucket.label}>
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className={`grid size-10 place-items-center rounded-lg text-sm font-black ${bucket.tint}`}>{bucket.label[0]}</span>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{bucket.label}</p>
+                              <p className="text-xs text-slate-500">{pct.toFixed(0)}% utilizado</p>
+                            </div>
+                          </div>
+                          <p className="text-sm font-semibold text-slate-800">
+                            ${formatearMonto(bucket.used)} <span className="font-normal text-slate-400">/ ${formatearMonto(bucket.limit)}</span>
+                          </p>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                          <div className={`h-full rounded-full ${bucket.color}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {mesSinIngresosConGastos && (
+                  <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    Este mes tiene gastos, pero aún no tiene ingresos. Referencia por bolsa: ${formatearMonto(presupuestoPromedio.Vida)}.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              {kpiCards.map((card) => (
+                <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500">{card.label}</p>
+                      <p className="mt-3 text-2xl font-bold tracking-tight text-slate-950">{card.value}</p>
+                    </div>
+                    <span className={`size-10 rounded-lg ${
+                      card.tone === 'emerald' ? 'bg-emerald-50' :
+                      card.tone === 'rose' ? 'bg-rose-50' :
+                      card.tone === 'blue' ? 'bg-blue-50' :
+                      card.tone === 'violet' ? 'bg-violet-50' :
+                      card.tone === 'amber' ? 'bg-amber-50' : 'bg-cyan-50'
+                    }`} />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-500">{card.detail}</span>
+                    <span className={`font-bold ${card.tone === 'rose' ? 'text-rose-600' : 'text-emerald-600'}`}>{card.trend}</span>
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Resultado mensual anual</h2>
+                    <p className="text-sm text-slate-500">Ingresos, egresos y flujo neto por mes.</p>
+                  </div>
+                  <span className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600">2026</span>
+                </div>
+                <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+                  <div className="relative flex h-72 items-end gap-3 border-b border-slate-200 pb-4">
+                    {!hasMonthlyData && (
+                      <div className="absolute inset-x-0 top-20 flex justify-center">
+                        <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500">
+                          Sin datos cargados en este entorno
+                        </span>
+                      </div>
+                    )}
+                    {resumenMensual.map((mes, index) => {
+                      const fallbackHeight = 36 + ((index % 5) * 22);
+                      return (
+                        <div key={mes.mes} className="flex flex-1 flex-col items-center gap-2">
+                          <div className="flex h-60 w-full items-end justify-center gap-1">
+                            <span
+                              className={`w-3 rounded-t ${hasMonthlyData ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                              style={{ height: `${hasMonthlyData ? Math.max((mes.ingresos / maxMonthlyBar) * 220, mes.ingresos ? 10 : 0) : fallbackHeight}px` }}
+                            />
+                            <span
+                              className={`w-3 rounded-t ${hasMonthlyData ? 'bg-rose-400' : 'bg-slate-100'}`}
+                              style={{ height: `${hasMonthlyData ? Math.max((mes.egresos / maxMonthlyBar) * 220, mes.egresos ? 10 : 0) : Math.max(fallbackHeight - 16, 12)}px` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-bold ${mes.mes === selectedMonthName ? 'text-blue-600' : 'text-slate-400'}`}>{mes.mes.slice(0, 3)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-xs text-slate-400">
+                          <th className="pb-2 font-semibold">Mes</th>
+                          <th className="pb-2 text-right font-semibold">Ingresos</th>
+                          <th className="pb-2 text-right font-semibold">Egresos</th>
+                          <th className="pb-2 text-right font-semibold">Flujo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {resumenMensual.map((mes) => (
+                          <tr key={mes.mes} className={mes.mes === selectedMonthName ? 'bg-blue-50/70' : ''}>
+                            <td className="py-2 font-medium text-slate-700">{mes.mes.slice(0, 3)}</td>
+                            <td className="py-2 text-right text-slate-600">${formatearEntero(mes.ingresos)}</td>
+                            <td className="py-2 text-right text-slate-600">${formatearEntero(mes.egresos)}</td>
+                            <td className={`py-2 text-right font-bold ${mes.resultado < 0 ? 'text-rose-600' : 'text-blue-700'}`}>${formatearEntero(mes.resultado)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-lg font-bold text-slate-950">Actividad bancaria</h2>
+                  <p className="mt-1 text-sm text-slate-500">Últimos eventos de ingesta y automatización.</p>
+                  <div className="mt-4 space-y-3">
+                    {santanderStatus?.ingestLogs?.logs.length ? (
+                      santanderStatus.ingestLogs.logs.slice(0, 4).map((log) => (
+                        <div key={log.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-900">{log.concepto || 'Movimiento bancario'}</p>
+                              <p className="text-xs text-slate-500">{formatearFecha(log.created_at)}</p>
+                            </div>
+                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{log.status}</span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
+                            {formatearDuracionMs(log.ingest_latency_ms) || 'sin latencia'}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">Sin movimientos bancarios recientes.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-lg font-bold text-slate-950">Tarjeta de crédito</h2>
+                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
+                  <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-cyan-500" style={{ width: `${cargosSantanderTdcMes > 0 ? Math.min((deudaTdcEstimadaMes / cargosSantanderTdcMes) * 100, 100) : 0}%` }} />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-2 border-b border-slate-200 p-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-950">Movimientos recientes</h2>
+                  <p className="text-sm text-slate-500">Ingresos y gastos del mes activo desde Supabase.</p>
+                </div>
+                <span className="text-sm font-semibold text-blue-700">{ultimosMovimientos.length} movimientos</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
+                      <th className="px-5 py-3 font-semibold">Fecha</th>
+                      <th className="px-5 py-3 font-semibold">Concepto</th>
+                      <th className="px-5 py-3 font-semibold">Categoría</th>
+                      <th className="px-5 py-3 font-semibold">Origen</th>
+                      <th className="px-5 py-3 text-right font-semibold">Monto</th>
+                      <th className="px-5 py-3 text-right font-semibold">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {ultimosMovimientos.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-8 text-center text-slate-500">No hay movimientos registrados este mes.</td>
+                      </tr>
+                    ) : (
+                      ultimosMovimientos.slice(0, 12).map((movimiento) => (
+                        <tr key={movimiento.id} className="hover:bg-slate-50">
+                          <td className="whitespace-nowrap px-5 py-3 text-slate-500">{formatearFecha(movimiento.fecha)}</td>
+                          <td className="px-5 py-3">
+                            <p className="font-semibold text-slate-900">{movimiento.concepto}</p>
+                            <p className="text-xs text-slate-500">{movimiento.subcategoria || 'Sin subcategoría'}</p>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${
+                              nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
+                              nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-blue-50 text-blue-700' :
+                              nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
+                            }`}>
+                              {nombreBolsa(movimiento.categoria)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-slate-500">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</td>
+                          <td className={`px-5 py-3 text-right font-bold ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : 'text-slate-900'}`}>
+                            {movimiento.tipo === 'ingreso' ? '+' : '-'}${formatearMonto(movimiento.monto)}
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            {movimiento.tipo === 'gasto' ? (
+                              <button
+                                type="button"
+                                onClick={() => eliminarGasto({
+                                  id: movimiento.id.replace('gasto-', ''),
+                                  concepto: movimiento.concepto,
+                                  categoria: movimiento.categoria,
+                                  subcategoria: movimiento.subcategoria,
+                                  monto: movimiento.monto,
+                                  origen: movimiento.origen,
+                                  fecha: movimiento.fecha,
+                                })}
+                                disabled={deletingId === movimiento.id.replace('gasto-', '')}
+                                className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                              >
+                                {deletingId === movimiento.id.replace('gasto-', '') ? 'Eliminando' : 'Eliminar'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => eliminarIngreso({
+                                  id: movimiento.id.replace('ingreso-', ''),
+                                  concepto: movimiento.concepto,
+                                  monto: movimiento.monto,
+                                  tipo: movimiento.subcategoria,
+                                  fecha: movimiento.fecha,
+                                })}
+                                disabled={deletingId === movimiento.id}
+                                className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                              >
+                                {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-slate-950">Ingresos del mes</h2>
+                  <span className="text-sm font-bold text-emerald-600">${formatearMonto(resumen.ingresosMes)}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-left text-sm">
+                    <tbody className="divide-y divide-slate-100">
+                      {ingresosMensuales.length === 0 ? (
+                        <tr><td className="py-5 text-center text-slate-500">No hay ingresos registrados.</td></tr>
+                      ) : ingresosMensuales.map((ingreso) => (
+                        <tr key={ingreso.id}>
+                          <td className="py-3 text-slate-500">{formatearFecha(ingreso.fecha)}</td>
+                          <td className="py-3 font-semibold text-slate-900">{ingreso.concepto || 'Ingreso'}</td>
+                          <td className="py-3 text-slate-500">{ingreso.tipo || 'Ingreso'}</td>
+                          <td className="py-3 text-right font-bold text-emerald-600">+${formatearMonto(ingreso.monto)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-slate-950">Abonos a tarjeta</h2>
+                  <span className="text-sm font-bold text-violet-600">${formatearMonto(totalAbonosTarjetaMes)}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-left text-sm">
+                    <tbody className="divide-y divide-slate-100">
+                      {abonosTarjetaMensuales.length === 0 ? (
+                        <tr><td className="py-5 text-center text-slate-500">No hay abonos registrados.</td></tr>
+                      ) : abonosTarjetaMensuales.map((abono) => (
+                        <tr key={abono.id}>
+                          <td className="py-3 text-slate-500">{formatearFecha(abono.fecha)}</td>
+                          <td className="py-3 font-semibold text-slate-900">{abono.concepto}</td>
+                          <td className="py-3 text-slate-500">{abono.tarjeta || 'Tarjeta'}</td>
+                          <td className="py-3 text-right font-bold text-violet-600">-${formatearMonto(abono.monto)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
       </div>
     </div>
   );

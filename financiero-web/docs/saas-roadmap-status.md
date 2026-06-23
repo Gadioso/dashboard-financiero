@@ -97,4 +97,8 @@ Estado: en progreso.
 - Open Banking foundation.
 - Plaid Link sandbox.
 - Plaid sync crudo a `bank_accounts` y `bank_transactions_raw`.
-- Pendiente: workers/queues, backpressure, monitoreo de costos y clasificacion asincrona.
+- Cola base de clasificacion para movimientos bancarios crudos.
+- Worker manual `POST /api/bank/transactions/classify` con lotes limitados.
+- Backpressure inicial con `BANK_CLASSIFICATION_BATCH_SIZE`.
+- Auditoria de procesadas, clasificadas, fallidas y pendientes restantes.
+- Pendiente: cron/worker externo, monitoreo de costos por proveedor y clasificacion asincrona continua.
