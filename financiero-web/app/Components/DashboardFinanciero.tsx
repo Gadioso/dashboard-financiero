@@ -121,6 +121,25 @@ function formatearDuracionMs(value?: number | null) {
   return `${minutes.toFixed(minutes < 10 ? 1 : 0)} min`;
 }
 
+type DashboardView = 'resumen' | 'movimientos' | 'presupuestos' | 'metas' | 'analisis' | 'cuentas' | 'planes' | 'reportes';
+
+function esAbonoTarjetaSospechoso(abono: AbonoTarjetaCredito) {
+  const concepto = String(abono.concepto || '').toLowerCase();
+  const monto = Number(abono.monto || 0);
+
+  return monto >= 100000 ||
+    /(?:l[ií]nea de cr[eé]dito|cr[eé]dito preaprobado|aprovecha|promoci[oó]n|oferta|beneficio|sin concepto|movimiento santander)/i.test(concepto);
+}
+
+function GearIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+      <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06a1.8 1.8 0 0 0-1.17-1.64 1.8 1.8 0 0 0-1.89.38l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.9 15a1.8 1.8 0 0 0-1.65-1.08H2.1a2.1 2.1 0 0 1 0-4.2h.06A1.8 1.8 0 0 0 3.8 8.55a1.8 1.8 0 0 0-.38-1.89l-.04-.04a2.1 2.1 0 1 1 2.97-2.97l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.45 2.4V2.1a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.08h.06a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z" />
+    </svg>
+  );
+}
+
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
@@ -128,15 +147,18 @@ export default function DashboardFinanciero() {
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
   const [mensajeStatus, setMensajeStatus] = useState('');
   const [mesActivo, setMesActivo] = useState(mesActualKey);
+  const [vistaActiva, setVistaActiva] = useState<DashboardView>('resumen');
   const [resumen, setResumen] = useState(resumenInicial);
   const [resumenMensual, setResumenMensual] = useState<ResumenMensual[]>([]);
   const [ultimosMovimientos, setUltimosMovimientos] = useState<Movimiento[]>([]);
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
+  const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   const cerrarSesion = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -170,10 +192,12 @@ export default function DashboardFinanciero() {
         const fecha = new Date(gasto.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
       });
-      const abonosTarjetaDelMes = abonosTarjetaTodoElAño.filter((abono) => {
+      const abonosTarjetaDelMesRaw = abonosTarjetaTodoElAño.filter((abono) => {
         const fecha = new Date(abono.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
       });
+      const abonosTarjetaDelMes = abonosTarjetaDelMesRaw.filter((abono) => !esAbonoTarjetaSospechoso(abono));
+      setAbonosSospechososOcultos(abonosTarjetaDelMesRaw.length - abonosTarjetaDelMes.length);
 
       const presupuesto = dashboardData.presupuesto;
       const ingresosMes = calcularIngresosMes(ingresosDelMes);
@@ -392,6 +416,33 @@ export default function DashboardFinanciero() {
     }
   };
 
+  const limpiarAbonosSospechosos = async () => {
+    setCleanupLoading(true);
+    setMensajeStatus('Limpiando abonos sospechosos...');
+
+    try {
+      const response = await fetch('/api/account/cleanup-card-payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: `${mesActivo}-14`, minAmount: 100000, apply: true }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setMensajeStatus(`No pude borrar en Supabase: ${data.error || 'sin autorización'}. Ya está oculto de la interfaz.`);
+        return;
+      }
+
+      setMensajeStatus(`Abonos sospechosos eliminados: ${data.deleted || 0}.`);
+      await fetchData();
+    } catch {
+      setMensajeStatus('No pude conectar con el limpiador. El abono sospechoso sigue oculto de la interfaz.');
+    } finally {
+      setCleanupLoading(false);
+      setTimeout(() => setMensajeStatus(''), 6000);
+    }
+  };
+
   const calcularPorcentaje = (gastado: number, limite: number) => {
     if (!limite) return gastado > 0 ? 100 : 0;
     return Math.min((gastado / limite) * 100, 100);
@@ -504,22 +555,52 @@ export default function DashboardFinanciero() {
   const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
   const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
   const selectedMonthName = meses2026.find((mes) => `2026-${String(mes.indice + 1).padStart(2, '0')}` === mesActivo)?.etiqueta || 'MES';
-  const desktopNavItems = [
-    { label: 'Resumen', href: '#resumen' },
-    { label: 'Movimientos', href: '#movimientos' },
-    { label: 'Presupuestos', href: '#presupuesto' },
-    { label: 'Metas', href: '#analisis' },
-    { label: 'Análisis', href: '#analisis' },
-    { label: 'Cuentas', href: '#actividad-bancaria' },
-    { label: 'Planes', href: '#plan-activo' },
-    { label: 'Reportes', href: '#reporte-anual' },
+  const desktopNavItems: Array<{ label: string; view: DashboardView; mark: string }> = [
+    { label: 'Resumen', view: 'resumen', mark: 'R' },
+    { label: 'Movimientos', view: 'movimientos', mark: 'M' },
+    { label: 'Presupuestos', view: 'presupuestos', mark: 'P' },
+    { label: 'Metas', view: 'metas', mark: 'G' },
+    { label: 'Análisis', view: 'analisis', mark: 'A' },
+    { label: 'Cuentas', view: 'cuentas', mark: 'C' },
+    { label: 'Planes', view: 'planes', mark: 'P' },
+    { label: 'Reportes', view: 'reportes', mark: 'R' },
   ];
   const mobileNavItems = [
-    { label: 'Inicio', href: '#resumen', mark: 'I' },
-    { label: 'Bolsas', href: '#presupuesto', mark: 'B' },
-    { label: 'Movs', href: '#movimientos', mark: 'M' },
-    { label: 'Datos', href: '#analisis', mark: 'D' },
+    { label: 'Inicio', view: 'resumen' as const, mark: 'I' },
+    { label: 'Movs', view: 'movimientos' as const, mark: 'M' },
+    { label: 'Metas', view: 'metas' as const, mark: 'G' },
+    { label: 'Cuenta', view: 'cuentas' as const, mark: 'C' },
   ];
+  const activeNav = desktopNavItems.find((item) => item.view === vistaActiva) || desktopNavItems[0];
+
+  const iaCard = (
+    <form onSubmit={procesarGastoIA} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-slate-950">Registrar movimiento</p>
+          <p className="text-sm text-slate-500">Describe el ingreso o gasto y lo clasifico con IA.</p>
+        </div>
+        <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">IA financiera</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <input
+          type="text"
+          value={inputIA}
+          onChange={(e) => setInputIA(e.target.value)}
+          disabled={procesando}
+          placeholder='Ej. "Gané 60000 de sueldo" o "Me gasté 350 en cine"'
+          className="h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={procesando}
+          className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {procesando ? 'Procesando' : 'Nuevo movimiento'}
+        </button>
+      </div>
+    </form>
+  );
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -532,23 +613,30 @@ export default function DashboardFinanciero() {
               <p className="text-sm font-bold leading-tight">Financiero</p>
             </div>
           </div>
-          <nav className="space-y-1 px-3 py-5 text-sm font-medium text-slate-500">
+          <nav className="space-y-1 px-3 py-5 text-sm font-medium text-slate-500" aria-label="Secciones del dashboard">
             {desktopNavItems.map((item) => (
-              <a
+              <button
                 key={item.label}
-                href={item.href}
+                type="button"
+                onClick={() => setVistaActiva(item.view)}
+                aria-current={vistaActiva === item.view ? 'page' : undefined}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                  item.label === 'Resumen' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
+                  vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
-                <span className={`size-2 rounded-full ${item.label === 'Resumen' ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                <span className={`grid size-7 place-items-center rounded-lg text-xs font-black ${
+                  vistaActiva === item.view ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {item.mark}
+                </span>
                 {item.label}
-              </a>
+              </button>
             ))}
           </nav>
           <div className="space-y-3 border-t border-slate-100 px-4 pb-4 pt-3">
-            <Link href="/onboarding" className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-              Configuración
+            <Link href="/onboarding" aria-label="Configuración" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+              <GearIcon />
+              <span>Configuración</span>
             </Link>
             <button type="button" onClick={cerrarSesion} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50">
               Salir
@@ -581,24 +669,18 @@ export default function DashboardFinanciero() {
                   Config
                 </Link>
               </div>
-              <form onSubmit={procesarGastoIA} className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] md:max-w-3xl">
-                <input
-                  type="text"
-                  value={inputIA}
-                  onChange={(e) => setInputIA(e.target.value)}
-                  disabled={procesando}
-                  placeholder='Registra con IA: "Gané 60000 de sueldo", "Me gasté 350 en cine"...'
-                  className="h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60 md:h-10"
-                />
-                <button
-                  type="submit"
-                  disabled={procesando}
-                  className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 md:h-10"
-                >
-                  {procesando ? 'Procesando' : 'Nuevo movimiento'}
-                </button>
-              </form>
+              <div className="hidden min-w-0 flex-1 md:block">
+                <p className="text-xs font-semibold uppercase text-slate-400">Vista actual</p>
+                <p className="truncate text-base font-bold text-slate-950">{activeNav.label}</p>
+              </div>
               <div className="hidden items-center gap-2 md:flex">
+                <Link
+                  href="/onboarding"
+                  aria-label="Configuración"
+                  className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
+                >
+                  <GearIcon />
+                </Link>
                 {billingConfigured && (
                   <button
                     type="button"
@@ -629,7 +711,52 @@ export default function DashboardFinanciero() {
               </div>
             )}
 
-            <section id="resumen" className="scroll-mt-28 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+            <section key={vistaActiva} className="dashboard-view-panel rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-blue-700">{activeNav.label}</p>
+                  <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
+                    {vistaActiva === 'resumen' ? 'Tu tablero financiero' :
+                      vistaActiva === 'movimientos' ? 'Movimientos del mes' :
+                      vistaActiva === 'presupuestos' ? 'Presupuestos y bolsas' :
+                      vistaActiva === 'metas' ? 'Metas financieras' :
+                      vistaActiva === 'analisis' ? 'Análisis de comportamiento' :
+                      vistaActiva === 'cuentas' ? 'Cuentas conectadas' :
+                      vistaActiva === 'planes' ? 'Plan y facturación' : 'Reportes'}
+                  </h1>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {loading ? 'Actualizando datos...' : `Vista de ${selectedMonthName.toLowerCase()} 2026.`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                    Mes
+                    <select
+                      value={mesActivo}
+                      onChange={(event) => setMesActivo(event.target.value)}
+                      className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500"
+                    >
+                      {meses2026.map((mes) => (
+                        <option key={mes.etiqueta} value={`2026-${String(mes.indice + 1).padStart(2, '0')}`}>
+                          {mes.etiqueta} 2026
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <Link
+                    href="/onboarding"
+                    aria-label="Configuración"
+                    className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  >
+                    <GearIcon />
+                  </Link>
+                </div>
+              </div>
+            </section>
+
+            {(vistaActiva === 'resumen' || vistaActiva === 'movimientos') && iaCard}
+
+            <section id="resumen" className={`${vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.4fr_1fr]`}>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
@@ -747,7 +874,7 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section className="grid gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-6">
+            <section className={`${['resumen', 'presupuestos', 'metas', 'planes'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-6`}>
               {kpiCards.map((card) => (
                 <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -771,7 +898,7 @@ export default function DashboardFinanciero() {
               ))}
             </section>
 
-            <section id="analisis" className="scroll-mt-28 grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <section id="analisis" className={`${['analisis', 'cuentas', 'planes', 'reportes'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.5fr_1fr]`}>
               <div id="reporte-anual" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
@@ -864,14 +991,29 @@ export default function DashboardFinanciero() {
                   <h2 className="text-lg font-bold text-slate-950">Tarjeta de crédito</h2>
                   <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
                   <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
+                  {abonosSospechososOcultos > 0 && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                      Oculté {abonosSospechososOcultos} abono sospechoso de esta vista. Puedes intentar borrarlo de Supabase desde aquí.
+                    </div>
+                  )}
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
                     <div className="h-full rounded-full bg-cyan-500" style={{ width: `${cargosSantanderTdcMes > 0 ? Math.min((deudaTdcEstimadaMes / cargosSantanderTdcMes) * 100, 100) : 0}%` }} />
                   </div>
+                  {abonosSospechososOcultos > 0 && (
+                    <button
+                      type="button"
+                      onClick={limpiarAbonosSospechosos}
+                      disabled={cleanupLoading}
+                      className="mt-4 h-10 rounded-lg border border-amber-200 bg-white px-4 text-sm font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-60"
+                    >
+                      {cleanupLoading ? 'Limpiando...' : 'Borrar abonos sospechosos'}
+                    </button>
+                  )}
                 </div>
               </div>
             </section>
 
-            <section id="movimientos" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="movimientos" className={`${vistaActiva === 'movimientos' ? 'dashboard-view-panel block' : 'hidden'} scroll-mt-28 rounded-lg border border-slate-200 bg-white shadow-sm`}>
               <div className="flex flex-col gap-2 border-b border-slate-200 p-5 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Movimientos recientes</h2>
@@ -1012,7 +1154,7 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-2">
+            <section className={`${['movimientos', 'cuentas'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-2`}>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-950">Ingresos del mes</h2>
@@ -1068,17 +1210,45 @@ export default function DashboardFinanciero() {
       >
         <div className="grid grid-cols-4 gap-2">
           {mobileNavItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <button
+              key={item.view}
+              type="button"
+              onClick={() => setVistaActiva(item.view)}
+              aria-current={vistaActiva === item.view ? 'page' : undefined}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-blue-700'
+              }`}
             >
-              <span className="grid size-7 place-items-center rounded-lg bg-slate-100 text-[11px] text-slate-700">{item.mark}</span>
+              <span className={`grid size-7 place-items-center rounded-lg text-[11px] ${
+                vistaActiva === item.view ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+              }`}>{item.mark}</span>
               <span>{item.label}</span>
-            </a>
+            </button>
           ))}
         </div>
       </nav>
+      <style jsx global>{`
+        @keyframes dashboard-view-in {
+          from {
+            opacity: 0;
+            transform: translateY(14px) scale(0.985);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .dashboard-view-panel {
+          animation: dashboard-view-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .dashboard-view-panel {
+            animation: none;
+          }
+        }
+      `}</style>
     </div>
   );
 }
