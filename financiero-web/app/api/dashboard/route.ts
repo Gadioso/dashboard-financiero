@@ -4,6 +4,10 @@ import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-contex
 
 export const dynamic = 'force-dynamic';
 
+function canIgnoreOptionalTableError(error?: { code?: string; message?: string } | null) {
+  return error?.code === '42P01' || /does not exist|schema cache|Could not find/i.test(error?.message || '');
+}
+
 function validarMes(mes: string | null) {
   if (mes && /^\d{4}-\d{2}$/.test(mes)) return mes;
 
@@ -52,13 +56,17 @@ export async function GET(request: Request) {
       .gte('fecha', inicio2026)
       .lt('fecha', fin2026)
       .order('fecha', { ascending: false });
+    const fondosQuery = supabase
+      .from('fondos_acumulados')
+      .select('*');
 
-    const [{ data: pres, error: errorPres }, { data: ingresosAnuales, error: errorIngresos }, { data: gastosAnuales, error: errorGastos }, abonosTarjetaResult] =
+    const [{ data: pres, error: errorPres }, { data: ingresosAnuales, error: errorIngresos }, { data: gastosAnuales, error: errorGastos }, abonosTarjetaResult, fondosResult] =
       await Promise.all([
         applyProfileFilter(presupuestosQuery, tenant.profileId).maybeSingle(),
         applyProfileFilter(ingresosQuery, tenant.profileId),
         applyProfileFilter(gastosQuery, tenant.profileId),
         applyProfileFilter(abonosQuery, tenant.profileId),
+        applyProfileFilter(fondosQuery, tenant.profileId),
       ]);
 
     if (errorPres) throw new Error(`No pude consultar presupuestos: ${errorPres.message}`);
@@ -72,9 +80,12 @@ export async function GET(request: Request) {
       ingresosAnuales: ingresosAnuales || [],
       gastosAnuales: gastosAnuales || [],
       abonosTarjetaAnuales: abonosTarjetaResult.error ? [] : abonosTarjetaResult.data || [],
+      fondosAcumulados: fondosResult.error && !canIgnoreOptionalTableError(fondosResult.error) ? [] : fondosResult.data || [],
       schema: {
         acceptsAbonosTarjetaCredito: !abonosTarjetaResult.error,
         abonosTarjetaError: abonosTarjetaResult.error?.message || null,
+        acceptsFondosAcumulados: !fondosResult.error,
+        fondosAcumuladosError: fondosResult.error?.message || null,
         profileScoped: Boolean(tenant.profileId),
         tenantSource: tenant.source,
       },

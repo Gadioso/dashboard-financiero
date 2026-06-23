@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   calcularIngresosMes,
@@ -41,6 +41,7 @@ type DashboardApiResponse = {
   ingresosAnuales: Ingreso[];
   gastosAnuales: Gasto[];
   abonosTarjetaAnuales: AbonoTarjetaCredito[];
+  fondosAcumulados?: FondoAcumulado[];
 };
 
 type SantanderStatus = {
@@ -99,27 +100,61 @@ type BillingStatus = {
   error?: string;
 };
 
+type FondoAcumulado = {
+  id?: string | number;
+  cuenta?: string | null;
+  nombre?: string | null;
+  concepto?: string | null;
+  saldo_actual?: number | string | null;
+  monto_actual?: number | string | null;
+  monto?: number | string | null;
+  objetivo?: number | string | null;
+  meta?: number | string | null;
+  monto_objetivo?: number | string | null;
+  meta_monto?: number | string | null;
+  fecha_objetivo?: string | null;
+  updated_at?: string | null;
+};
+
+type BankAccount = {
+  id: string;
+  connection_id?: string | null;
+  name?: string | null;
+  official_name?: string | null;
+  type?: string | null;
+  subtype?: string | null;
+  currency?: string | null;
+  current_balance?: number | string | null;
+  available_balance?: number | string | null;
+  updated_at?: string | null;
+};
+
+type BankConnection = {
+  id: string;
+  provider: string;
+  institution_name?: string | null;
+  status: string;
+  last_sync_at?: string | null;
+  consent_expires_at?: string | null;
+  updated_at?: string | null;
+};
+
 type AccountStatus = {
   success: boolean;
   billing?: BillingStatus;
+  bankConnections?: BankConnection[];
+  bankAccounts?: BankAccount[];
   error?: string;
 };
 
+type DashboardAnalysis = {
+  headline: string;
+  diagnosis: string;
+  actions: string[];
+  risks: string[];
+};
+
 const mesActualKey = mesKeyDesdeFecha(new Date());
-
-function formatearDuracionMs(value?: number | null) {
-  if (typeof value !== 'number' || Number.isNaN(value)) return null;
-
-  if (value < 1000) return `${Math.max(0, Math.round(value))} ms`;
-
-  const seconds = value / 1000;
-
-  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
-
-  const minutes = seconds / 60;
-
-  return `${minutes.toFixed(minutes < 10 ? 1 : 0)} min`;
-}
 
 type DashboardView = 'resumen' | 'movimientos' | 'presupuestos' | 'metas' | 'analisis' | 'cuentas' | 'planes' | 'reportes';
 
@@ -140,6 +175,46 @@ function GearIcon() {
   );
 }
 
+function valorNumerico(...values: Array<number | string | null | undefined>) {
+  for (const value of values) {
+    const numberValue = Number(value);
+    if (Number.isFinite(numberValue)) return numberValue;
+  }
+
+  return 0;
+}
+
+function etiquetaCambio(actual: number, anterior: number, options?: { invert?: boolean; neutral?: string }) {
+  if (!Number.isFinite(actual) || !Number.isFinite(anterior)) return options?.neutral || 'Sin base';
+  if (anterior === 0) {
+    if (actual === 0) return options?.neutral || 'Sin cambio';
+    return 'Nuevo';
+  }
+
+  const rawChange = ((actual - anterior) / Math.abs(anterior)) * 100;
+  const effectiveChange = options?.invert ? -rawChange : rawChange;
+  const sign = effectiveChange > 0 ? '+' : '';
+
+  return `${sign}${effectiveChange.toFixed(1)}%`;
+}
+
+function tendenciaTone(label: string) {
+  if (label === 'Nuevo' || label === 'Sin base' || label === 'Sin cambio') return 'text-slate-500';
+  return label.startsWith('-') ? 'text-rose-600' : 'text-emerald-600';
+}
+
+function fondoNombre(fondo: FondoAcumulado) {
+  return fondo.cuenta || fondo.nombre || fondo.concepto || 'Meta financiera';
+}
+
+function fondoActual(fondo: FondoAcumulado) {
+  return valorNumerico(fondo.saldo_actual, fondo.monto_actual, fondo.monto);
+}
+
+function fondoObjetivo(fondo: FondoAcumulado) {
+  return valorNumerico(fondo.objetivo, fondo.meta, fondo.monto_objetivo, fondo.meta_monto);
+}
+
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
@@ -150,6 +225,8 @@ export default function DashboardFinanciero() {
   const [vistaActiva, setVistaActiva] = useState<DashboardView>('resumen');
   const [resumen, setResumen] = useState(resumenInicial);
   const [resumenMensual, setResumenMensual] = useState<ResumenMensual[]>([]);
+  const [gastosAnuales, setGastosAnuales] = useState<Gasto[]>([]);
+  const [fondosAcumulados, setFondosAcumulados] = useState<FondoAcumulado[]>([]);
   const [ultimosMovimientos, setUltimosMovimientos] = useState<Movimiento[]>([]);
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
@@ -157,8 +234,14 @@ export default function DashboardFinanciero() {
   const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [analysisScope, setAnalysisScope] = useState<'month' | 'year'>('month');
+  const [analysis, setAnalysis] = useState<DashboardAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisKey, setAnalysisKey] = useState('');
 
   const cerrarSesion = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -182,6 +265,8 @@ export default function DashboardFinanciero() {
       const ingresosTodoElAño = dashboardData.ingresosAnuales || [];
       const gastosTodoElAño = dashboardData.gastosAnuales || [];
       const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
+      setGastosAnuales(gastosTodoElAño);
+      setFondosAcumulados(dashboardData.fondosAcumulados || []);
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -259,6 +344,8 @@ export default function DashboardFinanciero() {
         if (mounted) {
           setSantanderStatus(bankData);
           if (accountData.billing) setBillingStatus(accountData.billing);
+          setBankConnections(accountData.bankConnections || []);
+          setBankAccounts(accountData.bankAccounts || []);
         }
       } catch {
         if (mounted) setSantanderStatus({ error: 'No pude consultar estado bancario.' });
@@ -482,41 +569,68 @@ export default function DashboardFinanciero() {
       : 'Beta';
   const billingConfigured = Boolean(billingStatus?.configured);
   const premiumActive = Boolean(billingStatus?.active && billingStatus.plan === 'premium');
+  const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
+  const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
+  const selectedMonthName = meses2026.find((mes) => `2026-${String(mes.indice + 1).padStart(2, '0')}` === mesActivo)?.etiqueta || 'MES';
+  const selectedMonthIndex = meses2026.findIndex((mes) => mes.etiqueta === selectedMonthName);
+  const currentMonthSummary = resumenMensual[selectedMonthIndex] || null;
+  const previousMonthSummary = selectedMonthIndex > 0 ? resumenMensual[selectedMonthIndex - 1] : null;
+  const previousMonthKey = selectedMonthIndex > 0 ? `2026-${String(selectedMonthIndex).padStart(2, '0')}` : null;
+  const previousMonthStart = previousMonthKey ? new Date(inicioMesISO(previousMonthKey)).getTime() : null;
+  const previousMonthEnd = previousMonthKey ? new Date(finMesISO(previousMonthKey)).getTime() : null;
+  const gastosMesAnterior = previousMonthStart && previousMonthEnd
+    ? gastosAnuales.filter((gasto) => {
+        const fecha = new Date(gasto.fecha).getTime();
+        return fecha >= previousMonthStart && fecha < previousMonthEnd;
+      })
+    : [];
+  const gastosPorBolsaMesAnterior = calcularGastadoPorBolsa(gastosMesAnterior);
+  const gastoFuturoMesAnterior = gastosPorBolsaMesAnterior.Futuro;
+  const burnRateMesAnterior = previousMonthSummary && resumen.presupuesto.Vida + resumen.presupuesto.Placeres > 0
+    ? ((gastosPorBolsaMesAnterior.Vida + gastosPorBolsaMesAnterior.Placeres) / (resumen.presupuesto.Vida + resumen.presupuesto.Placeres)) * 100
+    : 0;
+  const tendencias = {
+    ingresos: etiquetaCambio(resumen.ingresosMes, previousMonthSummary?.ingresos || 0),
+    egresos: etiquetaCambio(totalGastadoMes, previousMonthSummary?.egresos || 0, { invert: true }),
+    flujo: etiquetaCambio(flujoNetoMes, previousMonthSummary?.resultado || 0),
+    futuro: etiquetaCambio(resumen.gastado.Futuro, gastoFuturoMesAnterior),
+    burnRate: etiquetaCambio(burnRate, burnRateMesAnterior, { invert: true }),
+  };
   const kpiCards = [
     {
       label: 'Ingresos',
       value: `$${formatearMonto(resumen.ingresosMes)}`,
       detail: `${ingresosMensuales.length} registros`,
       tone: 'emerald',
-      trend: '+12.4%',
+      trend: tendencias.ingresos,
     },
     {
       label: 'Egresos',
       value: `$${formatearMonto(totalGastadoMes)}`,
       detail: `${gastosMensuales.length} gastos`,
       tone: 'rose',
-      trend: '+8.7%',
+      trend: tendencias.egresos,
     },
     {
       label: 'Flujo neto',
       value: `$${formatearMonto(flujoNetoMes)}`,
       detail: 'Ingresos menos egresos',
       tone: flujoNetoMes < 0 ? 'rose' : 'blue',
-      trend: flujoNetoMes < 0 ? 'Atención' : '+15.8%',
+      trend: flujoNetoMes < 0 ? 'Atención' : tendencias.flujo,
     },
     {
       label: 'Futuro',
       value: `$${formatearMonto(resumen.gastado.Futuro)}`,
       detail: `${tasaFuturo.toFixed(1)}% del ingreso`,
       tone: 'violet',
-      trend: '+21.3%',
+      trend: tendencias.futuro,
     },
     {
       label: 'Burn rate',
       value: `${burnRate.toFixed(1)}%`,
       detail: `Mes ${avanceMes.toFixed(1)}%`,
       tone: 'amber',
-      trend: `$${formatearMonto((resumen.gastado.Vida + resumen.gastado.Placeres) / Math.max(fechaActual.getUTCDate(), 1))}/día`,
+      trend: tendencias.burnRate,
     },
     {
       label: 'Tarjeta',
@@ -526,7 +640,7 @@ export default function DashboardFinanciero() {
       trend: `Abonos $${formatearMonto(totalAbonosTarjetaMes)}`,
     },
   ];
-  const budgetBuckets = [
+  const budgetBuckets = useMemo(() => [
     {
       label: 'Vida',
       used: resumen.gastado.Vida,
@@ -551,10 +665,7 @@ export default function DashboardFinanciero() {
       color: 'bg-violet-600',
       tint: 'bg-violet-50 text-violet-700',
     },
-  ];
-  const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
-  const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
-  const selectedMonthName = meses2026.find((mes) => `2026-${String(mes.indice + 1).padStart(2, '0')}` === mesActivo)?.etiqueta || 'MES';
+  ], [restantes.Futuro, restantes.Placeres, restantes.Vida, resumen.gastado.Futuro, resumen.gastado.Placeres, resumen.gastado.Vida, resumen.presupuesto.Futuro, resumen.presupuesto.Placeres, resumen.presupuesto.Vida]);
   const desktopNavItems: Array<{ label: string; view: DashboardView; mark: string }> = [
     { label: 'Resumen', view: 'resumen', mark: 'R' },
     { label: 'Movimientos', view: 'movimientos', mark: 'M' },
@@ -572,6 +683,110 @@ export default function DashboardFinanciero() {
     { label: 'Cuenta', view: 'cuentas' as const, mark: 'C' },
   ];
   const activeNav = desktopNavItems.find((item) => item.view === vistaActiva) || desktopNavItems[0];
+  const currentAnalysisKey = `${analysisScope}:${mesActivo}:${resumen.ingresosMes}:${totalGastadoMes}:${flujoNetoMes}`;
+
+  const generarAnalisis = useCallback(async (scope: 'month' | 'year') => {
+    setAnalysisScope(scope);
+    setAnalysisLoading(true);
+    setMensajeStatus(scope === 'year' ? 'Generando análisis anual con IA...' : 'Generando análisis mensual con IA...');
+
+    try {
+      const response = await fetch('/api/dashboard/analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope,
+          monthLabel: selectedMonthName,
+          summary: {
+            ingresosMes: resumen.ingresosMes,
+            totalGastadoMes,
+            flujoNetoMes,
+            tasaFuturo,
+            burnRate,
+            deudaTdcEstimadaMes,
+          },
+          monthly: scope === 'year'
+            ? resumenMensual
+            : currentMonthSummary,
+          buckets: budgetBuckets.map((bucket) => ({
+            label: bucket.label,
+            used: bucket.used,
+            limit: bucket.limit,
+            remaining: bucket.remaining,
+            percent: calcularPorcentaje(bucket.used, bucket.limit),
+          })),
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setMensajeStatus(`No pude generar análisis: ${data.error || 'respuesta inválida'}`);
+        return;
+      }
+
+      setAnalysis(data.analysis);
+      setAnalysisKey(`${scope}:${mesActivo}:${resumen.ingresosMes}:${totalGastadoMes}:${flujoNetoMes}`);
+      setMensajeStatus(data.generatedBy === 'gemini' ? 'Análisis IA actualizado.' : 'Análisis local actualizado.');
+    } catch {
+      setMensajeStatus('No pude conectar con el análisis IA.');
+    } finally {
+      setAnalysisLoading(false);
+      setTimeout(() => setMensajeStatus(''), 4000);
+    }
+  }, [budgetBuckets, burnRate, currentMonthSummary, deudaTdcEstimadaMes, flujoNetoMes, mesActivo, resumen.ingresosMes, resumenMensual, selectedMonthName, tasaFuturo, totalGastadoMes]);
+
+  useEffect(() => {
+    if (vistaActiva !== 'analisis') return;
+    if (analysisLoading || analysisKey === currentAnalysisKey) return;
+    const timeoutId = window.setTimeout(() => {
+      void generarAnalisis(analysisScope);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [analysisKey, analysisLoading, analysisScope, currentAnalysisKey, generarAnalisis, vistaActiva]);
+
+  const metasFinancieras = fondosAcumulados.map((fondo, index) => {
+    const actual = fondoActual(fondo);
+    const objetivo = fondoObjetivo(fondo);
+    const progreso = objetivo > 0 ? Math.min((actual / objetivo) * 100, 100) : actual > 0 ? 100 : 0;
+
+    return {
+      id: fondo.id || `${fondoNombre(fondo)}-${index}`,
+      nombre: fondoNombre(fondo),
+      actual,
+      objetivo,
+      progreso,
+      fechaObjetivo: fondo.fecha_objetivo || fondo.updated_at || null,
+    };
+  });
+  const totalMetasActual = metasFinancieras.reduce((total, meta) => total + meta.actual, 0);
+  const totalMetasObjetivo = metasFinancieras.reduce((total, meta) => total + meta.objetivo, 0);
+  const progresoMetasGlobal = totalMetasObjetivo > 0 ? Math.min((totalMetasActual / totalMetasObjetivo) * 100, 100) : 0;
+  const saldoCuentas = bankAccounts.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
+  const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
+  const planOptions = [
+    {
+      name: 'Gratis',
+      price: '$0',
+      plan: 'free',
+      description: 'Para llevar control personal básico.',
+      features: ['1 banco conectado', '1 Gmail', '30 días de sincronización', 'Registro manual e IA básica'],
+    },
+    {
+      name: 'Beta',
+      price: '$149',
+      plan: 'beta',
+      description: 'Para operar el dashboard completo mientras evoluciona.',
+      features: ['3 bancos conectados', '3 Gmail', '180 días de historial', 'Telegram y reportes mensuales'],
+    },
+    {
+      name: 'Premium',
+      price: '$299',
+      plan: 'premium',
+      description: 'Para análisis profundo y automatización más amplia.',
+      features: ['10 bancos conectados', '5 Gmail', '2 años de historial', 'Análisis IA anual y soporte prioritario'],
+    },
+  ];
 
   const iaCard = (
     <form onSubmit={procesarGastoIA} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -785,8 +1000,8 @@ export default function DashboardFinanciero() {
                   <div>
                     <p className="text-sm font-semibold text-slate-500">Balance mensual</p>
                     <p className="mt-2 break-words text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">${formatearMonto(flujoNetoMes)}</p>
-                    <p className={`mt-2 text-sm font-semibold ${flujoNetoMes < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      {flujoNetoMes < 0 ? 'Flujo negativo' : '+15.8%'} vs. mes anterior
+                    <p className={`mt-2 text-sm font-semibold ${flujoNetoMes < 0 ? 'text-rose-600' : tendenciaTone(tendencias.flujo)}`}>
+                      {flujoNetoMes < 0 ? 'Flujo negativo' : tendencias.flujo} vs. mes anterior
                     </p>
                     <div className="relative mt-6 flex h-28 items-end gap-2 border-b border-slate-200 pb-2">
                       {!hasMonthlyData && (
@@ -874,6 +1089,103 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
+            <section className={`${vistaActiva === 'presupuestos' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[1fr_360px]`}>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Detalle de bolsas</h2>
+                    <p className="text-sm text-slate-500">Presupuesto, consumo y margen disponible por categoría.</p>
+                  </div>
+                  <span className="text-sm font-bold text-blue-700">${formatearMonto(resumen.presupuesto.Vida + resumen.presupuesto.Placeres + resumen.presupuesto.Futuro)} asignados</span>
+                </div>
+                <div className="grid gap-3">
+                  {budgetBuckets.map((bucket) => {
+                    const pct = calcularPorcentaje(bucket.used, bucket.limit);
+                    const overBudget = bucket.remaining < 0;
+                    return (
+                      <div key={bucket.label} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className={`grid size-11 place-items-center rounded-lg text-sm font-black ${bucket.tint}`}>{bucket.label[0]}</span>
+                            <div>
+                              <p className="font-bold text-slate-950">{bucket.label}</p>
+                              <p className="text-sm text-slate-500">{pct.toFixed(0)}% usado · {overBudget ? 'excedido' : 'disponible'} ${formatearMonto(Math.abs(bucket.remaining))}</p>
+                            </div>
+                          </div>
+                          <div className="text-left sm:text-right">
+                            <p className="text-sm font-bold text-slate-950">${formatearMonto(bucket.used)}</p>
+                            <p className="text-xs text-slate-500">de ${formatearMonto(bucket.limit)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                          <div className={`h-full rounded-full ${overBudget ? 'bg-rose-500' : bucket.color}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <h2 className="text-lg font-bold text-slate-950">Lectura rápida</h2>
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="rounded-lg bg-slate-50 p-3">
+                    <p className="font-bold text-slate-900">Bolsa con más presión</p>
+                    <p className="mt-1 text-slate-500">
+                      {[...budgetBuckets].sort((a, b) => calcularPorcentaje(b.used, b.limit) - calcularPorcentaje(a.used, a.limit))[0]?.label || 'Sin datos'}.
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3">
+                    <p className="font-bold text-slate-900">Ritmo del mes</p>
+                    <p className="mt-1 text-slate-500">Vas en {burnRate.toFixed(1)}% de uso contra {avanceMes.toFixed(1)}% de avance calendario.</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3">
+                    <p className="font-bold text-slate-900">Siguiente ajuste</p>
+                    <p className="mt-1 text-slate-500">Prioriza reducir la bolsa que esté más cerca del 100% antes de registrar gastos opcionales.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className={`${vistaActiva === 'metas' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[360px_1fr]`}>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <p className="text-sm font-semibold text-slate-500">Progreso global</p>
+                <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">{progresoMetasGlobal.toFixed(0)}%</p>
+                <p className="mt-1 text-sm text-slate-500">${formatearMonto(totalMetasActual)} de ${formatearMonto(totalMetasObjetivo)}</p>
+                <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-violet-600" style={{ width: `${progresoMetasGlobal}%` }} />
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Metas guardadas</h2>
+                    <p className="text-sm text-slate-500">Fondos acumulados cargados desde Supabase.</p>
+                  </div>
+                  <Link href="/onboarding" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Editar</Link>
+                </div>
+                <div className="space-y-3">
+                  {metasFinancieras.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      No llegaron metas desde `fondos_acumulados`. Si ya las capturaste, falta revisar que tengan `profile_id` o que estén en esta tabla.
+                    </div>
+                  ) : metasFinancieras.map((meta) => (
+                    <div key={meta.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-bold text-slate-950">{meta.nombre}</p>
+                          <p className="text-sm text-slate-500">{meta.fechaObjetivo ? `Actualizada ${formatearFecha(meta.fechaObjetivo)}` : 'Sin fecha objetivo'}</p>
+                        </div>
+                        <p className="text-sm font-bold text-slate-900">${formatearMonto(meta.actual)} / ${formatearMonto(meta.objetivo)}</p>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                        <div className="h-full rounded-full bg-violet-600" style={{ width: `${meta.progreso}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
             <section className={`${['resumen', 'presupuestos', 'metas', 'planes'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-6`}>
               {kpiCards.map((card) => (
                 <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
@@ -892,13 +1204,13 @@ export default function DashboardFinanciero() {
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 text-xs">
                     <span className="text-slate-500">{card.detail}</span>
-                    <span className={`font-bold ${card.tone === 'rose' ? 'text-rose-600' : 'text-emerald-600'}`}>{card.trend}</span>
+                    <span className={`font-bold ${tendenciaTone(card.trend)}`}>{card.trend}</span>
                   </div>
                 </div>
               ))}
             </section>
 
-            <section id="analisis" className={`${['analisis', 'cuentas', 'planes', 'reportes'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.5fr_1fr]`}>
+            <section id="analisis" className={`${vistaActiva === 'analisis' ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.35fr_1fr]`}>
               <div id="reporte-anual" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
@@ -960,51 +1272,242 @@ export default function DashboardFinanciero() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div id="actividad-bancaria" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <h2 className="text-lg font-bold text-slate-950">Actividad bancaria</h2>
-                  <p className="mt-1 text-sm text-slate-500">Últimos eventos de ingesta y automatización.</p>
-                  <div className="mt-4 space-y-3">
-                    {santanderStatus?.ingestLogs?.logs.length ? (
-                      santanderStatus.ingestLogs.logs.slice(0, 4).map((log) => (
-                        <div key={log.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-slate-900">{log.concepto || 'Movimiento bancario'}</p>
-                              <p className="text-xs text-slate-500">{formatearFecha(log.created_at)}</p>
-                            </div>
-                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{log.status}</span>
-                          </div>
-                          <p className="mt-2 text-xs text-slate-500">
-                            {log.monto ? `$${formatearMonto(log.monto)} · ` : ''}
-                            {formatearDuracionMs(log.ingest_latency_ms) || 'sin latencia'}
-                          </p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">Sin movimientos bancarios recientes.</p>
-                    )}
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Análisis IA</h2>
+                    <p className="mt-1 text-sm text-slate-500">Lectura accionable del mes o del año completo.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm font-bold">
+                    <button
+                      type="button"
+                      onClick={() => generarAnalisis('month')}
+                      disabled={analysisLoading}
+                      className={`rounded-md px-3 py-2 ${analysisScope === 'month' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      Mes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => generarAnalisis('year')}
+                      disabled={analysisLoading}
+                      className={`rounded-md px-3 py-2 ${analysisScope === 'year' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      Año
+                    </button>
                   </div>
                 </div>
+                <div className="mt-5 min-h-80 rounded-lg bg-slate-50 p-4">
+                  {analysisLoading ? (
+                    <div className="flex h-72 items-center justify-center text-sm font-semibold text-slate-500">Generando análisis...</div>
+                  ) : analysis ? (
+                    <div className="space-y-5">
+                      <div>
+                        <p className="text-sm font-bold text-blue-700">{analysisScope === 'year' ? 'Análisis anual' : `Análisis de ${selectedMonthName.toLowerCase()}`}</p>
+                        <h3 className="mt-1 text-xl font-black text-slate-950">{analysis.headline}</h3>
+                        <p className="mt-3 text-sm leading-6 text-slate-600">{analysis.diagnosis}</p>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-bold text-slate-950">Acciones sugeridas</p>
+                        <div className="space-y-2">
+                          {analysis.actions.map((action, index) => (
+                            <div key={action} className="flex gap-3 rounded-lg bg-white p-3 text-sm text-slate-700">
+                              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-black text-blue-700">{index + 1}</span>
+                              <span>{action}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {analysis.risks.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-sm font-bold text-slate-950">Riesgos</p>
+                          <div className="space-y-2">
+                            {analysis.risks.map((risk) => (
+                              <p key={risk} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{risk}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex h-72 flex-col items-center justify-center text-center">
+                      <p className="text-sm font-bold text-slate-950">Listo para analizar</p>
+                      <p className="mt-1 max-w-xs text-sm text-slate-500">Entra a esta vista o pulsa Mes/Año para generar una lectura con IA.</p>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => generarAnalisis(analysisScope)}
+                  disabled={analysisLoading}
+                  className="mt-4 h-10 w-full rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {analysisLoading ? 'Analizando...' : 'Actualizar análisis'}
+                </button>
+              </div>
+            </section>
 
+            <section className={`${vistaActiva === 'cuentas' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[360px_1fr]`}>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <p className="text-sm font-semibold text-slate-500">Saldo visible</p>
+                <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">${formatearMonto(saldoCuentas)}</p>
+                <p className="mt-1 text-sm text-slate-500">{bankAccounts.length} cuentas · {cuentasActivas} conexiones activas</p>
+                <Link href="/onboarding" className="mt-5 inline-flex h-10 items-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Conectar cuenta</Link>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <h2 className="text-lg font-bold text-slate-950">Cuentas bancarias</h2>
+                <div className="mt-4 space-y-3">
+                  {bankAccounts.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      No hay cuentas bancarias sincronizadas. Conecta Plaid desde configuración o revisa que la sincronización haya insertado `bank_accounts`.
+                    </div>
+                  ) : bankAccounts.map((account) => (
+                    <div key={account.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-bold text-slate-950">{account.name || account.official_name || 'Cuenta bancaria'}</p>
+                          <p className="text-sm text-slate-500">{account.type || 'Cuenta'} · {account.subtype || 'sin subtipo'}</p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="font-bold text-slate-950">${formatearMonto(valorNumerico(account.current_balance))}</p>
+                          <p className="text-xs text-slate-500">{account.currency || 'MXN'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 border-t border-slate-100 pt-4">
+                  <h3 className="text-sm font-bold text-slate-950">Conexiones</h3>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {bankConnections.length === 0 ? (
+                      <p className="text-sm text-slate-500">Sin conexiones de open banking registradas.</p>
+                    ) : bankConnections.map((connection) => (
+                      <div key={connection.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+                        <p className="font-bold text-slate-900">{connection.institution_name || connection.provider}</p>
+                        <p className="text-slate-500">{connection.status} · {connection.last_sync_at ? formatearFecha(connection.last_sync_at) : 'sin sincronía'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className={`${vistaActiva === 'planes' ? 'dashboard-view-panel block' : 'hidden'}`}>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Planes del producto</h2>
+                    <p className="text-sm text-slate-500">Propuesta inicial de límites y beneficios por plan.</p>
+                  </div>
+                  <span className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">Plan actual: {planLabel}</span>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {planOptions.map((option) => {
+                    const isCurrent = option.name === planLabel;
+                    return (
+                      <div key={option.name} className={`rounded-lg border p-4 ${isCurrent ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-white'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-lg font-black text-slate-950">{option.name}</p>
+                            <p className="mt-1 text-sm text-slate-500">{option.description}</p>
+                          </div>
+                          {isCurrent && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-bold text-white">Actual</span>}
+                        </div>
+                        <p className="mt-5 text-3xl font-black text-slate-950">{option.price}<span className="text-sm font-semibold text-slate-500">/mes</span></p>
+                        <div className="mt-5 space-y-2">
+                          {option.features.map((feature) => (
+                            <p key={feature} className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{feature}</p>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (option.plan === billingStatus?.plan && premiumActive) {
+                              void abrirPortalBilling();
+                              return;
+                            }
+                            if (option.plan === 'premium') {
+                              void abrirCheckoutBilling();
+                              return;
+                            }
+                            setMensajeStatus(`${option.name} queda como definición de producto por ahora.`);
+                          }}
+                          disabled={billingLoading || (!billingConfigured && option.plan === 'premium')}
+                          className={`mt-5 h-10 w-full rounded-lg px-4 text-sm font-bold disabled:opacity-60 ${
+                            isCurrent ? 'border border-blue-200 bg-white text-blue-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          {isCurrent ? 'Gestionar plan' : option.plan === 'premium' ? 'Mejorar' : 'Seleccionar'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className={`${vistaActiva === 'reportes' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[1.4fr_360px]`}>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Reporte anual 2026</h2>
+                    <p className="text-sm text-slate-500">Tabla consolidada para revisión y exportación.</p>
+                  </div>
+                  <Link href="/api/account/export" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Exportar datos</Link>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-slate-100">
+                  <table className="w-full min-w-[620px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
+                        <th className="px-4 py-3 font-semibold">Mes</th>
+                        <th className="px-4 py-3 text-right font-semibold">Ingresos</th>
+                        <th className="px-4 py-3 text-right font-semibold">Egresos</th>
+                        <th className="px-4 py-3 text-right font-semibold">Flujo</th>
+                        <th className="px-4 py-3 text-right font-semibold">Saldo acum.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {resumenMensual.map((mes) => (
+                        <tr key={mes.mes} className={mes.mes === selectedMonthName ? 'bg-blue-50/60' : ''}>
+                          <td className="px-4 py-3 font-bold text-slate-900">{mes.mes}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">${formatearEntero(mes.ingresos)}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">${formatearEntero(mes.egresos)}</td>
+                          <td className={`px-4 py-3 text-right font-bold ${mes.resultado < 0 ? 'text-rose-600' : 'text-blue-700'}`}>${formatearEntero(mes.resultado)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-900">${formatearEntero(mes.saldoAcumulado)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <h2 className="text-lg font-bold text-slate-950">Resumen ejecutivo</h2>
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-sm text-slate-500">Ingresos anuales</p>
+                      <p className="text-xl font-black text-slate-950">${formatearMonto(resumenMensual.reduce((total, mes) => total + mes.ingresos, 0))}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-sm text-slate-500">Egresos anuales</p>
+                      <p className="text-xl font-black text-slate-950">${formatearMonto(resumenMensual.reduce((total, mes) => total + mes.egresos, 0))}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-sm text-slate-500">Flujo acumulado</p>
+                      <p className={`text-xl font-black ${(resumenMensual[11]?.saldoAcumulado || 0) < 0 ? 'text-rose-600' : 'text-blue-700'}`}>${formatearMonto(resumenMensual[11]?.saldoAcumulado || 0)}</p>
+                    </div>
+                  </div>
+                </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <h2 className="text-lg font-bold text-slate-950">Tarjeta de crédito</h2>
                   <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
                   <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
                   {abonosSospechososOcultos > 0 && (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                      Oculté {abonosSospechososOcultos} abono sospechoso de esta vista. Puedes intentar borrarlo de Supabase desde aquí.
-                    </div>
-                  )}
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-cyan-500" style={{ width: `${cargosSantanderTdcMes > 0 ? Math.min((deudaTdcEstimadaMes / cargosSantanderTdcMes) * 100, 100) : 0}%` }} />
-                  </div>
-                  {abonosSospechososOcultos > 0 && (
                     <button
                       type="button"
                       onClick={limpiarAbonosSospechosos}
                       disabled={cleanupLoading}
-                      className="mt-4 h-10 rounded-lg border border-amber-200 bg-white px-4 text-sm font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-60"
+                      className="mt-4 h-10 rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
                     >
                       {cleanupLoading ? 'Limpiando...' : 'Borrar abonos sospechosos'}
                     </button>
