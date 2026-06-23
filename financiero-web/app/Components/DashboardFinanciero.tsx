@@ -504,6 +504,13 @@ export default function DashboardFinanciero() {
   const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
   const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
   const selectedMonthName = meses2026.find((mes) => `2026-${String(mes.indice + 1).padStart(2, '0')}` === mesActivo)?.etiqueta || 'MES';
+  const desktopNavItems = ['Resumen', 'Movimientos', 'Presupuestos', 'Metas', 'Análisis', 'Cuentas', 'Planes', 'Reportes'];
+  const mobileNavItems = [
+    { label: 'Inicio', href: '#resumen', mark: 'I' },
+    { label: 'Bolsas', href: '#presupuesto', mark: 'B' },
+    { label: 'Movs', href: '#movimientos', mark: 'M' },
+    { label: 'Datos', href: '#analisis', mark: 'D' },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -517,7 +524,7 @@ export default function DashboardFinanciero() {
             </div>
           </div>
           <nav className="flex-1 space-y-1 px-3 py-5 text-sm font-medium text-slate-500">
-            {['Resumen', 'Movimientos', 'Presupuestos', 'Metas', 'Análisis', 'Cuentas', 'Planes', 'Reportes'].map((item) => (
+            {desktopNavItems.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -549,31 +556,39 @@ export default function DashboardFinanciero() {
           </div>
         </aside>
 
-        <main className="min-w-0">
+        <main className="min-w-0 pb-24 lg:pb-0">
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
             <div className="flex min-h-16 flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
-              <div className="flex items-center gap-3 lg:hidden">
-                <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-                <p className="text-sm font-bold">Dashboard Financiero</p>
+              <div className="flex items-center justify-between gap-3 lg:hidden">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+                  <div>
+                    <p className="text-sm font-bold leading-tight">Dashboard Financiero</p>
+                    <p className="text-xs font-medium text-slate-500">Plan {planLabel}</p>
+                  </div>
+                </div>
+                <Link href="/onboarding" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                  Config
+                </Link>
               </div>
-              <form onSubmit={procesarGastoIA} className="flex flex-1 items-center gap-2 md:max-w-3xl">
+              <form onSubmit={procesarGastoIA} className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] md:max-w-3xl">
                 <input
                   type="text"
                   value={inputIA}
                   onChange={(e) => setInputIA(e.target.value)}
                   disabled={procesando}
                   placeholder='Registra con IA: "Gané 60000 de sueldo", "Me gasté 350 en cine"...'
-                  className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
+                  className="h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60 md:h-10"
                 />
                 <button
                   type="submit"
                   disabled={procesando}
-                  className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 md:h-10"
                 >
                   {procesando ? 'Procesando' : 'Nuevo movimiento'}
                 </button>
               </form>
-              <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 md:flex">
                 {billingConfigured && (
                   <button
                     type="button"
@@ -593,7 +608,7 @@ export default function DashboardFinanciero() {
             </div>
           </header>
 
-          <div className="space-y-5 p-4 md:p-6 lg:p-8">
+          <div className="space-y-5 p-3 sm:p-4 md:p-6 lg:p-8">
             {mensajeStatus && (
               <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${
                 mensajeStatus.startsWith('Error')
@@ -604,8 +619,8 @@ export default function DashboardFinanciero() {
               </div>
             )}
 
-            <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <section id="resumen" className="scroll-mt-28 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
@@ -629,10 +644,10 @@ export default function DashboardFinanciero() {
                   </label>
                 </div>
 
-                <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_260px]">
+                <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_260px]">
                   <div>
                     <p className="text-sm font-semibold text-slate-500">Balance mensual</p>
-                    <p className="mt-2 text-5xl font-bold tracking-tight text-slate-950">${formatearMonto(flujoNetoMes)}</p>
+                    <p className="mt-2 break-words text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">${formatearMonto(flujoNetoMes)}</p>
                     <p className={`mt-2 text-sm font-semibold ${flujoNetoMes < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                       {flujoNetoMes < 0 ? 'Flujo negativo' : '+15.8%'} vs. mes anterior
                     </p>
@@ -682,7 +697,7 @@ export default function DashboardFinanciero() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <div id="presupuesto" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Presupuesto por categoría</h2>
@@ -722,13 +737,13 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <section className="grid gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-6">
               {kpiCards.map((card) => (
-                <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-500">{card.label}</p>
-                      <p className="mt-3 text-2xl font-bold tracking-tight text-slate-950">{card.value}</p>
+                      <p className="mt-2 break-words text-xl font-bold tracking-tight text-slate-950 sm:mt-3 sm:text-2xl">{card.value}</p>
                     </div>
                     <span className={`size-10 rounded-lg ${
                       card.tone === 'emerald' ? 'bg-emerald-50' :
@@ -746,8 +761,8 @@ export default function DashboardFinanciero() {
               ))}
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <section id="analisis" className="scroll-mt-28 grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Resultado mensual anual</h2>
@@ -756,7 +771,7 @@ export default function DashboardFinanciero() {
                   <span className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600">2026</span>
                 </div>
                 <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-                  <div className="relative flex h-72 items-end gap-3 border-b border-slate-200 pb-4">
+                  <div className="relative flex h-56 items-end gap-2 overflow-x-auto border-b border-slate-200 pb-4 sm:h-72 sm:gap-3">
                     {!hasMonthlyData && (
                       <div className="absolute inset-x-0 top-20 flex justify-center">
                         <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500">
@@ -783,7 +798,7 @@ export default function DashboardFinanciero() {
                       );
                     })}
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-lg border border-slate-100 sm:border-0">
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="border-b border-slate-200 text-xs text-slate-400">
@@ -809,7 +824,7 @@ export default function DashboardFinanciero() {
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <h2 className="text-lg font-bold text-slate-950">Actividad bancaria</h2>
                   <p className="mt-1 text-sm text-slate-500">Últimos eventos de ingesta y automatización.</p>
                   <div className="mt-4 space-y-3">
@@ -835,7 +850,7 @@ export default function DashboardFinanciero() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <h2 className="text-lg font-bold text-slate-950">Tarjeta de crédito</h2>
                   <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
                   <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
@@ -846,7 +861,7 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="movimientos" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-2 border-b border-slate-200 p-5 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Movimientos recientes</h2>
@@ -854,7 +869,59 @@ export default function DashboardFinanciero() {
                 </div>
                 <span className="text-sm font-semibold text-blue-700">{ultimosMovimientos.length} movimientos</span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="space-y-3 p-3 md:hidden">
+                {ultimosMovimientos.length === 0 ? (
+                  <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">No hay movimientos registrados este mes.</p>
+                ) : (
+                  ultimosMovimientos.slice(0, 8).map((movimiento) => (
+                    <div key={movimiento.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-950">{movimiento.concepto}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatearFecha(movimiento.fecha)} · {nombreOrigen(movimiento.origen, movimiento.subcategoria)}</p>
+                        </div>
+                        <p className={`shrink-0 text-sm font-black ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : 'text-slate-950'}`}>
+                          {movimiento.tipo === 'ingreso' ? '+' : '-'}${formatearMonto(movimiento.monto)}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${
+                          nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
+                          nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-blue-50 text-blue-700' :
+                          nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
+                        }`}>
+                          {nombreBolsa(movimiento.categoria)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => movimiento.tipo === 'gasto'
+                            ? eliminarGasto({
+                                id: movimiento.id.replace('gasto-', ''),
+                                concepto: movimiento.concepto,
+                                categoria: movimiento.categoria,
+                                subcategoria: movimiento.subcategoria,
+                                monto: movimiento.monto,
+                                origen: movimiento.origen,
+                                fecha: movimiento.fecha,
+                              })
+                            : eliminarIngreso({
+                                id: movimiento.id.replace('ingreso-', ''),
+                                concepto: movimiento.concepto,
+                                monto: movimiento.monto,
+                                tipo: movimiento.subcategoria,
+                                fecha: movimiento.fecha,
+                              })}
+                          disabled={deletingId === movimiento.id || deletingId === movimiento.id.replace('gasto-', '')}
+                          className="min-h-9 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          {deletingId === movimiento.id || deletingId === movimiento.id.replace('gasto-', '') ? 'Eliminando' : 'Eliminar'}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[900px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
@@ -936,13 +1003,13 @@ export default function DashboardFinanciero() {
             </section>
 
             <section className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-950">Ingresos del mes</h2>
                   <span className="text-sm font-bold text-emerald-600">${formatearMonto(resumen.ingresosMes)}</span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-sm">
+                <div className="min-w-0 overflow-x-auto">
+                  <table className="w-full sm:min-w-[560px] text-left text-sm">
                     <tbody className="divide-y divide-slate-100">
                       {ingresosMensuales.length === 0 ? (
                         <tr><td className="py-5 text-center text-slate-500">No hay ingresos registrados.</td></tr>
@@ -959,13 +1026,13 @@ export default function DashboardFinanciero() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-950">Abonos a tarjeta</h2>
                   <span className="text-sm font-bold text-violet-600">${formatearMonto(totalAbonosTarjetaMes)}</span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-sm">
+                <div className="min-w-0 overflow-x-auto">
+                  <table className="w-full sm:min-w-[560px] text-left text-sm">
                     <tbody className="divide-y divide-slate-100">
                       {abonosTarjetaMensuales.length === 0 ? (
                         <tr><td className="py-5 text-center text-slate-500">No hay abonos registrados.</td></tr>
@@ -985,6 +1052,23 @@ export default function DashboardFinanciero() {
           </div>
         </main>
       </div>
+      <nav
+        aria-label="Navegación móvil"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden"
+      >
+        <div className="grid grid-cols-4 gap-2">
+          {mobileNavItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <span className="grid size-7 place-items-center rounded-lg bg-slate-100 text-[11px] text-slate-700">{item.mark}</span>
+              <span>{item.label}</span>
+            </a>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
