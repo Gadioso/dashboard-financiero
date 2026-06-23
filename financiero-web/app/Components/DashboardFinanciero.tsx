@@ -215,6 +215,12 @@ function fondoObjetivo(fondo: FondoAcumulado) {
   return valorNumerico(fondo.objetivo, fondo.meta, fondo.monto_objetivo, fondo.meta_monto);
 }
 
+function esCuentaDemo(account: BankAccount) {
+  const label = `${account.name || ''} ${account.official_name || ''}`.toLowerCase();
+
+  return /\b(plaid|checking|savings|money market|sandbox|flight)\b/i.test(label);
+}
+
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
@@ -231,12 +237,14 @@ export default function DashboardFinanciero() {
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
+  const [abonosTarjetaAnuales, setAbonosTarjetaAnuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [billingAction, setBillingAction] = useState<'checkout' | 'portal' | null>(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [analysisScope, setAnalysisScope] = useState<'month' | 'year'>('month');
   const [analysis, setAnalysis] = useState<DashboardAnalysis | null>(null);
@@ -265,8 +273,10 @@ export default function DashboardFinanciero() {
       const ingresosTodoElAño = dashboardData.ingresosAnuales || [];
       const gastosTodoElAño = dashboardData.gastosAnuales || [];
       const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
+      const abonosTarjetaAnualesFiltrados = abonosTarjetaTodoElAño.filter((abono) => !esAbonoTarjetaSospechoso(abono));
       setGastosAnuales(gastosTodoElAño);
       setFondosAcumulados(dashboardData.fondosAcumulados || []);
+      setAbonosTarjetaAnuales(abonosTarjetaAnualesFiltrados);
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -404,6 +414,7 @@ export default function DashboardFinanciero() {
 
   const abrirCheckoutBilling = async () => {
     setBillingLoading(true);
+    setBillingAction('checkout');
     setMensajeStatus('Abriendo checkout...');
 
     try {
@@ -420,11 +431,13 @@ export default function DashboardFinanciero() {
       setMensajeStatus('No pude abrir Stripe Checkout.');
     } finally {
       setBillingLoading(false);
+      setBillingAction(null);
     }
   };
 
   const abrirPortalBilling = async () => {
     setBillingLoading(true);
+    setBillingAction('portal');
     setMensajeStatus('Abriendo portal de facturación...');
 
     try {
@@ -441,6 +454,7 @@ export default function DashboardFinanciero() {
       setMensajeStatus('No pude abrir el portal de facturación.');
     } finally {
       setBillingLoading(false);
+      setBillingAction(null);
     }
   };
 
@@ -762,30 +776,48 @@ export default function DashboardFinanciero() {
   const totalMetasActual = metasFinancieras.reduce((total, meta) => total + meta.actual, 0);
   const totalMetasObjetivo = metasFinancieras.reduce((total, meta) => total + meta.objetivo, 0);
   const progresoMetasGlobal = totalMetasObjetivo > 0 ? Math.min((totalMetasActual / totalMetasObjetivo) * 100, 100) : 0;
-  const saldoCuentas = bankAccounts.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
+  const cuentasDemo = bankAccounts.filter(esCuentaDemo);
+  const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
+  const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
   const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
+  const cargosTdcAnuales = gastosAnuales
+    .filter((gasto) => gasto.origen === 'Santander_Email')
+    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
+  const abonosTdcAnuales = abonosTarjetaAnuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
+  const deudaTdcAnualEstimada = Math.max(cargosTdcAnuales - abonosTdcAnuales, 0);
   const planOptions = [
     {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para llevar control personal básico.',
-      features: ['1 banco conectado', '1 Gmail', '30 días de sincronización', 'Registro manual e IA básica'],
+      description: 'Para probar el control personal sin automatizar todo.',
+      features: ['1 banco conectado', '1 Gmail', '12 meses de historial', 'Registro manual e IA básica'],
+      unitCost: '$1.20',
+      margin: 'Soporte limitado',
     },
     {
       name: 'Beta',
-      price: '$149',
+      price: '$6',
       plan: 'beta',
-      description: 'Para operar el dashboard completo mientras evoluciona.',
-      features: ['3 bancos conectados', '3 Gmail', '180 días de historial', 'Telegram y reportes mensuales'],
+      description: 'Para uso personal con automatización real y bajo costo.',
+      features: ['5 bancos conectados', '3 Gmail', '12 meses de historial', 'Telegram y análisis mensual'],
+      unitCost: '$2.10-$3.40',
+      margin: '43%-65%',
     },
     {
       name: 'Premium',
-      price: '$299',
+      price: '$14',
       plan: 'premium',
-      description: 'Para análisis profundo y automatización más amplia.',
-      features: ['10 bancos conectados', '5 Gmail', '2 años de historial', 'Análisis IA anual y soporte prioritario'],
+      description: 'Para usuarios intensivos con más cuentas e histórico completo.',
+      features: ['30 bancos conectados', '5 Gmail', '12 meses de historial', 'Análisis IA anual y soporte prioritario'],
+      unitCost: '$4.00-$7.50',
+      margin: '46%-71%',
     },
+  ];
+  const goalTemplates = [
+    { name: 'Fondo de emergencia', target: resumen.ingresosMes > 0 ? resumen.ingresosMes * 3 : 90000, detail: '3 meses de ingreso como primer colchón.' },
+    { name: 'Inversión anual', target: resumen.ingresosMes > 0 ? resumen.ingresosMes * 1.5 : 45000, detail: 'Aportaciones a CETES, GBM o fondo patrimonial.' },
+    { name: 'Viaje / proyecto', target: 30000, detail: 'Meta flexible para un objetivo personal concreto.' },
   ];
 
   const iaCard = (
@@ -819,6 +851,19 @@ export default function DashboardFinanciero() {
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      {billingAction && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-5 text-center shadow-xl">
+            <div className="mx-auto grid size-12 animate-spin place-items-center rounded-full border-4 border-blue-100 border-t-blue-600" />
+            <p className="mt-4 text-base font-black text-slate-950">
+              {billingAction === 'checkout' ? 'Cargando Stripe' : 'Abriendo facturación'}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Estoy creando una sesión segura. Si cancelas en Stripe, volverás al dashboard.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[220px_1fr]">
         <aside className="hidden border-r border-slate-200 bg-white lg:flex lg:flex-col">
           <div className="flex h-16 items-center gap-3 px-5">
@@ -1165,8 +1210,19 @@ export default function DashboardFinanciero() {
                 </div>
                 <div className="space-y-3">
                   {metasFinancieras.length === 0 ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      No llegaron metas desde `fondos_acumulados`. Si ya las capturaste, falta revisar que tengan `profile_id` o que estén en esta tabla.
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                        No llegaron metas guardadas desde `fondos_acumulados`. Si ya las capturaste, falta revisar que tengan `profile_id` o que estén en esta tabla.
+                      </div>
+                      <div className="grid gap-3 lg:grid-cols-3">
+                        {goalTemplates.map((template) => (
+                          <div key={template.name} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                            <p className="font-bold text-slate-950">{template.name}</p>
+                            <p className="mt-2 text-2xl font-black text-slate-950">${formatearMonto(template.target)}</p>
+                            <p className="mt-1 text-sm text-slate-500">{template.detail}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : metasFinancieras.map((meta) => (
                     <div key={meta.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
@@ -1351,17 +1407,22 @@ export default function DashboardFinanciero() {
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <p className="text-sm font-semibold text-slate-500">Saldo visible</p>
                 <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">${formatearMonto(saldoCuentas)}</p>
-                <p className="mt-1 text-sm text-slate-500">{bankAccounts.length} cuentas · {cuentasActivas} conexiones activas</p>
+                <p className="mt-1 text-sm text-slate-500">{cuentasReales.length} cuentas reales · {cuentasActivas} conexiones activas</p>
                 <Link href="/onboarding" className="mt-5 inline-flex h-10 items-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Conectar cuenta</Link>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <h2 className="text-lg font-bold text-slate-950">Cuentas bancarias</h2>
                 <div className="mt-4 space-y-3">
-                  {bankAccounts.length === 0 ? (
+                  {cuentasDemo.length > 0 && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      No hay cuentas bancarias sincronizadas. Conecta Plaid desde configuración o revisa que la sincronización haya insertado `bank_accounts`.
+                      Detecté {cuentasDemo.length} cuenta demo de Plaid sandbox. No la sumo al saldo porque no representa tu dinero real.
                     </div>
-                  ) : bankAccounts.map((account) => (
+                  )}
+                  {cuentasReales.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      No hay cuentas reales sincronizadas. Conecta una institución real o cambia Plaid de sandbox a development/production.
+                    </div>
+                  ) : cuentasReales.map((account) => (
                     <div key={account.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -1418,6 +1479,16 @@ export default function DashboardFinanciero() {
                           {option.features.map((feature) => (
                             <p key={feature} className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{feature}</p>
                           ))}
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-lg bg-slate-50 p-3">
+                            <p className="font-semibold text-slate-500">Costo estimado</p>
+                            <p className="mt-1 font-black text-slate-950">{option.unitCost}/usuario</p>
+                          </div>
+                          <div className="rounded-lg bg-slate-50 p-3">
+                            <p className="font-semibold text-slate-500">Margen bruto</p>
+                            <p className="mt-1 font-black text-slate-950">{option.margin}</p>
+                          </div>
                         </div>
                         <button
                           type="button"
@@ -1499,9 +1570,12 @@ export default function DashboardFinanciero() {
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <h2 className="text-lg font-bold text-slate-950">Tarjeta de crédito</h2>
-                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
-                  <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
+                  <h2 className="text-lg font-bold text-slate-950">Tarjeta anual</h2>
+                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(deudaTdcAnualEstimada)}</p>
+                  <p className="mt-1 text-sm text-slate-500">Cargos Santander ${formatearMonto(cargosTdcAnuales)} · Abonos reales ${formatearMonto(abonosTdcAnuales)}</p>
+                  <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                    Esta tarjeta resume el año completo; los ceros por mes solo significan que no hay movimientos TDC clasificados en ese periodo.
+                  </div>
                   {abonosSospechososOcultos > 0 && (
                     <button
                       type="button"

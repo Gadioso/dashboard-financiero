@@ -31,19 +31,19 @@ export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
     bankConnections: 1,
     gmailIntegrations: 1,
     telegramAccounts: 1,
-    bankSyncLookbackDays: 30,
+    bankSyncLookbackDays: 365,
   },
   beta: {
-    bankConnections: 3,
+    bankConnections: 5,
     gmailIntegrations: 3,
     telegramAccounts: 1,
-    bankSyncLookbackDays: 180,
+    bankSyncLookbackDays: 365,
   },
   premium: {
-    bankConnections: 10,
+    bankConnections: 30,
     gmailIntegrations: 5,
     telegramAccounts: 3,
-    bankSyncLookbackDays: 730,
+    bankSyncLookbackDays: 365,
   },
 };
 

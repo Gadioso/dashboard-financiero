@@ -241,6 +241,9 @@ async function guardarMemoriaChat({
 }
 
 export async function POST(request: Request) {
+  let update: TelegramUpdate | null = null;
+  let chatId: number | undefined;
+
   try {
     if (telegramWebhookSecret) {
       const receivedSecret = request.headers.get('x-telegram-bot-api-secret-token');
@@ -259,8 +262,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const update = (await request.json()) as TelegramUpdate;
-    const chatId = update.message?.chat?.id;
+    update = (await request.json()) as TelegramUpdate;
+    chatId = update.message?.chat?.id;
     const texto = update.message?.text?.trim();
     const linkCode = extractTelegramLinkCode(texto);
 
@@ -381,6 +384,10 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error('Error en webhook de Telegram:', error);
     const message = error instanceof Error ? error.message : 'Error desconocido.';
+    await responderTelegram(
+      chatId,
+      `Recibí tu mensaje, pero fallé procesándolo: ${message}. Ya quedó registrado como error para revisar.`
+    ).catch(() => undefined);
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

@@ -141,7 +141,7 @@ export async function syncPlaidTransactions({
     count,
     options: {
       include_original_description: true,
-      days_requested: 90,
+      days_requested: 365,
     },
   });
 }

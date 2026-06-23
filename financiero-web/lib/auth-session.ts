@@ -13,7 +13,7 @@ export function getSafeNext(value?: string | null) {
 function getSessionCookieOptions() {
   return {
     httpOnly: true,
-    sameSite: 'strict' as const,
+    sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
@@ -30,7 +30,7 @@ export function setSupabaseSessionCookies(response: NextResponse, accessToken: s
 export function clearAuthCookies(response: NextResponse) {
   const cookieOptions = {
     httpOnly: true,
-    sameSite: 'strict' as const,
+    sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 0,
