@@ -1,7 +1,16 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+const activeGeminiModels = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+const retiredGeminiModelPattern = /^gemini-1\.5-/;
+
 export function getGeminiModelName() {
-  return process.env.GEMINI_MODEL || process.env.GOOGLE_AI_MODEL || 'gemini-2.5-flash';
+  const configuredModel = process.env.GEMINI_MODEL || process.env.GOOGLE_AI_MODEL || '';
+
+  if (configuredModel && !retiredGeminiModelPattern.test(configuredModel)) {
+    return configuredModel;
+  }
+
+  return activeGeminiModels[0];
 }
 
 function getGeminiModel(apiKey: string, modelName = getGeminiModelName()) {
@@ -12,7 +21,7 @@ function getGeminiModel(apiKey: string, modelName = getGeminiModelName()) {
 
 export async function generateGeminiText(apiKey: string, prompt: string) {
   const preferredModel = getGeminiModelName();
-  const fallbackModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+  const fallbackModels = activeGeminiModels;
   const models = [preferredModel, ...fallbackModels.filter((model) => model !== preferredModel)];
   let lastError: unknown;
 
