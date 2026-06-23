@@ -504,7 +504,16 @@ export default function DashboardFinanciero() {
   const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
   const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
   const selectedMonthName = meses2026.find((mes) => `2026-${String(mes.indice + 1).padStart(2, '0')}` === mesActivo)?.etiqueta || 'MES';
-  const desktopNavItems = ['Resumen', 'Movimientos', 'Presupuestos', 'Metas', 'Análisis', 'Cuentas', 'Planes', 'Reportes'];
+  const desktopNavItems = [
+    { label: 'Resumen', href: '#resumen' },
+    { label: 'Movimientos', href: '#movimientos' },
+    { label: 'Presupuestos', href: '#presupuesto' },
+    { label: 'Metas', href: '#analisis' },
+    { label: 'Análisis', href: '#analisis' },
+    { label: 'Cuentas', href: '#actividad-bancaria' },
+    { label: 'Planes', href: '#plan-activo' },
+    { label: 'Reportes', href: '#reporte-anual' },
+  ];
   const mobileNavItems = [
     { label: 'Inicio', href: '#resumen', mark: 'I' },
     { label: 'Bolsas', href: '#presupuesto', mark: 'B' },
@@ -523,21 +532,21 @@ export default function DashboardFinanciero() {
               <p className="text-sm font-bold leading-tight">Financiero</p>
             </div>
           </div>
-          <nav className="flex-1 space-y-1 px-3 py-5 text-sm font-medium text-slate-500">
+          <nav className="space-y-1 px-3 py-5 text-sm font-medium text-slate-500">
             {desktopNavItems.map((item) => (
-              <button
-                key={item}
-                type="button"
+              <a
+                key={item.label}
+                href={item.href}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                  item === 'Resumen' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
+                  item.label === 'Resumen' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
-                <span className={`size-2 rounded-full ${item === 'Resumen' ? 'bg-blue-600' : 'bg-slate-300'}`} />
-                {item}
-              </button>
+                <span className={`size-2 rounded-full ${item.label === 'Resumen' ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                {item.label}
+              </a>
             ))}
           </nav>
-          <div className="space-y-3 border-t border-slate-100 p-4">
+          <div className="space-y-3 border-t border-slate-100 px-4 pb-4 pt-3">
             <Link href="/onboarding" className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               Configuración
             </Link>
@@ -554,6 +563,7 @@ export default function DashboardFinanciero() {
               </div>
             </div>
           </div>
+          <div className="flex-1" />
         </aside>
 
         <main className="min-w-0 pb-24 lg:pb-0">
@@ -683,7 +693,7 @@ export default function DashboardFinanciero() {
                   </div>
 
                   <div className="grid gap-3">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div id="plan-activo" className="scroll-mt-28 rounded-lg border border-slate-200 bg-slate-50 p-4">
                       <p className="text-sm font-semibold text-slate-500">Plan activo</p>
                       <p className="mt-2 text-lg font-bold text-slate-950">Plan {planLabel}</p>
                       <p className="text-xs text-slate-500">{billingStatus?.currentPeriodEnd ? `Renueva ${formatearFecha(billingStatus.currentPeriodEnd)}` : 'Estado listo'}</p>
@@ -762,7 +772,7 @@ export default function DashboardFinanciero() {
             </section>
 
             <section id="analisis" className="scroll-mt-28 grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div id="reporte-anual" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Resultado mensual anual</h2>
@@ -824,7 +834,7 @@ export default function DashboardFinanciero() {
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div id="actividad-bancaria" className="scroll-mt-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <h2 className="text-lg font-bold text-slate-950">Actividad bancaria</h2>
                   <p className="mt-1 text-sm text-slate-500">Últimos eventos de ingesta y automatización.</p>
                   <div className="mt-4 space-y-3">

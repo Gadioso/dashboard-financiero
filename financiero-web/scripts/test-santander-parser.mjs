@@ -167,6 +167,13 @@ aprovecha una línea de crédito por $500,000.00 para tu Tarjeta de Crédito San
 Consulta términos y condiciones.`,
     expected: null,
   },
+  {
+    name: 'Credit line offer is not a card payment',
+    raw: `Santander México
+Aprovecha una línea de crédito por $500,000.00 para tu Tarjeta de Crédito Santander.
+Contrata hoy y consulta términos y condiciones.`,
+    expected: null,
+  },
 ];
 
 const results = cases.map((testCase) => {

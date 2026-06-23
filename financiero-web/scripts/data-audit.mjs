@@ -60,6 +60,14 @@ function looksLikeInformationalIncome(row) {
   return /(?:tu cuenta|puedes consultar|estimado cliente|notificaci[oó]n santander|atentamente|santander m[eé]xico|informaci[oó]n|sin concepto)/i.test(concept);
 }
 
+function looksLikeSuspiciousCardPayment(row) {
+  const concept = String(row.concepto || '').toLowerCase();
+  const amount = Number(row.monto || 0);
+
+  return amount >= 100000 ||
+    /(?:l[ií]nea de cr[eé]dito|cr[eé]dito preaprobado|aprovecha|promoci[oó]n|oferta|beneficio|sin concepto|movimiento santander)/i.test(concept);
+}
+
 function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) {
   const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
   const ingresosMes = ingresos.filter((row) => monthKey(row.fecha) === key);
@@ -134,6 +142,7 @@ async function main() {
   }
 
   const suspectIncomes = (ingresos || []).filter(looksLikeInformationalIncome);
+  const suspectCardPayments = (abonos || []).filter(looksLikeSuspiciousCardPayment);
   const duplicateIncomes = groupDuplicates(ingresos || [], ['concepto', 'monto', 'fecha_dia']);
   const duplicateExpenses = groupDuplicates(gastos || [], ['concepto', 'monto', 'fecha_dia']);
   const duplicateCardPayments = groupDuplicates(abonos || [], ['concepto', 'monto', 'fecha_dia']);
@@ -160,6 +169,7 @@ async function main() {
     monthly,
     findings: {
       suspectIncomes,
+      suspectCardPayments,
       duplicateIncomes,
       duplicateExpenses,
       duplicateCardPayments,
@@ -173,6 +183,7 @@ async function main() {
     },
     recommendedActions: [
       suspectIncomes.length ? 'Revisar y borrar ingresos informativos con `npm run data:cleanup-suspects -- --apply`.' : null,
+      suspectCardPayments.length ? 'Revisar y borrar abonos TDC sospechosos con `npm run data:cleanup-suspects -- --apply --card-payments`.' : null,
       missingBudgetMonths.length ? 'Recalcular presupuestos mensuales para meses desfasados.' : null,
       duplicateExpenses.length || duplicateIncomes.length || duplicateCardPayments.length ? 'Revisar duplicados antes de borrar.' : null,
       'Aplicar RLS en Supabase y rotar SUPABASE_SERVICE_ROLE_KEY antes de abrir acceso a terceros.',
