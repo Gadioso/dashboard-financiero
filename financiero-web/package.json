@@ -11,6 +11,7 @@
     "telegram:test-agent": "node scripts/test-telegram-agent.mjs",
     "telegram:webhook-status": "node scripts/telegram-webhook-status.mjs",
     "telegram:webhook-repair": "node scripts/telegram-webhook-status.mjs --repair",
+    "telegram:webhook-emergency": "node scripts/telegram-webhook-status.mjs --repair --drop-pending",
     "audit:goal": "node scripts/audit-financial-goal.mjs",
     "gmail:props": "node scripts/print-gmail-script-properties.mjs",
     "test:santander-parser": "node scripts/test-santander-parser.mjs",

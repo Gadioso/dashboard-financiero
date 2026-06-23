@@ -29,6 +29,7 @@ const token = env.TELEGRAM_BOT_TOKEN || '';
 const secret = env.TELEGRAM_WEBHOOK_SECRET || '';
 const appUrl = (env.NEXT_PUBLIC_APP_URL || env.APP_URL || '').replace(/\/$/, '');
 const shouldRepair = process.argv.includes('--repair');
+const shouldDropPending = process.argv.includes('--drop-pending');
 
 if (!token) {
   console.error('Falta TELEGRAM_BOT_TOKEN.');
@@ -62,7 +63,7 @@ if (shouldRepair) {
     url: expectedUrl,
     ...(secret ? { secret_token: secret } : {}),
     allowed_updates: ['message'],
-    drop_pending_updates: false,
+    drop_pending_updates: shouldDropPending,
   });
 }
 

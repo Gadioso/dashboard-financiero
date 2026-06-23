@@ -23,6 +23,7 @@ type TelegramMessage = {
 };
 
 type TelegramUpdate = {
+  update_id?: number;
   message?: TelegramMessage;
 };
 
@@ -34,6 +35,35 @@ type MensajeMemoria = {
     lastExpenseId?: string;
   };
 };
+
+const processedUpdates = new Map<number, number>();
+const PROCESSED_UPDATE_TTL_MS = 10 * 60 * 1000;
+const MAX_PROCESSED_UPDATES = 500;
+
+function alreadyReceivedUpdate(updateId?: number) {
+  if (typeof updateId !== 'number') return false;
+
+  const now = Date.now();
+  const previous = processedUpdates.get(updateId);
+
+  for (const [id, timestamp] of processedUpdates) {
+    if (now - timestamp > PROCESSED_UPDATE_TTL_MS) {
+      processedUpdates.delete(id);
+    }
+  }
+
+  if (processedUpdates.size > MAX_PROCESSED_UPDATES) {
+    const oldestId = processedUpdates.keys().next().value as number | undefined;
+    if (typeof oldestId === 'number') processedUpdates.delete(oldestId);
+  }
+
+  if (previous && now - previous < PROCESSED_UPDATE_TTL_MS) {
+    return true;
+  }
+
+  processedUpdates.set(updateId, now);
+  return false;
+}
 
 function fechaMovimientoDesdeClasificacion(fechaMovimiento: string | undefined, texto: string) {
   const fechaClasificada = fechaMovimiento ? new Date(fechaMovimiento) : null;
@@ -257,12 +287,16 @@ export async function POST(request: Request) {
 
     if (!supabase) {
       return NextResponse.json(
-        { success: false, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY.' },
-        { status: 500 }
+        { success: false, acknowledged: true, error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY.' },
+        { status: 200 }
       );
     }
 
     update = (await request.json()) as TelegramUpdate;
+    if (alreadyReceivedUpdate(update.update_id)) {
+      return NextResponse.json({ success: true, duplicate: true });
+    }
+
     chatId = update.message?.chat?.id;
     const texto = update.message?.text?.trim();
     const linkCode = extractTelegramLinkCode(texto);
@@ -276,7 +310,7 @@ export async function POST(request: Request) {
       });
 
       await responderTelegram(chatId, result.message);
-      return NextResponse.json({ success: result.success, action: 'claim-telegram', message: result.message }, { status: result.success ? 200 : 400 });
+      return NextResponse.json({ success: result.success, action: 'claim-telegram', message: result.message });
     }
 
     const tenant = await getTelegramTenantContext({ supabase, chatId });
@@ -346,7 +380,7 @@ export async function POST(request: Request) {
 
       if (error) {
         await responderTelegram(chatId, `No pude guardar el ingreso: ${error.message}`);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, acknowledged: true, error: error.message });
       }
 
       await sincronizarPresupuestoMensual(supabase, fechaMovimiento, tenant.profileId);
@@ -373,7 +407,7 @@ export async function POST(request: Request) {
 
     if (error) {
       await responderTelegram(chatId, `No pude guardar el gasto: ${error.message}`);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json({ success: false, acknowledged: true, error: error.message });
     }
 
     const message = `Registrado. ${respuesta.message}`;
@@ -384,10 +418,6 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error('Error en webhook de Telegram:', error);
     const message = error instanceof Error ? error.message : 'Error desconocido.';
-    await responderTelegram(
-      chatId,
-      `Recibí tu mensaje, pero fallé procesándolo: ${message}. Ya quedó registrado como error para revisar.`
-    ).catch(() => undefined);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, acknowledged: true, error: message }, { status: 200 });
   }
 }
