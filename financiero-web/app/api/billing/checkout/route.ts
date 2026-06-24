@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getAppBaseUrl, getPremiumPriceId, getStripeClient } from '@/lib/stripe-server';
+import type { BillingPlan } from '@/lib/billing';
+import { getAppBaseUrl, getStripeClient, getStripePriceIdForPlan } from '@/lib/stripe-server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 
 export const dynamic = 'force-dynamic';
+
+type CheckoutBody = {
+  plan?: BillingPlan;
+};
+
+function parseCheckoutPlan(value: unknown): Exclude<BillingPlan, 'free'> {
+  return value === 'beta' ? 'beta' : 'premium';
+}
 
 async function getOrCreateStripeCustomer({
   email,
@@ -52,11 +61,15 @@ async function getOrCreateStripeCustomer({
 export async function POST(request: Request) {
   try {
     const stripe = getStripeClient();
-    const priceId = getPremiumPriceId();
     const supabase = getSupabaseServiceClient();
+    const body = (await request.json().catch(() => ({}))) as CheckoutBody;
+    const plan = parseCheckoutPlan(body.plan);
+    const priceId = getStripePriceIdForPlan(plan);
 
     if (!stripe || !priceId) {
-      return NextResponse.json({ success: false, error: 'Faltan STRIPE_SECRET_KEY o STRIPE_PRICE_PREMIUM_MONTHLY.' }, { status: 500 });
+      const missingPrice = plan === 'beta' ? 'STRIPE_PRICE_BETA_MONTHLY' : 'STRIPE_PRICE_PREMIUM_MONTHLY';
+
+      return NextResponse.json({ success: false, error: `Faltan STRIPE_SECRET_KEY o ${missingPrice}.` }, { status: 500 });
     }
 
     if (!supabase) {
@@ -90,12 +103,12 @@ export async function POST(request: Request) {
       client_reference_id: tenant.profileId,
       metadata: {
         profile_id: tenant.profileId,
-        plan: 'premium',
+        plan,
       },
       subscription_data: {
         metadata: {
           profile_id: tenant.profileId,
-          plan: 'premium',
+          plan,
         },
       },
     });
@@ -110,7 +123,7 @@ export async function POST(request: Request) {
       resourceId: session.id,
       metadata: {
         customerId,
-        plan: 'premium',
+        plan,
       },
     });
 

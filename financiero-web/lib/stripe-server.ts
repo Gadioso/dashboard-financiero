@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import type { BillingPlan } from '@/lib/billing';
 
 const stripeApiVersion = '2026-05-27.dahlia';
 
@@ -25,6 +26,8 @@ export function getAppBaseUrl(request: Request) {
   return url.origin;
 }
 
-export function getPremiumPriceId() {
-  return process.env.STRIPE_PRICE_PREMIUM_MONTHLY || '';
+export function getStripePriceIdForPlan(plan: BillingPlan) {
+  if (plan === 'beta') return process.env.STRIPE_PRICE_BETA_MONTHLY || '';
+  if (plan === 'premium') return process.env.STRIPE_PRICE_PREMIUM_MONTHLY || '';
+  return '';
 }

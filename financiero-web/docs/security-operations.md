@@ -135,7 +135,7 @@ Secrets principales:
 - `GOOGLE_GMAIL_CLIENT_SECRET`: no rompe tokens ya emitidos normalmente, pero prueba reconexion.
 - `GMAIL_TOKEN_ENCRYPTION_KEY`: si cambia sin migracion de re-cifrado, los usuarios deben reconectar Gmail.
 - `BANK_TOKEN_ENCRYPTION_KEY`: si cambia sin migracion de re-cifrado, los usuarios deben reconectar bancos.
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PREMIUM_MONTHLY`: probar checkout, portal y webhook.
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BETA_MONTHLY`, `STRIPE_PRICE_PREMIUM_MONTHLY`: probar checkout, portal y webhook.
 - `CRON_SECRET`: actualizar cualquier job externo que lo use.
 - `EMAIL_INGEST_SECRET`: mantener solo para compatibilidad mientras se retira el flujo viejo.
 

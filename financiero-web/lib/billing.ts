@@ -34,13 +34,13 @@ export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
     bankSyncLookbackDays: 30,
   },
   beta: {
-    bankConnections: 1,
+    bankConnections: 0,
     gmailIntegrations: 1,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
   },
   premium: {
-    bankConnections: 3,
+    bankConnections: 0,
     gmailIntegrations: 2,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
@@ -49,17 +49,17 @@ export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
 
 export const defaultBillingStatus: BillingStatus = {
   configured: false,
-  plan: 'beta',
-  status: 'beta',
-  active: true,
+  plan: 'free',
+  status: 'free',
+  active: false,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
   stripeCustomerId: null,
-  limits: billingPlanLimits.beta,
+  limits: billingPlanLimits.free,
 };
 
 export function isBillingConfigured() {
-  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_PREMIUM_MONTHLY);
+  return Boolean(process.env.STRIPE_SECRET_KEY && (process.env.STRIPE_PRICE_BETA_MONTHLY || process.env.STRIPE_PRICE_PREMIUM_MONTHLY));
 }
 
 export function getBillingLimits(plan: BillingPlan) {

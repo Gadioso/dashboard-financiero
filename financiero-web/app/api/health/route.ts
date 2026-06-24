@@ -14,6 +14,7 @@ const requiredEnv = {
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   stripeSecret: 'STRIPE_SECRET_KEY',
   stripeWebhook: 'STRIPE_WEBHOOK_SECRET',
+  stripeBetaPrice: 'STRIPE_PRICE_BETA_MONTHLY',
   stripePremiumPrice: 'STRIPE_PRICE_PREMIUM_MONTHLY',
 };
 

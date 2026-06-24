@@ -427,13 +427,17 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const abrirCheckoutBilling = async () => {
+  const abrirCheckoutBilling = async (plan: 'beta' | 'premium' = 'premium') => {
     setBillingLoading(true);
     setBillingAction('checkout');
-    setMensajeStatus('Abriendo checkout...');
+    setMensajeStatus(`Abriendo checkout ${plan === 'beta' ? 'Beta' : 'Premium'}...`);
 
     try {
-      const response = await fetch('/api/billing/checkout', { method: 'POST' });
+      const response = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
       const data = await response.json();
 
       if (!response.ok || !data.success || !data.url) {
@@ -805,22 +809,22 @@ export default function DashboardFinanciero() {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para probar el dashboard antes de automatizar.',
-      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'IA limitada'],
+      description: 'Para probar el asistente financiero 33/33/33.',
+      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'IA muy limitada'],
     },
     {
       name: 'Beta',
-      price: '$19',
+      price: '$15',
       plan: 'beta',
-      description: 'Para una persona con automatizacion bancaria esencial.',
-      features: ['1 banco principal', 'Correo bancario fallback', '12 meses de historial', 'Telegram y analisis mensual'],
+      description: 'Para usar el asistente financiero personal sin banco directo.',
+      features: ['Telegram incluido', 'Correo bancario fallback', '12 meses de historial', 'Analisis mensual con IA'],
     },
     {
       name: 'Premium',
       price: '$39',
       plan: 'premium',
-      description: 'Para finanzas personales avanzadas y mas automatizacion.',
-      features: ['Hasta 3 instituciones', '2 correos fallback', '12 meses de historial', 'Analisis mensual/anual y soporte prioritario'],
+      description: 'Para seguimiento avanzado con mas analisis y soporte.',
+      features: ['2 correos fallback', '12 meses de historial', 'Analisis mensual/anual con IA', 'Soporte prioritario'],
     },
   ];
   const goalTemplates = [
@@ -953,7 +957,14 @@ export default function DashboardFinanciero() {
                 {billingConfigured && (
                   <button
                     type="button"
-                    onClick={premiumActive ? abrirPortalBilling : abrirCheckoutBilling}
+                    onClick={() => {
+                      if (premiumActive) {
+                        void abrirPortalBilling();
+                        return;
+                      }
+
+                      void abrirCheckoutBilling('premium');
+                    }}
                     disabled={billingLoading}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
                   >
@@ -1492,22 +1503,22 @@ export default function DashboardFinanciero() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (option.plan === billingStatus?.plan && premiumActive) {
+                            if (option.plan === billingStatus?.plan && billingStatus?.active) {
                               void abrirPortalBilling();
                               return;
                             }
-                            if (option.plan === 'premium') {
-                              void abrirCheckoutBilling();
+                            if (option.plan === 'beta' || option.plan === 'premium') {
+                              void abrirCheckoutBilling(option.plan);
                               return;
                             }
-                            setMensajeStatus(`${option.name} queda como definición de producto por ahora.`);
+                            setMensajeStatus('Gratis es el plan base sin suscripción activa.');
                           }}
-                          disabled={billingLoading || (!billingConfigured && option.plan === 'premium')}
+                          disabled={billingLoading || (!billingConfigured && (option.plan === 'beta' || option.plan === 'premium'))}
                           className={`mt-5 h-10 w-full rounded-lg px-4 text-sm font-bold disabled:opacity-60 ${
                             isCurrent ? 'border border-blue-200 bg-white text-blue-700' : 'bg-blue-600 text-white hover:bg-blue-700'
                           }`}
                         >
-                          {isCurrent ? 'Gestionar plan' : option.plan === 'premium' ? 'Mejorar' : 'Seleccionar'}
+                          {isCurrent ? 'Gestionar plan' : option.plan === 'free' ? 'Plan base' : 'Elegir plan'}
                         </button>
                       </div>
                     );

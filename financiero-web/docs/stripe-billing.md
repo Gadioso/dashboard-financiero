@@ -6,6 +6,7 @@ Billing usa Stripe Checkout en modo `subscription` y Stripe Customer Portal para
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_BETA_MONTHLY`
 - `STRIPE_PRICE_PREMIUM_MONTHLY`
 - `NEXT_PUBLIC_APP_URL`
 
@@ -26,7 +27,7 @@ Ambas tablas tienen `profile_id`, RLS y policies por `auth.uid()`.
 
 ## Endpoints
 
-- `POST /api/billing/checkout`: crea Stripe Checkout para el plan premium.
+- `POST /api/billing/checkout`: crea Stripe Checkout para `beta` o `premium`.
 - `POST /api/billing/portal`: abre Stripe Customer Portal.
 - `POST /api/billing/webhook`: sincroniza estado de suscripcion desde Stripe.
 
@@ -41,7 +42,7 @@ Configurar en Stripe:
 
 ## Estado actual
 
-Sin suscripcion activa, el producto queda en `beta` para no bloquear a usuarios existentes. Cuando el webhook registra una suscripcion `active` o `trialing`, `/api/account/status` devuelve `billing.plan = "premium"`.
+Sin suscripcion activa, el producto queda en `free`. Cuando el webhook registra una suscripcion `active` o `trialing`, `/api/account/status` devuelve `billing.plan = "beta"` o `billing.plan = "premium"` segun metadata/precio de Stripe.
 
 ## Limites iniciales
 
@@ -49,9 +50,11 @@ Los limites viven en `lib/billing.ts` y se aplican al agregar nuevas conexiones.
 
 | Plan | Bancos | Gmail | Telegram | Sincronizacion historica |
 | --- | ---: | ---: | ---: | ---: |
-| free | 1 | 1 | 1 | 30 dias |
-| beta | 3 | 3 | 1 | 180 dias |
-| premium | 10 | 5 | 3 | 730 dias |
+| free | 0 | 1 | 0 | 30 dias |
+| beta | 0 | 1 | 1 | 365 dias |
+| premium | 0 | 2 | 1 | 365 dias |
+
+Banco directo queda pausado hasta validar margen con Plaid/Belvo/Finerio/Prometeo. Cuando se active, debe entrar como add-on o plan separado.
 
 Endpoints con bloqueo por limite:
 
