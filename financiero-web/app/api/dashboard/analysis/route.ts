@@ -12,12 +12,14 @@ type AnalysisBody = {
   buckets?: unknown;
 };
 
-const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+function getGoogleApiKey() {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+}
 
-function fallbackAnalysis(scope: 'month' | 'year', monthLabel: string) {
+function fallbackAnalysis(scope: 'month' | 'year', monthLabel: string, diagnosis?: string) {
   return {
     headline: scope === 'year' ? 'Lectura anual pendiente de IA' : `Lectura de ${monthLabel.toLowerCase()} pendiente de IA`,
-    diagnosis: 'No hay una llave de Gemini configurada para generar el análisis automático.',
+    diagnosis: diagnosis || 'No hay una llave de Gemini configurada para generar el análisis automático.',
     actions: [
       'Revisar ingresos, egresos y flujo neto contra el mes anterior.',
       'Detectar la bolsa con mayor presión y ajustar los gastos nuevos ahí primero.',
@@ -50,6 +52,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as AnalysisBody;
   const scope = body.scope === 'year' ? 'year' : 'month';
   const monthLabel = body.monthLabel || 'MES';
+  const googleApiKey = getGoogleApiKey();
 
   if (!googleApiKey) {
     return NextResponse.json({
@@ -91,11 +94,17 @@ Reglas:
 
     return NextResponse.json({ success: true, generatedBy: 'gemini', analysis });
   } catch (error: unknown) {
+    const warning = error instanceof Error ? error.message : 'No pude generar análisis IA.';
+
     return NextResponse.json({
       success: true,
       generatedBy: 'fallback',
-      warning: error instanceof Error ? error.message : 'No pude generar análisis IA.',
-      analysis: fallbackAnalysis(scope, monthLabel),
+      warning,
+      analysis: fallbackAnalysis(
+        scope,
+        monthLabel,
+        `La llave de Gemini sí está configurada, pero el modelo no respondió correctamente: ${warning}`
+      ),
     });
   }
 }

@@ -11,7 +11,7 @@ const requiredEnv = {
   telegramWebhook: 'TELEGRAM_WEBHOOK_SECRET',
   telegramNotifyChat: 'TELEGRAM_NOTIFY_CHAT_ID',
   emailIngest: 'EMAIL_INGEST_SECRET',
-  gemini: 'GEMINI_API_KEY',
+  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   stripeSecret: 'STRIPE_SECRET_KEY',
   stripeWebhook: 'STRIPE_WEBHOOK_SECRET',
   stripePremiumPrice: 'STRIPE_PRICE_PREMIUM_MONTHLY',
@@ -19,7 +19,10 @@ const requiredEnv = {
 
 function envConfigured() {
   return Object.fromEntries(
-    Object.entries(requiredEnv).map(([label, key]) => [label, Boolean(process.env[key])])
+    Object.entries(requiredEnv).map(([label, key]) => [
+      label,
+      Array.isArray(key) ? key.some((name) => Boolean(process.env[name])) : Boolean(process.env[key]),
+    ])
   );
 }
 
