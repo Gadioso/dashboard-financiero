@@ -6,6 +6,14 @@ export const authCookieName = 'dashboard_auth';
 export const accessCookieName = 'sb_access_token';
 export const refreshCookieName = 'sb_refresh_token';
 
+export function getRequestCookie(request: Request, name: string) {
+  const cookieHeader = request.headers.get('cookie') || '';
+  const cookies = cookieHeader.split(';').map((cookie) => cookie.trim());
+  const match = cookies.find((cookie) => cookie.startsWith(`${name}=`));
+
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
+}
+
 export function getSafeNext(value?: string | null) {
   return value?.startsWith('/') && !value.startsWith('//') ? value : '/';
 }

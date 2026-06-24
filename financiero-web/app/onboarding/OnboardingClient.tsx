@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 type AccountStatus = {
   success: boolean;
@@ -38,6 +38,7 @@ type BankCountryOption = {
   code: BankCountryCode;
   label: string;
   providerPreference: string[];
+  banks: string[];
 };
 
 type PlaidHandler = {
@@ -62,14 +63,14 @@ const currencyFormatter = new Intl.NumberFormat('es-MX', {
 });
 
 const bankCountryOptions: BankCountryOption[] = [
-  { code: 'MX', label: 'Mexico', providerPreference: ['prometeo', 'belvo', 'finerio'] },
-  { code: 'US', label: 'Estados Unidos', providerPreference: ['plaid'] },
-  { code: 'CO', label: 'Colombia', providerPreference: ['prometeo', 'belvo'] },
-  { code: 'BR', label: 'Brasil', providerPreference: ['belvo', 'prometeo'] },
-  { code: 'CL', label: 'Chile', providerPreference: ['prometeo'] },
-  { code: 'PE', label: 'Peru', providerPreference: ['prometeo'] },
-  { code: 'AR', label: 'Argentina', providerPreference: ['prometeo'] },
-  { code: 'OTHER', label: 'Otro pais', providerPreference: ['prometeo'] },
+  { code: 'MX', label: 'Mexico', providerPreference: ['prometeo', 'finerio', 'belvo'], banks: ['BBVA', 'Santander', 'Banorte', 'Citibanamex', 'HSBC', 'Nu', 'Otro banco'] },
+  { code: 'US', label: 'Estados Unidos', providerPreference: ['plaid'], banks: ['Chase', 'Bank of America', 'Wells Fargo', 'Citi', 'Capital One', 'Otro banco'] },
+  { code: 'CO', label: 'Colombia', providerPreference: ['prometeo', 'belvo'], banks: ['Bancolombia', 'Davivienda', 'BBVA', 'Banco de Bogota', 'Otro banco'] },
+  { code: 'BR', label: 'Brasil', providerPreference: ['belvo', 'prometeo'], banks: ['Itau', 'Bradesco', 'Nubank', 'Banco do Brasil', 'Otro banco'] },
+  { code: 'CL', label: 'Chile', providerPreference: ['prometeo'], banks: ['Banco de Chile', 'Santander', 'BCI', 'Scotiabank', 'Otro banco'] },
+  { code: 'PE', label: 'Peru', providerPreference: ['prometeo'], banks: ['BCP', 'BBVA', 'Interbank', 'Scotiabank', 'Otro banco'] },
+  { code: 'AR', label: 'Argentina', providerPreference: ['prometeo'], banks: ['Galicia', 'Santander', 'BBVA', 'Macro', 'Otro banco'] },
+  { code: 'OTHER', label: 'Otro pais', providerPreference: ['prometeo'], banks: ['Otro banco'] },
 ];
 
 function formatCurrency(value: number) {
@@ -92,6 +93,7 @@ export default function OnboardingClient() {
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [bankProviders, setBankProviders] = useState<BankProvider[]>([]);
   const [bankCountry, setBankCountry] = useState<BankCountryCode>('MX');
+  const [bankName, setBankName] = useState('Santander');
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
@@ -106,12 +108,24 @@ export default function OnboardingClient() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const refreshStatus = async ({ keepFeedback = false }: { keepFeedback?: boolean } = {}) => {
+  const fetchWithSessionRefresh = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+
+    if (response.status !== 401) return response;
+
+    const refreshResponse = await fetch('/api/auth/refresh', { method: 'POST' });
+
+    if (!refreshResponse.ok) return response;
+
+    return fetch(input, init);
+  }, []);
+
+  const refreshStatus = useCallback(async ({ keepFeedback = false }: { keepFeedback?: boolean } = {}) => {
     setLoading(true);
     if (!keepFeedback) setError('');
 
     try {
-      const response = await fetch('/api/account/status', { cache: 'no-store' });
+      const response = await fetchWithSessionRefresh('/api/account/status', { cache: 'no-store' });
       const data = (await response.json()) as AccountStatus;
 
       if (!response.ok || !data.success) {
@@ -123,7 +137,7 @@ export default function OnboardingClient() {
       setMonthlyTarget(String(data.profile?.monthly_income_target || 60000));
 
       if (data.profileScoped) {
-        const providersResponse = await fetch('/api/bank/providers', { cache: 'no-store' });
+        const providersResponse = await fetchWithSessionRefresh('/api/bank/providers', { cache: 'no-store' });
         const providersData = await providersResponse.json();
 
         if (providersResponse.ok && providersData.success) {
@@ -135,7 +149,7 @@ export default function OnboardingClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchWithSessionRefresh]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -146,7 +160,7 @@ export default function OnboardingClient() {
       if (params.get('gmail') === 'connected') setMessage('Gmail/Banco conectado con Google.');
       void refreshStatus({ keepFeedback: Boolean(routeError || params.get('gmail')) });
     });
-  }, []);
+  }, [refreshStatus]);
 
   const monthlyTargetNumber = parseMoney(monthlyTarget);
   const third = monthlyTargetNumber / 3;
@@ -161,13 +175,13 @@ export default function OnboardingClient() {
   const hasBankFallback = hasBankConnection || hasGmail;
   const selectedBankCountry = bankCountryOptions.find((country) => country.code === bankCountry) || bankCountryOptions[0];
   const selectedCountryProvider = selectedBankCountry.providerPreference
-    .map((providerId) => bankProviders.find((provider) => provider.id === providerId && provider.configured))
+    .map((providerId) => bankProviders.find((provider) => provider.id === providerId))
     .find(Boolean);
-  const canConnectSelectedCountry = selectedCountryProvider?.id === 'plaid';
+  const canConnectSelectedCountry = selectedCountryProvider?.id === 'plaid' && selectedCountryProvider.configured;
   const selectedCountryStatus = selectedCountryProvider
     ? canConnectSelectedCountry
       ? 'Listo para conectar'
-      : 'Estamos activando la conexion bancaria para este pais'
+      : `${selectedCountryProvider.name} es la ruta recomendada; falta activar el flujo de conexion para este pais`
     : 'Aun no disponible para este pais';
   const checklist = useMemo(
     () => [
@@ -188,7 +202,7 @@ export default function OnboardingClient() {
     setMessage('');
 
     try {
-      const response = await fetch('/api/account/onboarding', {
+      const response = await fetchWithSessionRefresh('/api/account/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -219,7 +233,7 @@ export default function OnboardingClient() {
     setMessage('');
 
     try {
-      const response = await fetch('/api/account/telegram-link-code', {
+      const response = await fetchWithSessionRefresh('/api/account/telegram-link-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -275,7 +289,7 @@ export default function OnboardingClient() {
     setMessage('');
 
     try {
-      const tokenResponse = await fetch('/api/bank/plaid/link-token', {
+      const tokenResponse = await fetchWithSessionRefresh('/api/bank/plaid/link-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -297,7 +311,7 @@ export default function OnboardingClient() {
         token: tokenData.linkToken,
         onSuccess: async (publicToken, metadata) => {
           try {
-            const exchangeResponse = await fetch('/api/bank/plaid/exchange-public-token', {
+            const exchangeResponse = await fetchWithSessionRefresh('/api/bank/plaid/exchange-public-token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -348,7 +362,7 @@ export default function OnboardingClient() {
     setMessage('');
 
     try {
-      const response = await fetch('/api/bank/plaid/sync', {
+      const response = await fetchWithSessionRefresh('/api/bank/plaid/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -374,7 +388,7 @@ export default function OnboardingClient() {
     setMessage('');
 
     try {
-      const response = await fetch('/api/email/gmail/sync', {
+      const response = await fetchWithSessionRefresh('/api/email/gmail/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -539,13 +553,17 @@ export default function OnboardingClient() {
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">Banco</h2>
-              <p className="mt-1 text-sm text-slate-500">Elige tu pais y conecta tu banco. La plataforma selecciona automaticamente la conexion adecuada.</p>
+              <h2 className="text-xl font-bold text-slate-950">Conexion bancaria</h2>
+              <p className="mt-1 text-sm text-slate-500">Primero dinos donde esta tu banco. Despues elegimos el proveedor mas adecuado para sincronizar movimientos.</p>
               <label className="mt-5 block text-sm font-medium text-slate-600">
-                Pais de tu banco
+                1. Pais de tu banco
                 <select
                   value={bankCountry}
-                  onChange={(event) => setBankCountry(event.target.value as BankCountryCode)}
+                  onChange={(event) => {
+                    const nextCountry = bankCountryOptions.find((country) => country.code === event.target.value) || bankCountryOptions[0];
+                    setBankCountry(nextCountry.code);
+                    setBankName(nextCountry.banks[0]);
+                  }}
                   className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
                 >
                   {bankCountryOptions.map((country) => (
@@ -555,8 +573,24 @@ export default function OnboardingClient() {
                   ))}
                 </select>
               </label>
+              <label className="mt-4 block text-sm font-medium text-slate-600">
+                2. Banco principal
+                <select
+                  value={bankName}
+                  onChange={(event) => setBankName(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
+                >
+                  {selectedBankCountry.banks.map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-sm font-semibold text-slate-900">{selectedCountryStatus}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">3. Ruta de conexion</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{selectedCountryProvider?.name || 'Proveedor por confirmar'} para {bankName}</p>
+                <p className="mt-1 text-sm text-slate-600">{selectedCountryStatus}</p>
                 <p className="mt-1 text-xs text-slate-500">
                   Tus credenciales bancarias se ingresan en una ventana segura del proveedor autorizado. El dashboard solo recibe acceso de lectura.
                 </p>
@@ -585,7 +619,7 @@ export default function OnboardingClient() {
                 disabled={!hasProfile || !canConnectSelectedCountry || connectingPlaid}
                 className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {connectingPlaid ? 'Abriendo conexion bancaria...' : 'Conectar mi banco'}
+                {connectingPlaid ? 'Abriendo conexion segura...' : canConnectSelectedCountry ? `Conectar ${bankName}` : 'Conexion directa en preparacion'}
               </button>
               <button
                 type="button"
@@ -593,24 +627,28 @@ export default function OnboardingClient() {
                 disabled={!hasProfile || !hasBankConnection || syncingBank}
                 className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {syncingBank ? 'Sincronizando banco...' : 'Sincronizar banco ahora'}
+                {syncingBank ? 'Sincronizando movimientos...' : 'Actualizar movimientos bancarios'}
               </button>
-              <button
-                type="button"
-                onClick={startGmailOAuth}
-                disabled={!hasProfile}
-                className="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {hasGmail ? 'Conectar otro correo bancario' : 'Conectar correo bancario'}
-              </button>
-              <button
-                type="button"
-                onClick={syncGmailNow}
-                disabled={!hasProfile || !hasGmailOAuth || syncingGmail}
-                className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {syncingGmail ? 'Sincronizando...' : 'Sincronizar Gmail ahora'}
-              </button>
+              <div className="mt-5 border-t border-slate-200 pt-4">
+                <p className="text-sm font-semibold text-slate-900">Fallback por correo bancario</p>
+                <p className="mt-1 text-xs text-slate-500">Usalo solo si tu banco todavia no tiene conexion directa. Leemos correos bancarios autorizados y convertimos cargos/abonos en movimientos.</p>
+                <button
+                  type="button"
+                  onClick={startGmailOAuth}
+                  disabled={!hasProfile}
+                  className="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {hasGmail ? 'Agregar otro correo bancario' : 'Usar correo bancario'}
+                </button>
+                <button
+                  type="button"
+                  onClick={syncGmailNow}
+                  disabled={!hasProfile || !hasGmailOAuth || syncingGmail}
+                  className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {syncingGmail ? 'Sincronizando correos...' : 'Actualizar movimientos desde correo'}
+                </button>
+              </div>
             </section>
           </div>
         </div>

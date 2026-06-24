@@ -256,17 +256,32 @@ export default function DashboardFinanciero() {
     window.location.href = '/login';
   };
 
+  const fetchWithSessionRefresh = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+
+    if (response.status !== 401) return response;
+
+    const refreshResponse = await fetch('/api/auth/refresh', { method: 'POST' });
+
+    if (!refreshResponse.ok) return response;
+
+    return fetch(input, init);
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
 
-      const response = await fetch(`/api/dashboard?mes=${encodeURIComponent(mesActivo)}`, {
+      const response = await fetchWithSessionRefresh(`/api/dashboard?mes=${encodeURIComponent(mesActivo)}`, {
         cache: 'no-store',
       });
       const dashboardData = (await response.json()) as DashboardApiResponse;
 
       if (!response.ok || !dashboardData.success) {
-        setMensajeStatus(`Error cargando dashboard: ${dashboardData.error || 'respuesta inválida'}`);
+        setMensajeStatus(response.status === 401
+          ? 'Tu sesión expiró. Vuelve a iniciar sesión para continuar.'
+          : `Error cargando dashboard: ${dashboardData.error || 'respuesta inválida'}`
+        );
         return;
       }
 
@@ -333,7 +348,7 @@ export default function DashboardFinanciero() {
     } finally {
       setLoading(false);
     }
-  }, [mesActivo]);
+  }, [fetchWithSessionRefresh, mesActivo]);
 
   useEffect(() => {
     void Promise.resolve().then(fetchData);
@@ -345,8 +360,8 @@ export default function DashboardFinanciero() {
     async function fetchAccountAndBankStatus() {
       try {
         const [bankResponse, accountResponse] = await Promise.all([
-          fetch('/api/email/santander'),
-          fetch('/api/account/status'),
+          fetchWithSessionRefresh('/api/email/santander'),
+          fetchWithSessionRefresh('/api/account/status'),
         ]);
         const bankData = await bankResponse.json();
         const accountData = (await accountResponse.json()) as AccountStatus;
@@ -367,12 +382,12 @@ export default function DashboardFinanciero() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [fetchWithSessionRefresh]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       void fetchData();
-    }, 5000);
+    }, 60000);
 
     return () => {
       window.clearInterval(intervalId);
@@ -790,28 +805,22 @@ export default function DashboardFinanciero() {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para probar el control personal sin automatizar todo.',
-      features: ['1 banco conectado', '1 Gmail', '12 meses de historial', 'Registro manual e IA básica'],
-      unitCost: '$1.20',
-      margin: 'Soporte limitado',
+      description: 'Para probar el dashboard antes de automatizar.',
+      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'IA limitada'],
     },
     {
       name: 'Beta',
-      price: '$6',
+      price: '$19',
       plan: 'beta',
-      description: 'Para uso personal con automatización real y bajo costo.',
-      features: ['5 bancos conectados', '3 Gmail', '12 meses de historial', 'Telegram y análisis mensual'],
-      unitCost: '$2.10-$3.40',
-      margin: '43%-65%',
+      description: 'Para una persona con automatizacion bancaria esencial.',
+      features: ['1 banco principal', 'Correo bancario fallback', '12 meses de historial', 'Telegram y analisis mensual'],
     },
     {
       name: 'Premium',
-      price: '$14',
+      price: '$39',
       plan: 'premium',
-      description: 'Para usuarios intensivos con más cuentas e histórico completo.',
-      features: ['30 bancos conectados', '5 Gmail', '12 meses de historial', 'Análisis IA anual y soporte prioritario'],
-      unitCost: '$4.00-$7.50',
-      margin: '46%-71%',
+      description: 'Para finanzas personales avanzadas y mas automatizacion.',
+      features: ['Hasta 3 instituciones', '2 correos fallback', '12 meses de historial', 'Analisis mensual/anual y soporte prioritario'],
     },
   ];
   const goalTemplates = [
@@ -1479,16 +1488,6 @@ export default function DashboardFinanciero() {
                           {option.features.map((feature) => (
                             <p key={feature} className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{feature}</p>
                           ))}
-                        </div>
-                        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded-lg bg-slate-50 p-3">
-                            <p className="font-semibold text-slate-500">Costo estimado</p>
-                            <p className="mt-1 font-black text-slate-950">{option.unitCost}/usuario</p>
-                          </div>
-                          <div className="rounded-lg bg-slate-50 p-3">
-                            <p className="font-semibold text-slate-500">Margen bruto</p>
-                            <p className="mt-1 font-black text-slate-950">{option.margin}</p>
-                          </div>
                         </div>
                         <button
                           type="button"

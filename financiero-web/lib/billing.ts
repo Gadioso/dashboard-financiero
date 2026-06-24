@@ -28,21 +28,21 @@ const activeSubscriptionStatuses = new Set(activeSubscriptionStatusList);
 
 export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
   free: {
+    bankConnections: 0,
+    gmailIntegrations: 1,
+    telegramAccounts: 0,
+    bankSyncLookbackDays: 30,
+  },
+  beta: {
     bankConnections: 1,
     gmailIntegrations: 1,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
   },
-  beta: {
-    bankConnections: 5,
-    gmailIntegrations: 3,
-    telegramAccounts: 1,
-    bankSyncLookbackDays: 365,
-  },
   premium: {
-    bankConnections: 30,
-    gmailIntegrations: 5,
-    telegramAccounts: 3,
+    bankConnections: 3,
+    gmailIntegrations: 2,
+    telegramAccounts: 1,
     bankSyncLookbackDays: 365,
   },
 };
