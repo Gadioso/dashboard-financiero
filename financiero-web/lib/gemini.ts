@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const activeGeminiModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+const activeGeminiModels = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
 
 export function getGeminiModelName() {
   const configuredModel = process.env.GEMINI_MODEL || process.env.GOOGLE_AI_MODEL || '';
