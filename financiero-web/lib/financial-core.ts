@@ -146,6 +146,66 @@ export function extraerFechaRelativaMovimiento(texto: string) {
   return new Date(Date.UTC(year, monthIndex, day + offset, 12));
 }
 
+const mesesTexto: Record<string, number> = {
+  enero: 0,
+  ene: 0,
+  febrero: 1,
+  feb: 1,
+  marzo: 2,
+  mar: 2,
+  abril: 3,
+  abr: 3,
+  mayo: 4,
+  may: 4,
+  junio: 5,
+  jun: 5,
+  julio: 6,
+  jul: 6,
+  agosto: 7,
+  ago: 7,
+  septiembre: 8,
+  setiembre: 8,
+  sep: 8,
+  sept: 8,
+  octubre: 9,
+  oct: 9,
+  noviembre: 10,
+  nov: 10,
+  diciembre: 11,
+  dic: 11,
+};
+
+export function extraerFechaExplicitaMovimiento(texto: string) {
+  const normalizado = texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const match = normalizado.match(/\b(?:el\s+)?([0-3]?\d)\s*(?:de\s+)?(enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)(?:\s*(?:de\s*)?(\d{4}))?\b/);
+
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const monthIndex = mesesTexto[match[2]];
+  const current = currentMexicoDateParts();
+  const year = match[3] ? Number(match[3]) : current.year;
+
+  if (!Number.isInteger(day) || day < 1 || day > 31 || monthIndex === undefined || !Number.isInteger(year)) {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(year, monthIndex, day, 12));
+
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== monthIndex || date.getUTCDate() !== day) {
+    return null;
+  }
+
+  return date;
+}
+
+export function extraerFechaMovimiento(texto: string) {
+  return extraerFechaExplicitaMovimiento(texto) || extraerFechaRelativaMovimiento(texto);
+}
+
 export const formatoFechaMX = new Intl.DateTimeFormat('es-MX', {
   timeZone: 'America/Mexico_City',
   day: '2-digit',

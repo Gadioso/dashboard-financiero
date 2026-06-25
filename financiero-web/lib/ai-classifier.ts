@@ -3,7 +3,7 @@ import {
   type CategoriaFinanciera,
   type ClasificacionMovimiento,
   esComandoAyuda,
-  extraerFechaRelativaMovimiento,
+  extraerFechaMovimiento,
   parsearMovimientoEstructurado,
 } from '@/lib/financial-core';
 
@@ -75,8 +75,8 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
   if (!Number.isFinite(monto) || monto <= 0) return null;
 
   const concepto = limpiarConcepto(texto) || 'Movimiento';
-  const fechaRelativa = extraerFechaRelativaMovimiento(texto);
-  const fechaMovimiento = fechaRelativa ? fechaRelativa.toISOString() : undefined;
+  const fechaDetectada = extraerFechaMovimiento(texto);
+  const fechaMovimiento = fechaDetectada ? fechaDetectada.toISOString() : undefined;
 
   if (/\b(reg[ií]strame|registrame|registra|registrar|gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision)\b/.test(normalizado) && /\b(ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance)\b/.test(normalizado)) {
     return {
@@ -204,6 +204,8 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
 
   if (estructurado.ok) {
     if (estructurado.tipo === 'gasto' && herramientaProductivaRegex.test(estructurado.concepto.toLowerCase())) {
+      const fechaDetectada = extraerFechaMovimiento(texto);
+
       return {
         concepto: estructurado.concepto,
         monto: estructurado.monto,
@@ -211,9 +213,11 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
         categoria: 'Futuro',
         subcategoria: 'Inversion',
         razon: 'Clasificado por regla local como herramienta/software de inversión productiva.',
-        ...(extraerFechaRelativaMovimiento(texto) ? { fechaMovimiento: extraerFechaRelativaMovimiento(texto)?.toISOString() } : {}),
+        ...(fechaDetectada ? { fechaMovimiento: fechaDetectada.toISOString() } : {}),
       };
     }
+
+    const fechaDetectada = extraerFechaMovimiento(texto);
 
     return {
       concepto: estructurado.concepto,
@@ -222,7 +226,7 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
       categoria: estructurado.categoria,
       subcategoria: estructurado.subcategoria,
       razon: estructurado.razon,
-      ...(extraerFechaRelativaMovimiento(texto) ? { fechaMovimiento: extraerFechaRelativaMovimiento(texto)?.toISOString() } : {}),
+      ...(fechaDetectada ? { fechaMovimiento: fechaDetectada.toISOString() } : {}),
     };
   }
 
@@ -273,7 +277,7 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "Mercado Pago, PayPal, restaurants, travel, hotels, Uber/Didi rides, coffee, convenience stores and leisure purchases are Placeres unless the user explicitly says they were for a necessary living expense.",
     "Vida is narrow: rent, water, electricity, basic groceries/supermarket, necessary transport/gasoline, phone/internet, health and debt. Do not put software, AI, cloud or work tools in Vida.",
     "If there is no clear amount, use 0. Do not invent an amount.",
-    "If the user says hoy, ayer, anoche, antier or anteayer, include fechaMovimiento as an ISO date for that relative date in America/Mexico_City.",
+    "If the user says hoy, ayer, anoche, antier, anteayer, or gives an explicit date such as 21 de junio, include fechaMovimiento as an ISO date for that date in America/Mexico_City.",
     "Do not include relative date words such as ayer or hoy in concepto.",
     "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
     "Return only valid raw JSON matching the output_schema."

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos, extraerFechaRelativaMovimiento } from '@/lib/financial-core';
+import { categoriaParaGastos, extraerFechaMovimiento } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib/tenant-context';
@@ -72,7 +72,7 @@ function fechaMovimientoDesdeClasificacion(fechaMovimiento: string | undefined, 
     return fechaClasificada;
   }
 
-  return extraerFechaRelativaMovimiento(texto) || new Date();
+  return extraerFechaMovimiento(texto) || new Date();
 }
 
 function extractTelegramLinkCode(texto?: string | null) {

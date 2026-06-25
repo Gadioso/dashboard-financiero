@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
-import { categoriaParaGastos } from '@/lib/financial-core';
+import { categoriaParaGastos, extraerFechaMovimiento } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
@@ -29,6 +29,9 @@ export async function POST(request: Request) {
     }
 
     const dataAI = await clasificarMovimientoFinanciero(texto, googleApiKey);
+    const fechaMovimiento = dataAI.fechaMovimiento && !Number.isNaN(new Date(dataAI.fechaMovimiento).getTime())
+      ? new Date(dataAI.fechaMovimiento)
+      : extraerFechaMovimiento(texto) || new Date();
 
     // 4. Inserción directa en la base de datos de Supabase según el tipo mapeado
     let queryResult;
@@ -45,23 +48,22 @@ export async function POST(request: Request) {
           categoria: categoriaFinal,
           subcategoria: dataAI.subcategoria,
           origen: 'Web',
-          fecha: new Date().toISOString()
+          fecha: fechaMovimiento.toISOString()
         }, tenant.profileId)])
         .select();
     } else {
-      const fechaIngreso = new Date();
       queryResult = await supabase
         .from('ingresos')
         .insert([withProfile({
           concepto: dataAI.concepto,
           monto: Number(dataAI.monto),
           tipo: 'Extra',
-          fecha: fechaIngreso.toISOString()
+          fecha: fechaMovimiento.toISOString()
         }, tenant.profileId)])
         .select();
 
       if (!queryResult.error) {
-        await sincronizarPresupuestoMensual(supabase, fechaIngreso, tenant.profileId);
+        await sincronizarPresupuestoMensual(supabase, fechaMovimiento, tenant.profileId);
       }
     }
 
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
         categoria: dataAI.categoria,
         subcategoria: dataAI.subcategoria,
         amount: Number(dataAI.monto),
+        fecha: fechaMovimiento.toISOString(),
       },
     });
 
