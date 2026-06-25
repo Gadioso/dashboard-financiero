@@ -85,6 +85,10 @@ type SantanderStatus = {
 
 type BillingStatus = {
   configured: boolean;
+  priceConfigured?: {
+    beta: boolean;
+    premium: boolean;
+  };
   plan: 'free' | 'beta' | 'premium';
   status: string;
   active: boolean;
@@ -98,6 +102,14 @@ type BillingStatus = {
     bankSyncLookbackDays: number;
   };
   error?: string;
+};
+
+type PlanOption = {
+  name: string;
+  price: string;
+  plan: 'free' | 'beta' | 'premium';
+  description: string;
+  features: string[];
 };
 
 type FondoAcumulado = {
@@ -601,6 +613,11 @@ export default function DashboardFinanciero() {
       ? 'Gratis'
       : 'Beta';
   const billingConfigured = Boolean(billingStatus?.configured);
+  const billingPriceConfigured = billingStatus?.priceConfigured || { beta: false, premium: false };
+  const isPlanPriceConfigured = (plan: PlanOption['plan']) => {
+    if (plan === 'free') return true;
+    return billingPriceConfigured[plan];
+  };
   const premiumActive = Boolean(billingStatus?.active && billingStatus.plan === 'premium');
   const maxMonthlyBar = Math.max(...resumenMensual.map((mes) => Math.max(mes.ingresos, mes.egresos)), 1);
   const hasMonthlyData = resumenMensual.some((mes) => mes.ingresos > 0 || mes.egresos > 0);
@@ -804,7 +821,7 @@ export default function DashboardFinanciero() {
     .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
   const abonosTdcAnuales = abonosTarjetaAnuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
   const deudaTdcAnualEstimada = Math.max(cargosTdcAnuales - abonosTdcAnuales, 0);
-  const planOptions = [
+  const planOptions: PlanOption[] = [
     {
       name: 'Gratis',
       price: '$0',
@@ -965,7 +982,7 @@ export default function DashboardFinanciero() {
 
                       void abrirCheckoutBilling('premium');
                     }}
-                    disabled={billingLoading}
+                    disabled={billingLoading || !billingPriceConfigured.premium}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
                   >
                     {premiumActive ? 'Facturación' : 'Mejorar plan'}
@@ -1485,6 +1502,8 @@ export default function DashboardFinanciero() {
                 <div className="grid gap-4 lg:grid-cols-3">
                   {planOptions.map((option) => {
                     const isCurrent = option.name === planLabel;
+                    const isPaidPlan = option.plan === 'beta' || option.plan === 'premium';
+                    const paidPlanConfigured = isPlanPriceConfigured(option.plan);
                     return (
                       <div key={option.name} className={`rounded-lg border p-4 ${isCurrent ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-white'}`}>
                         <div className="flex items-start justify-between gap-3">
@@ -1508,18 +1527,26 @@ export default function DashboardFinanciero() {
                               return;
                             }
                             if (option.plan === 'beta' || option.plan === 'premium') {
+                              if (!paidPlanConfigured) {
+                                setMensajeStatus(`Falta configurar Stripe para ${option.name}.`);
+                                return;
+                              }
+
                               void abrirCheckoutBilling(option.plan);
                               return;
                             }
                             setMensajeStatus('Gratis es el plan base sin suscripción activa.');
                           }}
-                          disabled={billingLoading || (!billingConfigured && (option.plan === 'beta' || option.plan === 'premium'))}
+                          disabled={billingLoading || (isPaidPlan && !paidPlanConfigured)}
                           className={`mt-5 h-10 w-full rounded-lg px-4 text-sm font-bold disabled:opacity-60 ${
                             isCurrent ? 'border border-blue-200 bg-white text-blue-700' : 'bg-blue-600 text-white hover:bg-blue-700'
                           }`}
                         >
                           {isCurrent ? 'Gestionar plan' : option.plan === 'free' ? 'Plan base' : 'Elegir plan'}
                         </button>
+                        {isPaidPlan && !paidPlanConfigured && (
+                          <p className="mt-2 text-xs font-semibold text-amber-700">Falta activar precio en Stripe.</p>
+                        )}
                       </div>
                     );
                   })}

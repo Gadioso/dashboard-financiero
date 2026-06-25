@@ -13,6 +13,7 @@ export type BillingLimits = {
 
 export type BillingStatus = {
   configured: boolean;
+  priceConfigured: Record<Exclude<BillingPlan, 'free'>, boolean>;
   plan: BillingPlan;
   status: string;
   active: boolean;
@@ -49,6 +50,10 @@ export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
 
 export const defaultBillingStatus: BillingStatus = {
   configured: false,
+  priceConfigured: {
+    beta: false,
+    premium: false,
+  },
   plan: 'free',
   status: 'free',
   active: false,
@@ -60,6 +65,13 @@ export const defaultBillingStatus: BillingStatus = {
 
 export function isBillingConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY && (process.env.STRIPE_PRICE_BETA_MONTHLY || process.env.STRIPE_PRICE_PREMIUM_MONTHLY));
+}
+
+export function getBillingPriceConfig() {
+  return {
+    beta: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_BETA_MONTHLY),
+    premium: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_PREMIUM_MONTHLY),
+  };
 }
 
 export function getBillingLimits(plan: BillingPlan) {
@@ -76,6 +88,7 @@ export async function getBillingStatus({
   if (!profileId) return defaultBillingStatus;
 
   const configured = isBillingConfigured();
+  const priceConfigured = getBillingPriceConfig();
   const { data: customer } = await supabase
     .from('billing_customers')
     .select('stripe_customer_id')
@@ -108,6 +121,7 @@ export async function getBillingStatus({
     return {
       ...defaultBillingStatus,
       configured,
+      priceConfigured,
       stripeCustomerId: customer?.stripe_customer_id || null,
     };
   }
@@ -118,6 +132,7 @@ export async function getBillingStatus({
 
   return {
     configured,
+    priceConfigured,
     plan,
     status,
     active,
@@ -157,6 +172,7 @@ export async function getSafeBillingStatus({
     return {
       ...defaultBillingStatus,
       configured: isBillingConfigured(),
+      priceConfigured: getBillingPriceConfig(),
       error: error instanceof Error ? error.message : 'No pude consultar billing.',
     };
   }
