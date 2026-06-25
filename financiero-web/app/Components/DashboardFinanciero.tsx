@@ -249,7 +249,6 @@ export default function DashboardFinanciero() {
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
-  const [abonosTarjetaAnuales, setAbonosTarjetaAnuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
   const [santanderStatus, setSantanderStatus] = useState<SantanderStatus | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
@@ -300,10 +299,8 @@ export default function DashboardFinanciero() {
       const ingresosTodoElAño = dashboardData.ingresosAnuales || [];
       const gastosTodoElAño = dashboardData.gastosAnuales || [];
       const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
-      const abonosTarjetaAnualesFiltrados = abonosTarjetaTodoElAño.filter((abono) => !esAbonoTarjetaSospechoso(abono));
       setGastosAnuales(gastosTodoElAño);
       setFondosAcumulados(dashboardData.fondosAcumulados || []);
-      setAbonosTarjetaAnuales(abonosTarjetaAnualesFiltrados);
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -646,6 +643,12 @@ export default function DashboardFinanciero() {
     futuro: etiquetaCambio(resumen.gastado.Futuro, gastoFuturoMesAnterior),
     burnRate: etiquetaCambio(burnRate, burnRateMesAnterior, { invert: true }),
   };
+  const reporteMensualCards = [
+    { label: 'Ingresos del mes', value: `$${formatearMonto(resumen.ingresosMes)}`, detail: `${ingresosMensuales.length} ingresos`, tone: 'text-emerald-700' },
+    { label: 'Egresos del mes', value: `$${formatearMonto(totalGastadoMes)}`, detail: `${gastosMensuales.length} gastos`, tone: 'text-rose-600' },
+    { label: 'Flujo neto', value: `$${formatearMonto(flujoNetoMes)}`, detail: previousMonthSummary ? `${tendencias.flujo} vs. mes anterior` : 'Primer mes con comparativa', tone: flujoNetoMes < 0 ? 'text-rose-600' : 'text-blue-700' },
+    { label: 'Saldo acumulado', value: `$${formatearMonto(currentMonthSummary?.saldoAcumulado || 0)}`, detail: `Acumulado a ${selectedMonthName.toLowerCase()}`, tone: (currentMonthSummary?.saldoAcumulado || 0) < 0 ? 'text-rose-600' : 'text-slate-950' },
+  ];
   const kpiCards = [
     {
       label: 'Ingresos',
@@ -816,11 +819,6 @@ export default function DashboardFinanciero() {
   const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
   const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
   const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
-  const cargosTdcAnuales = gastosAnuales
-    .filter((gasto) => gasto.origen === 'Santander_Email')
-    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
-  const abonosTdcAnuales = abonosTarjetaAnuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
-  const deudaTdcAnualEstimada = Math.max(cargosTdcAnuales - abonosTdcAnuales, 0);
   const planOptions: PlanOption[] = [
     {
       name: 'Gratis',
@@ -1555,13 +1553,87 @@ export default function DashboardFinanciero() {
             </section>
 
             <section className={`${vistaActiva === 'reportes' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[1.4fr_360px]`}>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-950">Reporte de {selectedMonthName.toLowerCase()} 2026</h2>
+                      <p className="text-sm text-slate-500">Lectura mensual con movimientos, bolsas y comparación.</p>
+                    </div>
+                    <Link href="/api/account/export" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Exportar datos</Link>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {reporteMensualCards.map((card) => (
+                      <div key={card.label} className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-sm text-slate-500">{card.label}</p>
+                        <p className={`mt-1 text-xl font-black ${card.tone}`}>{card.value}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">{card.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {budgetBuckets.map((bucket) => (
+                      <div key={bucket.label} className="rounded-lg border border-slate-100 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-bold text-slate-900">{bucket.label}</p>
+                          <p className="text-xs font-bold text-slate-500">{bucket.limit > 0 ? `${Math.min((bucket.used / bucket.limit) * 100, 999).toFixed(0)}%` : 'Sin limite'}</p>
+                        </div>
+                        <div className="mt-2 h-2 rounded-full bg-slate-100">
+                          <div className={`h-2 rounded-full ${bucket.color}`} style={{ width: `${bucket.limit > 0 ? Math.min((bucket.used / bucket.limit) * 100, 100) : bucket.used > 0 ? 100 : 0}%` }} />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">${formatearMonto(bucket.used)} usado · ${formatearMonto(bucket.remaining)} restante</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-950">Movimientos del mes</h2>
+                      <p className="text-sm text-slate-500">{ultimosMovimientos.length} movimientos registrados en {selectedMonthName.toLowerCase()}.</p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-slate-100">
+                    <table className="w-full min-w-[620px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
+                          <th className="px-4 py-3 font-semibold">Fecha</th>
+                          <th className="px-4 py-3 font-semibold">Concepto</th>
+                          <th className="px-4 py-3 font-semibold">Bolsa</th>
+                          <th className="px-4 py-3 font-semibold">Origen</th>
+                          <th className="px-4 py-3 text-right font-semibold">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {ultimosMovimientos.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No hay movimientos para este mes.</td>
+                          </tr>
+                        ) : (
+                          ultimosMovimientos.map((movimiento) => (
+                            <tr key={movimiento.id}>
+                              <td className="px-4 py-3 text-slate-500">{formatearFecha(movimiento.fecha)}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-900">{movimiento.concepto}</td>
+                              <td className="px-4 py-3 text-slate-600">{nombreBolsa(String(movimiento.categoria))}</td>
+                              <td className="px-4 py-3 text-slate-500">{nombreOrigen(movimiento.origen)}</td>
+                              <td className={`px-4 py-3 text-right font-bold ${movimiento.tipo === 'ingreso' ? 'text-emerald-700' : 'text-slate-900'}`}>
+                                {movimiento.tipo === 'ingreso' ? '+' : '-'}${formatearMonto(movimiento.monto)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-950">Reporte anual 2026</h2>
-                    <p className="text-sm text-slate-500">Tabla consolidada para revisión y exportación.</p>
+                    <h2 className="text-lg font-bold text-slate-950">Contexto anual 2026</h2>
+                    <p className="text-sm text-slate-500">La fila azul muestra el mes activo.</p>
                   </div>
-                  <Link href="/api/account/export" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Exportar datos</Link>
                 </div>
                 <div className="overflow-x-auto rounded-lg border border-slate-100">
                   <table className="w-full min-w-[620px] text-left text-sm">
@@ -1587,31 +1659,32 @@ export default function DashboardFinanciero() {
                     </tbody>
                   </table>
                 </div>
+                </div>
               </div>
               <div className="space-y-4">
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <h2 className="text-lg font-bold text-slate-950">Resumen ejecutivo</h2>
+                  <h2 className="text-lg font-bold text-slate-950">Resumen del mes</h2>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-sm text-slate-500">Ingresos anuales</p>
-                      <p className="text-xl font-black text-slate-950">${formatearMonto(resumenMensual.reduce((total, mes) => total + mes.ingresos, 0))}</p>
+                      <p className="text-sm text-slate-500">Ingresos</p>
+                      <p className="text-xl font-black text-slate-950">${formatearMonto(resumen.ingresosMes)}</p>
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-sm text-slate-500">Egresos anuales</p>
-                      <p className="text-xl font-black text-slate-950">${formatearMonto(resumenMensual.reduce((total, mes) => total + mes.egresos, 0))}</p>
+                      <p className="text-sm text-slate-500">Egresos</p>
+                      <p className="text-xl font-black text-slate-950">${formatearMonto(totalGastadoMes)}</p>
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-sm text-slate-500">Flujo acumulado</p>
-                      <p className={`text-xl font-black ${(resumenMensual[11]?.saldoAcumulado || 0) < 0 ? 'text-rose-600' : 'text-blue-700'}`}>${formatearMonto(resumenMensual[11]?.saldoAcumulado || 0)}</p>
+                      <p className="text-sm text-slate-500">Flujo mensual</p>
+                      <p className={`text-xl font-black ${flujoNetoMes < 0 ? 'text-rose-600' : 'text-blue-700'}`}>${formatearMonto(flujoNetoMes)}</p>
                     </div>
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <h2 className="text-lg font-bold text-slate-950">Tarjeta anual</h2>
-                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(deudaTdcAnualEstimada)}</p>
-                  <p className="mt-1 text-sm text-slate-500">Cargos Santander ${formatearMonto(cargosTdcAnuales)} · Abonos reales ${formatearMonto(abonosTdcAnuales)}</p>
+                  <h2 className="text-lg font-bold text-slate-950">Tarjeta del mes</h2>
+                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
+                  <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
                   <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-                    Esta tarjeta resume el año completo; los ceros por mes solo significan que no hay movimientos TDC clasificados en ese periodo.
+                    El cálculo cambia con el mes seleccionado y solo usa movimientos TDC de ese periodo.
                   </div>
                   {abonosSospechososOcultos > 0 && (
                     <button
