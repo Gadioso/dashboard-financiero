@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   calcularIngresosMes,
@@ -26,6 +26,40 @@ import {
   nombreOrigen,
   resumenInicial,
 } from '@/lib/financial-core';
+
+type BrowserSpeechRecognitionEvent = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: {
+      isFinal: boolean;
+      [index: number]: {
+        transcript: string;
+      };
+    };
+  };
+};
+
+type BrowserSpeechRecognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  }
+}
 
 type PresupuestoMensualRow = {
   techo_vida?: number | string | null;
@@ -237,6 +271,7 @@ export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
   const [procesando, setProcesando] = useState(false);
+  const [escuchandoVoz, setEscuchandoVoz] = useState(false);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
   const [mensajeStatus, setMensajeStatus] = useState('');
   const [mesActivo, setMesActivo] = useState(mesActualKey);
@@ -261,6 +296,7 @@ export default function DashboardFinanciero() {
   const [analysis, setAnalysis] = useState<DashboardAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisKey, setAnalysisKey] = useState('');
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
 
   const cerrarSesion = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -434,6 +470,61 @@ export default function DashboardFinanciero() {
       setProcesando(false);
       setTimeout(() => setMensajeStatus(''), 5000);
     }
+  };
+
+  const alternarDictadoMovimiento = () => {
+    if (escuchandoVoz) {
+      speechRecognitionRef.current?.stop();
+      setEscuchandoVoz(false);
+      return;
+    }
+
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setMensajeStatus('Tu navegador no soporta dictado de voz. Prueba en Chrome o Safari.');
+      setTimeout(() => setMensajeStatus(''), 5000);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    let finalTranscript = '';
+
+    recognition.lang = 'es-MX';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0]?.transcript || '';
+
+        if (event.results[index].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      const spokenText = `${finalTranscript} ${interimTranscript}`.trim();
+      if (spokenText) setInputIA(spokenText);
+    };
+    recognition.onerror = () => {
+      setEscuchandoVoz(false);
+      setMensajeStatus('No pude escuchar el audio. Revisa permisos del micrófono.');
+      setTimeout(() => setMensajeStatus(''), 5000);
+    };
+    recognition.onend = () => {
+      setEscuchandoVoz(false);
+      speechRecognitionRef.current = null;
+    };
+
+    speechRecognitionRef.current = recognition;
+    setEscuchandoVoz(true);
+    setMensajeStatus('Escuchando movimiento...');
+    recognition.start();
   };
 
   const abrirCheckoutBilling = async (plan: 'beta' | 'premium' = 'premium') => {
@@ -858,14 +949,25 @@ export default function DashboardFinanciero() {
         <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">IA financiera</span>
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <input
-          type="text"
-          value={inputIA}
-          onChange={(e) => setInputIA(e.target.value)}
-          disabled={procesando}
-          placeholder='Ej. "Gané 60000 de sueldo" o "Me gasté 350 en cine"'
-          className="h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
-        />
+        <div className="grid min-w-0 grid-cols-[1fr_auto] rounded-lg border border-slate-200 bg-white focus-within:border-blue-500">
+          <input
+            type="text"
+            value={inputIA}
+            onChange={(e) => setInputIA(e.target.value)}
+            disabled={procesando}
+            placeholder='Ej. "Gané 60000 de sueldo" o "Me gasté 350 en cine"'
+            className="h-11 min-w-0 rounded-l-lg bg-transparent px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={alternarDictadoMovimiento}
+            disabled={procesando}
+            title={escuchandoVoz ? 'Detener dictado' : 'Dictar movimiento'}
+            className={`m-1 h-9 rounded-lg px-3 text-xs font-black transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${escuchandoVoz ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'}`}
+          >
+            {escuchandoVoz ? 'Stop' : 'Voz'}
+          </button>
+        </div>
         <button
           type="submit"
           disabled={procesando}

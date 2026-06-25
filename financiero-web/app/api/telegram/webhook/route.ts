@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { transcribirAudioFinanciero } from '@/lib/audio-transcription';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
 import { categoriaParaGastos, extraerFechaMovimiento } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
@@ -20,6 +21,16 @@ type TelegramMessage = {
     last_name?: string;
   };
   text?: string;
+  voice?: {
+    file_id: string;
+    mime_type?: string;
+    file_size?: number;
+  };
+  audio?: {
+    file_id: string;
+    mime_type?: string;
+    file_size?: number;
+  };
 };
 
 type TelegramUpdate = {
@@ -171,6 +182,67 @@ async function responderTelegram(chatId: number | undefined, texto: string) {
   });
 }
 
+function telegramAudioFromMessage(message?: TelegramMessage) {
+  const media = message?.voice || message?.audio;
+
+  if (!media?.file_id) return null;
+
+  return {
+    fileId: media.file_id,
+    mimeType: media.mime_type || (message?.voice ? 'audio/ogg' : 'audio/mpeg'),
+    fileSize: media.file_size || 0,
+  };
+}
+
+async function telegramApi<T>(method: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json() as { ok?: boolean; result?: T; description?: string };
+
+  if (!response.ok || !data.ok || !data.result) {
+    throw new Error(data.description || `Telegram ${method} falló.`);
+  }
+
+  return data.result;
+}
+
+async function transcribirAudioTelegram(message?: TelegramMessage) {
+  const audio = telegramAudioFromMessage(message);
+
+  if (!audio) return null;
+
+  if (!telegramBotToken) {
+    throw new Error('Falta configurar TELEGRAM_BOT_TOKEN para descargar audios.');
+  }
+
+  if (audio.fileSize > 15 * 1024 * 1024) {
+    throw new Error('El audio es demasiado grande. Mándame una nota de voz más corta.');
+  }
+
+  const file = await telegramApi<{ file_path?: string }>('getFile', { file_id: audio.fileId });
+
+  if (!file.file_path) {
+    throw new Error('Telegram no devolvió la ruta del audio.');
+  }
+
+  const audioResponse = await fetch(`https://api.telegram.org/file/bot${telegramBotToken}/${file.file_path}`);
+
+  if (!audioResponse.ok) {
+    throw new Error('No pude descargar el audio de Telegram.');
+  }
+
+  const audioBuffer = await audioResponse.arrayBuffer();
+
+  return transcribirAudioFinanciero({
+    apiKey: googleApiKey,
+    audio: audioBuffer,
+    mimeType: audio.mimeType,
+  });
+}
+
 async function desconectarTelegram({
   supabase,
   chatId,
@@ -298,7 +370,8 @@ export async function POST(request: Request) {
     }
 
     chatId = update.message?.chat?.id;
-    const texto = update.message?.text?.trim();
+    const textoOriginal = update.message?.text?.trim();
+    let texto = textoOriginal;
     const linkCode = extractTelegramLinkCode(texto);
 
     if (linkCode) {
@@ -327,8 +400,21 @@ export async function POST(request: Request) {
     }
 
     if (!texto) {
-      await responderTelegram(chatId, 'Estoy listo. Puedes decirme "pagué 250 de gasolina" o preguntarme "cómo voy este mes".');
-      return NextResponse.json({ success: true, ignored: true });
+      const audioTelegram = telegramAudioFromMessage(update.message);
+
+      if (audioTelegram) {
+        await responderTelegram(chatId, 'Recibí tu audio. Lo estoy transcribiendo para registrar el movimiento...');
+        const transcripcion = await transcribirAudioTelegram(update.message);
+        if (!transcripcion) {
+          await responderTelegram(chatId, 'No pude transcribir ese audio. Intenta con una nota de voz más corta o mándamelo por texto.');
+          return NextResponse.json({ success: true, ignored: true, action: 'voice-transcription-empty' });
+        }
+        texto = transcripcion;
+        await responderTelegram(chatId, `Entendí: "${texto}"`);
+      } else {
+        await responderTelegram(chatId, 'Estoy listo. Puedes decirme "pagué 250 de gasolina", mandarme una nota de voz o preguntarme "cómo voy este mes".');
+        return NextResponse.json({ success: true, ignored: true });
+      }
     }
 
     if (esComandoDesconexionTelegram(texto)) {

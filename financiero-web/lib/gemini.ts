@@ -18,6 +18,8 @@ function getGeminiModel(apiKey: string, modelName = getGeminiModelName()) {
   return ai.getGenerativeModel({ model: modelName });
 }
 
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
 export async function generateGeminiText(apiKey: string, prompt: string) {
   const preferredModel = getGeminiModelName();
   const fallbackModels = activeGeminiModels;
@@ -28,6 +30,26 @@ export async function generateGeminiText(apiKey: string, prompt: string) {
     try {
       const model = getGeminiModel(apiKey, modelName);
       const response = await model.generateContent(prompt);
+
+      return response.response.text();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+export async function generateGeminiParts(apiKey: string, parts: GeminiPart[]) {
+  const preferredModel = getGeminiModelName();
+  const fallbackModels = activeGeminiModels;
+  const models = [preferredModel, ...fallbackModels.filter((model) => model !== preferredModel)];
+  let lastError: unknown;
+
+  for (const modelName of models) {
+    try {
+      const model = getGeminiModel(apiKey, modelName);
+      const response = await model.generateContent({ contents: [{ role: 'user', parts }] });
 
       return response.response.text();
     } catch (error) {
