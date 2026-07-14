@@ -197,29 +197,6 @@ type BankConnection = {
   updated_at?: string | null;
 };
 
-type BusinessEntity = {
-  id: string;
-  name: string;
-  entity_type: string;
-  country?: string | null;
-  currency?: string | null;
-  status: string;
-  created_at?: string | null;
-};
-
-type InvestmentAccount = {
-  id: string;
-  business_entity_id?: string | null;
-  provider: string;
-  account_name: string;
-  account_type: string;
-  mode: string;
-  status: string;
-  base_currency?: string | null;
-  last_sync_at?: string | null;
-  created_at?: string | null;
-};
-
 type AgentTask = {
   id: string;
   agent_key: string;
@@ -228,57 +205,6 @@ type AgentTask = {
   status: string;
   priority: string;
   due_at?: string | null;
-  created_at?: string | null;
-};
-
-type AgentFinding = {
-  id: string;
-  agent_key: string;
-  finding_type: string;
-  severity: string;
-  title: string;
-  summary: string;
-  recommendation?: string | null;
-  status: string;
-  created_at?: string | null;
-};
-
-type CfdiDocument = {
-  id: string;
-  business_entity_id?: string | null;
-  cfdi_uuid?: string | null;
-  document_direction: string;
-  issue_date?: string | null;
-  document_type?: string | null;
-  status: string;
-  issuer_rfc?: string | null;
-  issuer_name?: string | null;
-  receiver_rfc?: string | null;
-  receiver_name?: string | null;
-  currency?: string | null;
-  subtotal?: number | null;
-  total?: number | null;
-  tax_transferred?: number | null;
-  tax_withheld?: number | null;
-  created_at?: string | null;
-};
-
-type CfdiReconciliationEvent = {
-  id: string;
-  cfdi_document_id?: string | null;
-  gasto_id?: number | null;
-  ingreso_id?: number | null;
-  bank_transaction_raw_id?: string | null;
-  match_status: string;
-  confidence?: number | null;
-  amount_delta?: number | null;
-  date_delta_days?: number | null;
-  evidence?: {
-    candidateKind?: string;
-    candidateLabel?: string;
-    cfdiUuid?: string;
-    reason?: string;
-  } | null;
   created_at?: string | null;
 };
 
@@ -300,78 +226,6 @@ type MarketSnapshot = {
     currency?: string | null;
     provider?: string | null;
   } | null;
-};
-
-type InvestmentThesis = {
-  id: string;
-  asset_id?: string | null;
-  thesis_type: string;
-  title: string;
-  summary: string;
-  stance: string;
-  horizon: string;
-  confidence?: number | null;
-  status: string;
-  evidence?: Record<string, unknown> | null;
-  created_by_agent?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  asset?: {
-    id: string;
-    asset_type: string;
-    symbol?: string | null;
-    name: string;
-    exchange?: string | null;
-    currency?: string | null;
-    provider?: string | null;
-  } | null;
-};
-
-type PaperTrade = {
-  id: string;
-  thesis_id?: string | null;
-  asset_id?: string | null;
-  side: 'buy' | 'sell';
-  status: 'open' | 'closed' | 'cancelled' | 'expired';
-  opened_at: string;
-  closed_at?: string | null;
-  entry_price?: number | null;
-  exit_price?: number | null;
-  quantity?: number | null;
-  notional?: number | null;
-  realized_pnl?: number | null;
-  fees_estimated?: number | null;
-  rationale?: string | null;
-  asset?: {
-    id: string;
-    asset_type: string;
-    symbol?: string | null;
-    name: string;
-    currency?: string | null;
-    provider?: string | null;
-  } | null;
-  thesis?: {
-    id: string;
-    title: string;
-    stance?: string | null;
-    thesis_type?: string | null;
-    status?: string | null;
-  } | null;
-};
-
-type PaperTradeScorecard = {
-  total: number;
-  open: number;
-  closed: number;
-  wins: number;
-  losses: number;
-  winRate: number;
-  totalPnl: number;
-  averagePnl: number;
-  bestPnl: number;
-  worstPnl: number;
-  totalNotional: number;
-  pnlPct: number;
 };
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
@@ -416,14 +270,7 @@ type AccountStatus = {
   billing?: BillingStatus;
   bankConnections?: BankConnection[];
   bankAccounts?: BankAccount[];
-  businessEntities?: BusinessEntity[];
-  investmentAccounts?: InvestmentAccount[];
   agentTasks?: AgentTask[];
-  agentFindings?: AgentFinding[];
-  cfdiDocuments?: CfdiDocument[];
-  cfdiReconciliationEvents?: CfdiReconciliationEvent[];
-  agenticFoundationReady?: boolean;
-  cfdiFoundationReady?: boolean;
   error?: string;
 };
 
@@ -747,28 +594,11 @@ export default function DashboardFinanciero() {
   const [bankDisconnectingId, setBankDisconnectingId] = useState('');
   const [bankSyncLoading, setBankSyncLoading] = useState(false);
   const [lastBankRefreshAt, setLastBankRefreshAt] = useState<string | null>(null);
-  const [businessEntities, setBusinessEntities] = useState<BusinessEntity[]>([]);
-  const [investmentAccounts, setInvestmentAccounts] = useState<InvestmentAccount[]>([]);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
-  const [agentFindings, setAgentFindings] = useState<AgentFinding[]>([]);
   const [notificationTrayOpen, setNotificationTrayOpen] = useState(false);
   const [notificationsSeenAt, setNotificationsSeenAt] = useState(0);
-  const [cfdiDocuments, setCfdiDocuments] = useState<CfdiDocument[]>([]);
-  const [cfdiReconciliationEvents, setCfdiReconciliationEvents] = useState<CfdiReconciliationEvent[]>([]);
   const [marketSnapshots, setMarketSnapshots] = useState<MarketSnapshot[]>([]);
-  const [investmentTheses, setInvestmentTheses] = useState<InvestmentThesis[]>([]);
-  const [paperTrades, setPaperTrades] = useState<PaperTrade[]>([]);
-  const [paperTradeScorecard, setPaperTradeScorecard] = useState<PaperTradeScorecard | null>(null);
-  const [agenticFoundationReady, setAgenticFoundationReady] = useState(false);
-  const [cfdiFoundationReady, setCfdiFoundationReady] = useState(false);
-  const [cfdiXmlInput, setCfdiXmlInput] = useState('');
-  const [cfdiDirection, setCfdiDirection] = useState<'unknown' | 'issued' | 'received' | 'payroll'>('unknown');
-  const [cfdiBusinessEntityId, setCfdiBusinessEntityId] = useState('');
-  const [cfdiLoading, setCfdiLoading] = useState(false);
-  const [cfdiReconcileLoading, setCfdiReconcileLoading] = useState(false);
   const [marketSyncLoading, setMarketSyncLoading] = useState(false);
-  const [researchAgentLoading, setResearchAgentLoading] = useState(false);
-  const [paperTradeLoadingId, setPaperTradeLoadingId] = useState<string | null>(null);
   const [riskProfile, setRiskProfile] = useState<InvestmentRiskProfile>({
     experienceLevel: 'beginner',
     monthlyContribution: 5000,
@@ -787,7 +617,6 @@ export default function DashboardFinanciero() {
   const [wealthEligibility, setWealthEligibility] = useState<WealthEligibility>({ ready: false, profileCompleted: false, hasGoals: false });
   const [wealthGoals, setWealthGoals] = useState<WealthGoalSummary[]>([]);
   const [riskProfileLoading, setRiskProfileLoading] = useState(false);
-  const [weeklyCfoLoading, setWeeklyCfoLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingAction, setBillingAction] = useState<'checkout' | 'portal' | null>(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
@@ -1134,13 +963,11 @@ export default function DashboardFinanciero() {
 
     async function fetchAccountAndBankStatus() {
       try {
-        const [bankResult, accountResult, riskProfileResult, marketResult, thesesResult, paperTradesResult] = await Promise.allSettled([
+        const [bankResult, accountResult, riskProfileResult, marketResult] = await Promise.allSettled([
           fetchWithSessionRefresh('/api/email/santander'),
           fetchWithSessionRefresh('/api/account/status'),
           fetchWithSessionRefresh('/api/investments/risk-profile'),
           fetchWithSessionRefresh('/api/investments/market-sync'),
-          fetchWithSessionRefresh('/api/investments/research-agent'),
-          fetchWithSessionRefresh('/api/investments/paper-trades'),
         ]);
 
         if (mounted) {
@@ -1157,14 +984,7 @@ export default function DashboardFinanciero() {
             if (accountData.profile) setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
             if (accountData.bankConnections) setBankConnections(accountData.bankConnections);
             if (accountData.bankAccounts) setBankAccounts(accountData.bankAccounts);
-            if (accountData.businessEntities) setBusinessEntities(accountData.businessEntities);
-            if (accountData.investmentAccounts) setInvestmentAccounts(accountData.investmentAccounts);
             if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
-            if (accountData.agentFindings) setAgentFindings(accountData.agentFindings);
-            if (accountData.cfdiDocuments) setCfdiDocuments(accountData.cfdiDocuments);
-            if (accountData.cfdiReconciliationEvents) setCfdiReconciliationEvents(accountData.cfdiReconciliationEvents);
-            if (typeof accountData.agenticFoundationReady === 'boolean') setAgenticFoundationReady(accountData.agenticFoundationReady);
-            if (typeof accountData.cfdiFoundationReady === 'boolean') setCfdiFoundationReady(accountData.cfdiFoundationReady);
           }
 
           const riskProfileData = riskProfileResult.status === 'fulfilled' ? await readJsonResponse<{ riskProfile?: InvestmentRiskProfile; acceptedAt?: string | null; routePlan?: WealthRoutePlan | null; eligibility?: WealthEligibility; goals?: WealthGoalSummary[] }>(riskProfileResult.value) : null;
@@ -1181,17 +1001,6 @@ export default function DashboardFinanciero() {
           const marketData = marketResult.status === 'fulfilled' ? await readJsonResponse<{ snapshots?: MarketSnapshot[] }>(marketResult.value) : null;
           if (marketResult.status === 'fulfilled' && marketResult.value.ok && marketData?.snapshots) {
             setMarketSnapshots(marketData.snapshots);
-          }
-
-          const thesesData = thesesResult.status === 'fulfilled' ? await readJsonResponse<{ theses?: InvestmentThesis[] }>(thesesResult.value) : null;
-          if (thesesResult.status === 'fulfilled' && thesesResult.value.ok && thesesData?.theses) {
-            setInvestmentTheses(thesesData.theses);
-          }
-
-          const paperTradesData = paperTradesResult.status === 'fulfilled' ? await readJsonResponse<{ trades?: PaperTrade[]; scorecard?: PaperTradeScorecard }>(paperTradesResult.value) : null;
-          if (paperTradesResult.status === 'fulfilled' && paperTradesResult.value.ok && paperTradesData?.trades) {
-            setPaperTrades(paperTradesData.trades);
-            setPaperTradeScorecard(paperTradesData.scorecard || null);
           }
         }
       } catch {
@@ -1237,142 +1046,6 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const ejecutarWeeklyCfo = async () => {
-    setWeeklyCfoLoading(true);
-    setMensajeStatus('Ejecutando cierre semanal AI CFO...');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/agents/weekly-cfo', {
-        method: 'POST',
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude ejecutar AI CFO: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setAgentTasks((current) => [...(data.tasks || []), ...current]);
-      setAgentFindings((current) => [...(data.findings || []), ...current]);
-      const firstTask = data.tasks?.[0]?.title ? ` Primer paso: ${data.tasks[0].title}.` : '';
-      setMensajeStatus(`AI CFO dejó un plan semanal accionable.${firstTask} Revísalo en Wealth y marca lo que completes.`);
-    } catch {
-      setMensajeStatus('No pude conectar con el workflow AI CFO.');
-    } finally {
-      setWeeklyCfoLoading(false);
-      setTimeout(() => setMensajeStatus(''), 6000);
-    }
-  };
-
-  const actualizarTareaAgente = async (taskId: string, status: 'completed' | 'dismissed') => {
-    setMensajeStatus(status === 'completed' ? 'Marcando tarea como completada...' : 'Descartando tarea...');
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/agents/tasks/${encodeURIComponent(taskId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude actualizar tarea: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setAgentTasks((current) => current.map((task) => task.id === taskId ? { ...task, ...data.task } : task));
-      setMensajeStatus(status === 'completed' ? 'Tarea completada.' : 'Tarea descartada.');
-    } catch {
-      setMensajeStatus('No pude conectar con la tarea.');
-    } finally {
-      setTimeout(() => setMensajeStatus(''), 4000);
-    }
-  };
-
-  const actualizarHallazgoAgente = async (findingId: string, status: 'resolved' | 'dismissed') => {
-    setMensajeStatus(status === 'resolved' ? 'Resolviendo hallazgo...' : 'Descartando hallazgo...');
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/agents/findings/${encodeURIComponent(findingId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude actualizar hallazgo: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setAgentFindings((current) => current.map((finding) => finding.id === findingId ? { ...finding, ...data.finding } : finding));
-      setMensajeStatus(status === 'resolved' ? 'Hallazgo resuelto.' : 'Hallazgo descartado.');
-    } catch {
-      setMensajeStatus('No pude conectar con el hallazgo.');
-    } finally {
-      setTimeout(() => setMensajeStatus(''), 4000);
-    }
-  };
-
-  const cargarCfdiXml = async () => {
-    setCfdiLoading(true);
-    setMensajeStatus('Procesando XML CFDI...');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/cfdi/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          xml: cfdiXmlInput,
-          documentDirection: cfdiDirection,
-          businessEntityId: cfdiBusinessEntityId || null,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude guardar CFDI: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setCfdiDocuments((current) => [data.document, ...current.filter((document) => document.id !== data.document.id)].slice(0, 8));
-      setCfdiXmlInput('');
-      setMensajeStatus('CFDI guardado. Ya puede entrar a conciliación fiscal.');
-    } catch {
-      setMensajeStatus('No pude conectar con la carga CFDI.');
-    } finally {
-      setCfdiLoading(false);
-      setTimeout(() => setMensajeStatus(''), 5000);
-    }
-  };
-
-  const conciliarCfdi = async () => {
-    setCfdiReconcileLoading(true);
-    setMensajeStatus('Conciliando CFDI contra movimientos...');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/cfdi/reconcile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 50, dateToleranceDays: 7, amountTolerance: 2 }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude conciliar CFDI: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setCfdiReconciliationEvents((current) => [...(data.events || []), ...current].slice(0, 8));
-      setMensajeStatus(`Conciliación lista: ${data.created || 0} eventos nuevos, ${data.matched || 0} matches automáticos.`);
-    } catch {
-      setMensajeStatus('No pude conectar con la conciliación CFDI.');
-    } finally {
-      setCfdiReconcileLoading(false);
-      setTimeout(() => setMensajeStatus(''), 6000);
-    }
-  };
-
   const sincronizarMercado = async () => {
     setMarketSyncLoading(true);
     setMensajeStatus('Actualizando información de mercado...');
@@ -1396,90 +1069,6 @@ export default function DashboardFinanciero() {
       setMensajeStatus('No pude conectar con market sync.');
     } finally {
       setMarketSyncLoading(false);
-      setTimeout(() => setMensajeStatus(''), 6000);
-    }
-  };
-
-  const generarTesisInversion = async () => {
-    setResearchAgentLoading(true);
-    setMensajeStatus('Generando tesis de inversión research-only...');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/investments/research-agent', {
-        method: 'POST',
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude generar tesis: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setInvestmentTheses(data.theses || []);
-      setMensajeStatus(`Análisis listo: ${data.created || 0} oportunidades nuevas. Puedes simular una cuando no esté marcada como evitar.`);
-    } catch {
-      setMensajeStatus('No pude conectar con el research agent.');
-    } finally {
-      setResearchAgentLoading(false);
-      setTimeout(() => setMensajeStatus(''), 6000);
-    }
-  };
-
-  const abrirPaperTrade = async (thesisId: string) => {
-    setPaperTradeLoadingId(thesisId);
-    setMensajeStatus('Abriendo simulación...');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/investments/paper-trades', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thesisId, side: 'buy', notional: 100 }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude abrir la simulación: ${formatActionError(data, 'Intenta nuevamente más tarde.')}`);
-        return;
-      }
-
-      setPaperTrades(data.trades || (data.trade ? [data.trade, ...paperTrades] : paperTrades));
-      if (data.scorecard) setPaperTradeScorecard(data.scorecard);
-      setMensajeStatus(data.created ? 'Simulación activa. Ahora puedes medir el resultado sin usar dinero real.' : 'Ya existía una simulación abierta para esa oportunidad.');
-    } catch {
-      setMensajeStatus('No pude abrir la simulación. Intenta nuevamente.');
-    } finally {
-      setPaperTradeLoadingId(null);
-      setTimeout(() => setMensajeStatus(''), 6000);
-    }
-  };
-
-  const actualizarPaperTrade = async (tradeId: string, action: 'close' | 'cancel') => {
-    setPaperTradeLoadingId(tradeId);
-    setMensajeStatus(action === 'close' ? 'Cerrando simulación...' : 'Cancelando simulación...');
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/investments/paper-trades/${encodeURIComponent(tradeId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus(`No pude actualizar la simulación: ${formatActionError(data, 'Intenta nuevamente más tarde.')}`);
-        return;
-      }
-
-      setPaperTrades((current) => current.map((trade) => trade.id === tradeId ? { ...trade, ...data.trade } : trade));
-      if (data.thesis) {
-        setInvestmentTheses((current) => current.map((thesis) => thesis.id === data.thesis.id ? { ...thesis, ...data.thesis } : thesis));
-      }
-      if (data.scorecard) setPaperTradeScorecard(data.scorecard);
-      setMensajeStatus(action === 'close' ? 'Simulación cerrada con su resultado final.' : 'Simulación cancelada.');
-    } catch {
-      setMensajeStatus('No pude actualizar la simulación. Intenta nuevamente.');
-    } finally {
-      setPaperTradeLoadingId(null);
       setTimeout(() => setMensajeStatus(''), 6000);
     }
   };
@@ -2567,11 +2156,6 @@ export default function DashboardFinanciero() {
       fechaObjetivo: fondo.fecha_objetivo || null,
     };
   });
-  const totalMetasActual = metasFinancieras.reduce((total, meta) => total + meta.actual, 0);
-  const totalMetasObjetivo = metasFinancieras.reduce((total, meta) => total + meta.objetivo, 0);
-  const progresoMetasGlobal = metaMensualActiva > 0
-    ? avanceMetaMensual
-    : totalMetasObjetivo > 0 ? Math.min((totalMetasActual / totalMetasObjetivo) * 100, 100) : 0;
   const gastoPorSubcategoria = gastosMensuales.reduce<Record<string, number>>((acc, gasto) => {
     const label = String(gasto.subcategoria || gasto.concepto || 'Sin categoría').trim();
     acc[label] = (acc[label] || 0) + valorNumerico(gasto.monto);
@@ -2597,18 +2181,6 @@ export default function DashboardFinanciero() {
   const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
   const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
   const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
-  const investmentAccountsByMode = investmentAccounts.reduce<Record<string, number>>((acc, account) => {
-    acc[account.mode] = (acc[account.mode] || 0) + 1;
-    return acc;
-  }, {});
-  const marketSnapshotsByProvider = marketSnapshots.reduce<Record<string, number>>((acc, snapshot) => {
-    acc[snapshot.provider] = (acc[snapshot.provider] || 0) + 1;
-    return acc;
-  }, {});
-  const openPaperTrades = paperTrades.filter((trade) => trade.status === 'open');
-  const closedPaperTrades = paperTrades.filter((trade) => trade.status === 'closed');
-  const paperTradePnl = paperTrades.reduce((total, trade) => total + valorNumerico(trade.realized_pnl), 0);
-  const openPaperTradeThesisIds = new Set(openPaperTrades.map((trade) => trade.thesis_id).filter(Boolean));
   const openAgentTasks = agentTasks.filter((task) => ['open', 'in_progress', 'waiting_user'].includes(task.status));
   const taskNotifications = openAgentTasks.filter((task) => task.agent_key === 'movement_monitor');
   const movementNotifications = ultimosMovimientos.slice(0, 20).map((movement) => ({
@@ -2644,32 +2216,6 @@ export default function DashboardFinanciero() {
       return next;
     });
   };
-  const activeAgentFindings = agentFindings.filter((finding) => finding.status === 'active');
-  const highSeverityFindings = activeAgentFindings.filter((finding) => ['high', 'critical'].includes(finding.severity));
-  const cfdiDocumentsByDirection = cfdiDocuments.reduce<Record<string, number>>((acc, document) => {
-    acc[document.document_direction] = (acc[document.document_direction] || 0) + 1;
-    return acc;
-  }, {});
-  const cfdiReconciliationByStatus = cfdiReconciliationEvents.reduce<Record<string, number>>((acc, event) => {
-    acc[event.match_status] = (acc[event.match_status] || 0) + 1;
-    return acc;
-  }, {});
-  const marketSnapshotCount = marketSnapshots.length;
-  const actionableTheses = investmentTheses.filter((thesis) => thesis.stance !== 'avoid');
-  const cfoStatusText = openAgentTasks.length > 0
-    ? `${openAgentTasks.length} pasos pendientes`
-    : activeAgentFindings.length > 0
-      ? `${activeAgentFindings.length} hallazgos activos`
-      : 'Sin plan semanal generado';
-  const marketStatusText = marketSnapshotCount > 0
-    ? `${marketSnapshotCount} precios listos`
-    : 'Sin precios sincronizados';
-  const researchStatusText = investmentTheses.length > 0
-    ? `${investmentTheses.length} tesis, ${actionableTheses.length} accionables`
-    : 'Sin tesis todavía';
-  const fiscalStatusText = cfdiDocuments.length > 0
-    ? `${cfdiDocuments.length} CFDI, ${cfdiReconciliationEvents.length} cruces`
-    : 'Sin CFDI cargados';
   const planOptions: PlanOption[] = [
     {
       name: 'Gratis',
