@@ -10,5 +10,11 @@ dist
 .vercel
 .DS_Store
 
+# Local QA and generated artifacts
+financiero-web/output/
+financiero-web/tmp/
+financiero-web/supabase/.temp/
+financiero-web/wealth-*.png
+
 *.duckdb
 *.duckdb.wal

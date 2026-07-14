@@ -16,15 +16,15 @@ El 01/06/2026 a las 19:18:06 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio OPENAI *CHATGPT SUBSCR con tu tarjeta de TDC terminación **1765, por un monto de $399.00 MXN.
 El 01/06/2026 a las 23:24:52 hrs.`,
-    expected: { concepto: 'OPENAI *CHATGPT SUBSCR', monto: 399, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
+    expected: { concepto: 'OPENAI *CHATGPT SUBSCR', monto: 399, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Herramientas Software' },
   },
   {
-    name: 'Telcel life expense',
+    name: 'Telcel defaults to pleasure',
     raw: `Santander México
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio TELCEL con tu tarjeta de TDC terminación **1765, por un monto de $499.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'TELCEL', monto: 499, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+    expected: { concepto: 'TELCEL', monto: 499, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
     name: 'Fiverr work tool',
@@ -32,7 +32,7 @@ El 02/06/2026 a las 10:00:00 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio FIVERR INTERNATIONAL con tu tarjeta de TDC terminación **1765, por un monto de $850.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'FIVERR INTERNATIONAL', monto: 850, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
+    expected: { concepto: 'FIVERR INTERNATIONAL', monto: 850, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Herramientas Software' },
   },
   {
     name: 'Opus work tool',
@@ -40,7 +40,7 @@ El 02/06/2026 a las 10:00:00 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio OPUS CLIP con tu tarjeta de TDC terminación **1765, por un monto de $390.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'OPUS CLIP', monto: 390, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
+    expected: { concepto: 'OPUS CLIP', monto: 390, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Herramientas Software' },
   },
   {
     name: 'Codex work tool',
@@ -48,7 +48,23 @@ El 02/06/2026 a las 10:00:00 hrs.`,
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio CODEX con tu tarjeta de TDC terminación **1765, por un monto de $299.00 MXN.
 El 02/06/2026 a las 10:00:00 hrs.`,
-    expected: { concepto: 'CODEX', monto: 299, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
+    expected: { concepto: 'CODEX', monto: 299, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Herramientas Software' },
+  },
+  {
+    name: 'Twilio work tool',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio TWILIO SENDGRID con tu tarjeta de TDC terminación **1765, por un monto de $620.00 MXN.
+El 02/06/2026 a las 10:00:00 hrs.`,
+    expected: { concepto: 'TWILIO SENDGRID', monto: 620, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Herramientas Software' },
+  },
+  {
+    name: 'GBM investment',
+    raw: `Santander México
+Pago/Compra con Tarjeta Santander
+Te informamos que se ha realizado una compra en el comercio GBM con tu tarjeta de TDC terminación **1765, por un monto de $1000.00 MXN.
+El 02/06/2026 a las 10:00:00 hrs.`,
+    expected: { concepto: 'GBM', monto: 1000, tipo: 'gasto', categoria: 'Futuro', subcategoria: 'Inversion' },
   },
   {
     name: 'Oxxo Jacarandas pleasure expense',
@@ -62,12 +78,12 @@ Santander México`,
     expected: { concepto: 'OXXO JACARANDAS', monto: 338, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
-    name: 'Oxxo service life expense',
+    name: 'Oxxo service still defaults to pleasure',
     raw: `Santander México
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio OXXO RECARGA TELCEL con tu tarjeta de TDC terminación **1765, por un monto de $200.00 MXN.
 El 04/06/2026 a las 21:07:57 hrs.`,
-    expected: { concepto: 'OXXO RECARGA TELCEL', monto: 200, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+    expected: { concepto: 'OXXO RECARGA TELCEL', monto: 200, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
     name: '7 Eleven convenience pleasure expense',
@@ -94,20 +110,20 @@ El 06/06/2026 a las 20:40:00 hrs.`,
     expected: { concepto: 'RANDOM', monto: 120, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
-    name: 'Gasoline is life expense',
+    name: 'Gasoline defaults to pleasure',
     raw: `Santander México
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio GASOLINA SHELL con tu tarjeta de TDC terminación **1765, por un monto de $800.00 MXN.
 El 06/06/2026 a las 20:40:00 hrs.`,
-    expected: { concepto: 'GASOLINA SHELL', monto: 800, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+    expected: { concepto: 'GASOLINA SHELL', monto: 800, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
-    name: 'Super groceries are life expense',
+    name: 'Super groceries default to pleasure',
     raw: `Santander México
 Pago/Compra con Tarjeta Santander
 Te informamos que se ha realizado una compra en el comercio SUPERAMA DESPENSA con tu tarjeta de TDC terminación **1765, por un monto de $1500.00 MXN.
 El 06/06/2026 a las 20:40:00 hrs.`,
-    expected: { concepto: 'SUPERAMA DESPENSA', monto: 1500, tipo: 'gasto', categoria: 'Vida', subcategoria: 'Costo de Vida' },
+    expected: { concepto: 'SUPERAMA DESPENSA', monto: 1500, tipo: 'gasto', categoria: 'Placeres', subcategoria: 'Otros Placeres' },
   },
   {
     name: 'Uber is pleasure by default',

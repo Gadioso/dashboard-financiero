@@ -6,7 +6,7 @@ import { getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
-const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const aiApiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 
 function parseLimit(value: unknown) {
   const limit = Number(value);
@@ -33,7 +33,10 @@ export async function POST(request: Request) {
       supabase,
       profileId: tenant.profileId,
       limit: parseLimit((body as { limit?: unknown }).limit),
-      googleApiKey,
+      minPostedAt: typeof (body as { minPostedAt?: unknown }).minPostedAt === 'string'
+        ? (body as { minPostedAt: string }).minPostedAt
+        : undefined,
+      googleApiKey: aiApiKey,
     });
 
     await logAuditEvent({
@@ -50,6 +53,9 @@ export async function POST(request: Request) {
         ignored: result.ignored,
         remainingPending: result.remainingPending,
         limit: result.limit,
+        minPostedAt: typeof (body as { minPostedAt?: unknown }).minPostedAt === 'string'
+          ? (body as { minPostedAt: string }).minPostedAt
+          : undefined,
       },
     });
 

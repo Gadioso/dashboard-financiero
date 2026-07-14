@@ -62,6 +62,31 @@ function esPagoTarjetaCredito(texto: string) {
 
 export function clasificarConceptoGastoSantander(concepto: string, texto = '') {
   const normalizado = `${concepto} ${texto}`.toLowerCase();
+  const conceptoNormalizado = concepto.toLowerCase();
+
+  if (/\b(mercado\s*pago|mercadopago|paypal)\b/i.test(conceptoNormalizado)) {
+    return {
+      categoria: 'Placeres' as const,
+      subcategoria: 'Otros Placeres',
+      razon: 'Comercio de pago intermediado; sin señal explícita de herramienta productiva se clasifica como Placeres.',
+    };
+  }
+
+  if (/\b(cafe|caf[eé]|cafecito|pharmacy|farmacia)\b/i.test(conceptoNormalizado)) {
+    return {
+      categoria: 'Placeres' as const,
+      subcategoria: /\b(cafe|caf[eé]|cafecito)\b/i.test(conceptoNormalizado) ? 'Cafe' : 'Otros Placeres',
+      razon: 'Comercio cotidiano sin señal explícita de herramienta productiva; se clasifica como Placeres.',
+    };
+  }
+
+  if (/\b(openai|chatgpt|codex|twilio|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/i.test(normalizado)) {
+    return {
+      categoria: 'Futuro' as const,
+      subcategoria: 'Herramientas Software',
+      razon: 'Comercio identificado como herramienta/software productivo.',
+    };
+  }
 
   if (/\b(gbm|cetes|casa de bolsa|kuspit|fintual|acciones|etf|inversi[oó]n)\b/i.test(normalizado)) {
     return {
@@ -93,42 +118,10 @@ export function clasificarConceptoGastoSantander(concepto: string, texto = '') {
     };
   }
 
-  if (/\b(oxxo|7\s*eleven|seven\s+eleven)\b/i.test(normalizado)) {
-    if (/\b(recarga|telcel|at[&y]t|movistar|servicio|luz|agua|internet|dep[oó]sito|deposito|farmacia|medicina|gasolina)\b/i.test(normalizado)) {
-      return {
-        categoria: 'Vida' as const,
-        subcategoria: 'Costo de Vida',
-        razon: 'Tienda de conveniencia con señal de servicio, recarga, salud o gasto necesario.',
-      };
-    }
-
-    return {
-      categoria: 'Placeres' as const,
-      subcategoria: 'Otros Placeres',
-      razon: 'Tienda de conveniencia sin señal de necesidad; por criterio de Diego se trata como consumo discrecional.',
-    };
-  }
-
-  if (/\b(openai|chatgpt|codex|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/i.test(normalizado)) {
-    return {
-      categoria: 'Futuro' as const,
-      subcategoria: 'Inversion',
-      razon: 'Comercio identificado como herramienta/software de inversión productiva.',
-    };
-  }
-
-  if (/\b(super|s[uú]per|despensa|farmacia|gasolina|metro|luz|agua|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex|doctor|hospital|carro|auto)\b/i.test(normalizado)) {
-    return {
-      categoria: 'Vida' as const,
-      subcategoria: 'Costo de Vida',
-      razon: 'Comercio identificado como gasto necesario o recurrente.',
-    };
-  }
-
   return {
     categoria: 'Placeres' as const,
     subcategoria: 'Otros Placeres',
-    razon: 'Movimiento Santander sin señal clara de necesidad; por criterio de Diego se clasifica como consumo discrecional.',
+    razon: 'Movimiento Santander sin señal de herramienta o inversión; por criterio actual de Diego se clasifica como Placeres.',
   };
 }
 

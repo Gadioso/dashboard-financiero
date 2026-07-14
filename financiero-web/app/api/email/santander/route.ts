@@ -677,8 +677,11 @@ export async function POST(request: Request) {
     }
 
     const preferencia = await buscarPreferenciaClasificacion(supabase, parsed.concepto, tenant.profileId);
-    const categoriaClasificada = preferencia?.categoria || parsed.categoria;
-    const subcategoriaClasificada = preferencia?.subcategoria || parsed.subcategoria;
+    const preferenciaProductivaIncompatible = preferencia?.categoria === 'Futuro' &&
+      preferencia.subcategoria === 'Herramientas Software' &&
+      parsed.categoria === 'Placeres';
+    const categoriaClasificada = !preferenciaProductivaIncompatible && preferencia?.categoria ? preferencia.categoria : parsed.categoria;
+    const subcategoriaClasificada = !preferenciaProductivaIncompatible && preferencia?.subcategoria ? preferencia.subcategoria : parsed.subcategoria;
 
     const duplicado = await buscarGastoDuplicado({
       concepto: parsed.concepto,

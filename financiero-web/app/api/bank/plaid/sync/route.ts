@@ -163,7 +163,7 @@ async function syncConnection(
   try {
     const accessToken = decryptBankSecret(connection.access_token_encrypted);
 
-    if (!accessToken) throw new Error('La conexion bancaria no tiene token de acceso.');
+    if (!accessToken) throw new Error('La conexión bancaria no tiene token de acceso.');
 
     let cursor = connection.transactions_cursor || null;
     let hasMore = true;

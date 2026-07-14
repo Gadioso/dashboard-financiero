@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS fiscal_compliance_opinions_provider_document_idx
+  ON public.fiscal_compliance_opinions(fiscal_provider_document_id);
