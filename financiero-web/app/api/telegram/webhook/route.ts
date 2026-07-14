@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { transcribirAudioFinanciero } from '@/lib/audio-transcription';
+import { esAbonoTarjetaCredito, extraerMontoAbonoTarjeta } from '@/lib/card-payment-intent';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos, extraerFechaMovimiento } from '@/lib/financial-core';
+import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto } from '@/lib/financial-core';
+import { logErrorEvent } from '@/lib/operational-events';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib/tenant-context';
@@ -10,8 +12,12 @@ import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const openRouterApiKey = process.env.OPENROUTER_API_KEY || '';
+const conversationApiKey = openRouterApiKey || googleApiKey;
+const openAiApiKey = process.env.OPENAI_API_KEY || '';
 
 type TelegramMessage = {
+  message_id?: number;
   chat?: {
     id?: number;
   };
@@ -31,6 +37,7 @@ type TelegramMessage = {
     mime_type?: string;
     file_size?: number;
   };
+  reply_to_message?: TelegramMessage;
 };
 
 type TelegramUpdate = {
@@ -182,6 +189,58 @@ async function responderTelegram(chatId: number | undefined, texto: string) {
   });
 }
 
+async function mostrarTelegramEscribiendo(chatId: number | undefined) {
+  if (!chatId || !telegramBotToken) return;
+
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendChatAction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Telegram sendChatAction falló: ${response.status} ${detail}`);
+  }
+}
+
+async function conTelegramEscribiendo<T>(chatId: number | undefined, trabajo: () => Promise<T>) {
+  if (!chatId || !telegramBotToken) return trabajo();
+
+  const renovar = () => {
+    void mostrarTelegramEscribiendo(chatId).catch((error) => {
+      console.warn('No pude renovar el indicador de escritura de Telegram:', error);
+    });
+  };
+
+  renovar();
+  const intervalId = setInterval(renovar, 4_000);
+
+  try {
+    return await trabajo();
+  } finally {
+    clearInterval(intervalId);
+  }
+}
+
+function mensajeErrorTelegram(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || 'Error desconocido.');
+
+  if (/429|quota|credits|prepayment|billing|Too Many Requests/i.test(message)) {
+    return [
+      'La IA externa se quedó sin cuota justo ahora.',
+      'No pude terminar esa transcripción, pero el bot sigue activo para texto.',
+      'Mándame el movimiento escrito, por ejemplo: "hice un abono de 10k a tarjeta".',
+    ].join('\n');
+  }
+
+  if (/audio|transcrib/i.test(message)) {
+    return 'No pude transcribir ese audio. Mándamelo por texto y lo registro.';
+  }
+
+  return 'Tuve un error procesando ese mensaje, pero ya sigo activo. Reenvíamelo por texto y lo proceso.';
+}
+
 function telegramAudioFromMessage(message?: TelegramMessage) {
   const media = message?.voice || message?.audio;
 
@@ -192,6 +251,49 @@ function telegramAudioFromMessage(message?: TelegramMessage) {
     mimeType: media.mime_type || (message?.voice ? 'audio/ogg' : 'audio/mpeg'),
     fileSize: media.file_size || 0,
   };
+}
+
+function normalizarTextoTelegram(texto: string) {
+  return texto
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function extraerIdGastoDeMensajeTelegram(texto?: string | null) {
+  const match = texto?.match(/\bID:\s*([a-z0-9-]{1,})\b/i);
+
+  return match?.[1] || null;
+}
+
+function extraerCategoriaCorreccionTelegram(texto?: string | null) {
+  const normalizado = normalizarTextoTelegram(texto || '');
+
+  if (!normalizado) return null;
+  if (/\b(?:vida|costo\s+de\s+vida)\b/.test(normalizado)) return 'vida';
+  if (/\b(?:placeres?|placer)\b/.test(normalizado)) return 'placeres';
+  if (/\b(?:futuro|inversion|ahorro|emergencia)\b/.test(normalizado)) return 'futuro';
+
+  return null;
+}
+
+function esCorreccionDeMensajeTelegram(texto?: string | null) {
+  const normalizado = normalizarTextoTelegram(texto || '');
+
+  return /\b(?:cambia|cambiame|cambiamelo|corrige|corrigeme|clasifica|clasificame|pon|ponme)\b/.test(normalizado) &&
+    Boolean(extraerCategoriaCorreccionTelegram(texto));
+}
+
+function aplicarContextoDeRespuestaTelegram(texto: string, message?: TelegramMessage) {
+  if (!esCorreccionDeMensajeTelegram(texto)) return texto;
+
+  const id = extraerIdGastoDeMensajeTelegram(message?.reply_to_message?.text);
+  const categoria = extraerCategoriaCorreccionTelegram(texto);
+
+  if (!id || !categoria) return texto;
+
+  return `cambiar ${id} a ${categoria}`;
 }
 
 async function telegramApi<T>(method: string, body: Record<string, unknown>): Promise<T> {
@@ -237,9 +339,12 @@ async function transcribirAudioTelegram(message?: TelegramMessage) {
   const audioBuffer = await audioResponse.arrayBuffer();
 
   return transcribirAudioFinanciero({
-    apiKey: googleApiKey,
+    geminiApiKey: googleApiKey,
+    openRouterApiKey,
+    openAiApiKey,
     audio: audioBuffer,
     mimeType: audio.mimeType,
+    fileName: file.file_path.split('/').pop() || undefined,
   });
 }
 
@@ -404,8 +509,46 @@ export async function POST(request: Request) {
 
       if (audioTelegram) {
         await responderTelegram(chatId, 'Recibí tu audio. Lo estoy transcribiendo para registrar el movimiento...');
-        const transcripcion = await transcribirAudioTelegram(update.message);
+        let transcripcion: string | null = null;
+        const telegramMessage = update.message;
+
+        try {
+          transcripcion = await conTelegramEscribiendo(chatId, () => transcribirAudioTelegram(telegramMessage));
+        } catch (error) {
+          console.error('Error transcribiendo audio de Telegram:', error);
+          await logErrorEvent({
+            supabase,
+            request,
+            profileId: tenant.profileId,
+            action: 'telegram.voice_transcription',
+            error,
+            code: 'telegram_voice_transcription_failed',
+            severity: 'warning',
+            metadata: {
+              chatId: chatId ? String(chatId) : null,
+              fileSize: audioTelegram.fileSize,
+              mimeType: audioTelegram.mimeType,
+            },
+          });
+          await responderTelegram(chatId, mensajeErrorTelegram(error));
+          return NextResponse.json({ success: true, acknowledged: true, action: 'voice-transcription-failed' });
+        }
+
         if (!transcripcion) {
+          await logErrorEvent({
+            supabase,
+            request,
+            profileId: tenant.profileId,
+            action: 'telegram.voice_transcription',
+            error: new Error('La transcripción de audio llegó vacía.'),
+            code: 'telegram_voice_transcription_empty',
+            severity: 'warning',
+            metadata: {
+              chatId: chatId ? String(chatId) : null,
+              fileSize: audioTelegram.fileSize,
+              mimeType: audioTelegram.mimeType,
+            },
+          });
           await responderTelegram(chatId, 'No pude transcribir ese audio. Intenta con una nota de voz más corta o mándamelo por texto.');
           return NextResponse.json({ success: true, ignored: true, action: 'voice-transcription-empty' });
         }
@@ -432,14 +575,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ignored: true, message });
     }
 
+    texto = aplicarContextoDeRespuestaTelegram(texto, update.message);
     const memoria = await leerMemoriaChat(supabase, chatId, tenant.profileId);
-    const respuesta = await responderConversacionFinanciera({
+
+    if (esAbonoTarjetaCredito(texto)) {
+      const monto = extraerMontoAbonoTarjeta(texto);
+
+      if (!Number.isFinite(monto) || monto <= 0) {
+        const message = 'Entendí que es abono a tarjeta, pero no detecté el monto. Ejemplo: "hice un abono de 10k a la de crédito".';
+        await responderTelegram(chatId, message);
+        await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
+        return NextResponse.json({ success: true, ignored: true, action: 'card-payment-missing-amount' });
+      }
+
+      const fechaMovimiento = extraerFechaMovimiento(texto) || new Date();
+      const payload = withProfile({
+        concepto: 'Abono tarjeta de crédito',
+        monto,
+        tarjeta: 'Tarjeta de crédito',
+        origen: 'Telegram',
+        fecha: fechaMovimiento.toISOString(),
+      }, tenant.profileId);
+      const { data, error } = await supabase
+        .from('abonos_tarjeta_credito')
+        .insert([payload])
+        .select('id, concepto, monto, tarjeta, origen, fecha')
+        .single();
+
+      if (error) {
+        await responderTelegram(chatId, `No pude guardar el abono de tarjeta: ${error.message}`);
+        return NextResponse.json({ success: false, acknowledged: true, action: 'card-payment-error', error: error.message });
+      }
+
+      const message = `Abono registrado. $${formatearMonto(monto)} a tarjeta de crédito. Esto reduce deuda de tarjeta y no cuenta como gasto nuevo.`;
+      await responderTelegram(chatId, message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
+
+      return NextResponse.json({ success: true, action: 'card-payment', data, message });
+    }
+
+    const respuesta = await conTelegramEscribiendo(chatId, () => responderConversacionFinanciera({
       texto,
-      apiKey: googleApiKey,
+      apiKey: conversationApiKey,
       supabase,
       memoria,
       profileId: tenant.profileId,
-    });
+    }));
 
     if (respuesta.action === 'reply') {
       await responderTelegram(chatId, respuesta.message);
@@ -503,6 +684,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data, message });
   } catch (error: unknown) {
     console.error('Error en webhook de Telegram:', error);
+    await responderTelegram(chatId, mensajeErrorTelegram(error));
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     return NextResponse.json({ success: false, acknowledged: true, error: message }, { status: 200 });
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { BillingPlan } from '@/lib/billing';
-import { getAppBaseUrl, getStripeClient, getStripePriceIdForPlan } from '@/lib/stripe-server';
+import { getAppBaseUrl, getOrCreateStripePriceForPlan, getStripeClient } from '@/lib/stripe-server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
@@ -64,12 +64,10 @@ export async function POST(request: Request) {
     const supabase = getSupabaseServiceClient();
     const body = (await request.json().catch(() => ({}))) as CheckoutBody;
     const plan = parseCheckoutPlan(body.plan);
-    const priceId = getStripePriceIdForPlan(plan);
+    const priceId = await getOrCreateStripePriceForPlan(plan);
 
     if (!stripe || !priceId) {
-      const missingPrice = plan === 'beta' ? 'STRIPE_PRICE_BETA_MONTHLY' : 'STRIPE_PRICE_PREMIUM_MONTHLY';
-
-      return NextResponse.json({ success: false, error: `Faltan STRIPE_SECRET_KEY o ${missingPrice}.` }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'El pago seguro todavía no está disponible.' }, { status: 503 });
     }
 
     if (!supabase) {
@@ -98,7 +96,7 @@ export async function POST(request: Request) {
         },
       ],
       allow_promotion_codes: true,
-      success_url: `${baseUrl}/?billing=success`,
+      success_url: `${baseUrl}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/?billing=cancelled`,
       client_reference_id: tenant.profileId,
       metadata: {

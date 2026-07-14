@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAppBaseUrl, getStripeClient } from '@/lib/stripe-server';
+import { getAppBaseUrl, getOrCreateBillingPortalConfiguration, getStripeClient } from '@/lib/stripe-server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
@@ -39,9 +39,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Todavía no hay cliente de Stripe para esta cuenta.' }, { status: 404 });
     }
 
+    const configuration = await getOrCreateBillingPortalConfiguration();
     const session = await stripe.billingPortal.sessions.create({
       customer: data.stripe_customer_id,
       return_url: `${getAppBaseUrl(request)}/`,
+      ...(configuration ? { configuration } : {}),
     });
 
     await logAuditEvent({

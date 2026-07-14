@@ -6,9 +6,7 @@ import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 
-// 2. Inicializar el motor de Google Gemini
-// Recuerda que debes tener tu variable GEMINI_API_KEY en tu archivo .env.local
-const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const aiApiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 export async function POST(request: Request) {
   try {
     const supabase = getSupabaseServiceClient();
@@ -28,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
 
-    const dataAI = await clasificarMovimientoFinanciero(texto, googleApiKey);
+    const dataAI = await clasificarMovimientoFinanciero(texto, aiApiKey, { supabase, profileId: tenant.profileId });
     const fechaMovimiento = dataAI.fechaMovimiento && !Number.isNaN(new Date(dataAI.fechaMovimiento).getTime())
       ? new Date(dataAI.fechaMovimiento)
       : extraerFechaMovimiento(texto) || new Date();

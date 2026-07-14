@@ -3,7 +3,9 @@ import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { guardarPreferenciaClasificacion } from '@/lib/classification-preferences';
 import { applyProfileFilter } from '@/lib/tenant-context';
-import { extraerJson, generateGeminiText } from '@/lib/gemini';
+import { extraerJson, generateGeminiText, generateLlmChat } from '@/lib/gemini';
+import { runFinancialToolAgent } from '@/lib/financial-tool-agent';
+import { shouldUseIntentLlm } from '@/lib/ai-policy';
 import {
   calcularGastadoPorBolsa,
   calcularIngresosMes,
@@ -21,7 +23,7 @@ type Intent =
   | { type: 'help' }
   | { type: 'category-total'; text: string }
   | { type: 'expense-total'; text: string }
-  | { type: 'update-category'; idPrefix?: string; category: string }
+  | { type: 'update-category'; idPrefix?: string; category: string; plural?: boolean }
   | { type: 'summary'; text: string }
   | { type: 'list'; text: string }
   | { type: 'delete-request'; text: string }
@@ -35,7 +37,7 @@ type MovimientoEliminable =
   | ({ kind: 'gasto' } & Gasto)
   | ({ kind: 'ingreso' } & Ingreso);
 
-type MensajeMemoria = {
+export type MensajeMemoria = {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
@@ -82,24 +84,94 @@ function limpiarFormatoTelegram(texto: string) {
     .trim();
 }
 
-function detectarIntent(texto: string): Intent {
-  const normalizado = texto.trim().toLowerCase();
+function normalizarTextoBasico(texto: string) {
+  return texto
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
 
-  if (!normalizado || normalizado === '/start' || normalizado === 'start' || normalizado === 'hola' || normalizado === 'ayuda' || normalizado === '/help') {
+function esMovimientoCortoConConcepto(normalizado: string) {
+  if (parecePreguntaONotaSinRegistro(normalizado)) return false;
+
+  const partes = normalizado
+    .replace(/[$,]/g, '')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const tieneMonto = partes.some((parte) => /^\d+(?:\.\d{1,2})?k?$/.test(parte));
+  const tieneConcepto = partes.some((parte) => /[a-zñ]/i.test(parte) && !aliasSoloCategoria(parte));
+
+  return tieneMonto && tieneConcepto;
+}
+
+function aliasSoloCategoria(texto: string) {
+  return /^(?:vida|v|placeres?|placer|p|futuro|f|inv|inversion|inversiones|ahorro|emergencia)$/.test(texto);
+}
+
+function extraerCategoriaCorreccion(normalizado: string) {
+  const match = normalizado.match(/\b(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversion|ahorro|emergencia)\b/);
+
+  return match?.[1] || null;
+}
+
+function extraerIdsCorreccion(normalizado: string) {
+  if (!/\b(?:cambia|cambiame|cambialo|cambialos|cambiamelo|cambiar|corrige|corrigeme|corregir|clasifica|clasificame|clasificar|pon|ponme|poner)\b/.test(normalizado)) {
+    return [];
+  }
+
+  const categoria = extraerCategoriaCorreccion(normalizado);
+  const textoAntesCategoria = categoria ? normalizado.slice(0, normalizado.lastIndexOf(categoria)) : normalizado;
+  const matches = textoAntesCategoria.match(/\b\d{1,8}\b/g) || [];
+
+  return [...new Set(matches)];
+}
+
+function detectarCorreccionCategoria(normalizado: string): Intent | null {
+  if (!/\b(?:cambia|cambiame|cambialo|cambialos|cambiamelo|cambiar|corrige|corrigeme|corregir|clasifica|clasificame|clasificar|pon|ponme|poner)\b/.test(normalizado)) {
+    return null;
+  }
+
+  const category = extraerCategoriaCorreccion(normalizado);
+
+  if (!category) return null;
+
+  const ids = extraerIdsCorreccion(normalizado);
+  const plural = /\b(?:cambialos|corrigelos|clasificalos|ponlos|ambos|ultimos\s+dos|ultimos\s+2)\b/.test(normalizado);
+
+  return {
+    type: 'update-category',
+    ...(ids.length ? { idPrefix: ids.join(',') } : {}),
+    category,
+    ...(plural ? { plural: true } : {}),
+  };
+}
+
+function detectarIntent(texto: string): Intent {
+  const normalizado = normalizarTextoBasico(texto);
+
+  if (!normalizado || normalizado === '/start' || normalizado === 'start' || normalizado === 'ayuda' || normalizado === '/help') {
     return { type: 'help' };
+  }
+
+  const correccionCategoria = detectarCorreccionCategoria(normalizado);
+
+  if (correccionCategoria) {
+    return correccionCategoria;
   }
 
   if (/\d/.test(normalizado) && esRegistroExplicito(normalizado)) {
     return { type: 'movement', text: texto };
   }
 
-  const actualizarCategoriaMatch = normalizado.match(/\b(?:cambia|cambiar|corrige|corregir|clasifica|clasificar|pon|poner)\s+(?:el\s+)?(?:gasto\s+)?([a-z0-9-]{1,})\s+(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversi[oó]n|inversion|ahorro|emergencia)\b/i);
+  const actualizarCategoriaMatch = normalizado.match(/\b(?:cambia|cambiame|cambiamelo|cambiar|corrige|corregir|clasifica|clasificar|pon|poner)\s+(?:el\s+)?(?:gasto\s+)?([a-z0-9-]{1,})\s+(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversion|ahorro|emergencia)\b/i);
 
   if (actualizarCategoriaMatch?.[1] && actualizarCategoriaMatch?.[2]) {
     return { type: 'update-category', idPrefix: actualizarCategoriaMatch[1], category: actualizarCategoriaMatch[2] };
   }
 
-  const actualizarUltimoMatch = normalizado.match(/\b(?:cambia|cambiar|corrige|corregir|clasifica|clasificar|pon|poner)\s*(?:lo|la|ese|esa|eso|este|esta|el\s+gasto|el\s+movimiento)?\s*(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversi[oó]n|inversion|ahorro|emergencia)\b/i);
+  const actualizarUltimoMatch = normalizado.match(/\b(?:cambia|cambiame|cambiamelo|cambiar|corrige|corrigeme|corregir|clasifica|clasificame|clasificar|pon|ponme|poner)\s*(?:lo|la|me|este|esta|ese|esa|eso|esto|el\s+gasto|el\s+movimiento)?\s*(?:a|como|en)\s+(vida|costo\s+de\s+vida|placeres?|placer|futuro|inversion|ahorro|emergencia)\b/i);
 
   if (actualizarUltimoMatch?.[1]) {
     return { type: 'update-category', category: actualizarUltimoMatch[1] };
@@ -119,7 +191,11 @@ function detectarIntent(texto: string): Intent {
     return { type: 'expense-total', text: texto };
   }
 
-  if (/\b(?:cu[aá]nto\s+)?(?:he\s+)?gast(?:e|é|ado|aste)?\b/.test(normalizado) && detectarFiltroCategoria(normalizado)) {
+  if (
+    /\b(?:cu[aá]nto|cu[aá]ntos|total|monto)\b/.test(normalizado) &&
+    /\b(?:gast(?:e|é|ado|aste)|invert(?:i|í|ido|iste)|destin(?:e|é|ado|aste)|aport(?:e|é|ado|aste)|ahorr(?:e|é|ado|aste))\b/.test(normalizado) &&
+    detectarFiltroCategoria(normalizado)
+  ) {
     return { type: 'category-total', text: texto };
   }
 
@@ -135,7 +211,7 @@ function detectarIntent(texto: string): Intent {
     return { type: 'conversation', text: texto };
   }
 
-  if (/\d/.test(normalizado)) {
+  if (/\d/.test(normalizado) && esMovimientoCortoConConcepto(normalizado)) {
     return { type: 'movement', text: texto };
   }
 
@@ -170,16 +246,16 @@ function protegerIntentAmbiguo(intent: Intent, texto: string): Intent {
   }
 
   if (intent.type === 'movement' && !esRegistroExplicito(normalizado)) {
-    return { type: 'conversation', text: texto };
+    return esMovimientoCortoConConcepto(normalizado) ? intent : { type: 'conversation', text: texto };
   }
 
   return intent;
 }
 
-async function detectarIntentInteligente(texto: string, apiKey: string): Promise<Intent> {
+async function detectarIntentInteligente(texto: string, apiKey: string, memoria: MensajeMemoria[] = []): Promise<Intent> {
   const fallback = protegerIntentAmbiguo(detectarIntent(texto), texto);
 
-  if (!apiKey) return fallback;
+  if (!apiKey || !shouldUseIntentLlm()) return fallback;
 
   const normalizado = texto.trim().toLowerCase();
 
@@ -189,6 +265,11 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     return fallback;
   }
 
+  const memoriaReciente = memoria.slice(-8).map((mensaje) => ({
+    role: mensaje.role,
+    content: mensaje.content.slice(0, 800),
+  }));
+
   const prompt = `
 {
   "role": "telegram_financial_intent_router",
@@ -197,7 +278,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "output_format": "raw_json_only",
     "no_markdown": true
   },
-  "objective": "Classify the user's Telegram message into exactly one intent before any database write happens.",
+  "objective": "Classify the user's financial assistant message into exactly one intent before any database write happens. Use recent_chat_memory to understand follow-ups.",
   "allowed_intents": {
     "help": "Greeting, help, start or onboarding.",
     "summary": "Balance, budget, monthly/range overview, how am I doing, how much remains, how much to invest, how much to reserve.",
@@ -213,8 +294,11 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
   "critical_rules": [
     "Questions like 'de dónde sale', 'por qué', 'qué significa', 'eso', 'esos 92k', 'sin sentido' are conversation even if they include numbers.",
     "Use movement when there is an amount and an explicit registration verb: pagar, gastar, comprar, ganar, cobrar, recibir, invertir, aportar, agregar, registrar, regístrame.",
+    "If the user says a short follow-up such as 'y mayo?', 'y ayer?', 'y todo julio?', infer the same kind of query as the previous assistant/user exchange, usually summary or list.",
+    "If the user says 'sí', 'hazlo', 'ok', or 'dale' after the assistant asked a clarifying question, classify as conversation unless the missing movement details are present in recent_chat_memory.",
     "'Regístrame $15k de ingresos de quincena de Aire' is movement, tipo ingreso.",
     "'15k ingresos quincena Aire' is movement, tipo ingreso.",
+    "'agrega 10k' without saying expense, income, card payment, concept, or target is conversation because the assistant must clarify before writing.",
     "A number inside a question is not a movement.",
     "'y todo mayo', 'en todo este mes de mayo', 'pero en todo enero' are summary.",
     "'de enero a mayo', 'enero para acá', 'todo el año', 'desde enero' are summary.",
@@ -225,6 +309,7 @@ async function detectarIntentInteligente(texto: string, apiKey: string): Promise
     "'cambialo a vida', 'cámbialo a placer', 'ponlo en futuro' are update-category without idPrefix; they refer to the last expense in memory.",
     "Return only valid raw JSON matching output_schema."
   ],
+  "recent_chat_memory": ${JSON.stringify(memoriaReciente, null, 2)},
   "user_message": ${JSON.stringify(texto)},
   "output_schema": {
     "type": "help | summary | category-total | expense-total | update-category | list | delete-request | delete-confirm | movement | conversation",
@@ -249,10 +334,14 @@ function detectarFiltroCategoria(texto: string) {
   const normalizado = texto.toLowerCase();
 
   if (normalizado.includes('placer') || /\b(salidas?|restaurantes?|caf[eé]s?|ocio)\b/.test(normalizado)) return 'Placeres';
-  if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?|herramientas?|software|openai|chatgpt|codex|opus|cloud|claude|github|vercel|supabase)\b/.test(normalizado)) return 'Seguros';
-  if (/\b(vida|costo de vida|telcel|servicios?|super|s[uú]per|renta|luz|agua)\b/.test(normalizado)) return 'Vida';
+  if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?|herramientas?|software|openai|chatgpt|codex|twilio|opus|cloud|claude|github|vercel|supabase)\b/.test(normalizado)) return 'Futuro';
+  if (/\b(vida|costo de vida)\b/.test(normalizado)) return 'Vida';
 
   return null;
+}
+
+function categoriasPersistidas(categoria: 'Vida' | 'Placeres' | 'Futuro') {
+  return categoria === 'Futuro' ? ['Futuro', 'Seguros'] : [categoria];
 }
 
 function esConsultaTotalGastos(normalizado: string) {
@@ -270,7 +359,7 @@ function normalizarCategoriaCorreccion(texto: string) {
   }
 
   if (normalizado.includes('futuro') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia') || normalizado.includes('herramienta') || normalizado.includes('software')) {
-    return { categoria: 'Seguros' as const, subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
+    return { categoria: 'Futuro' as const, subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
   }
 
   if (normalizado.includes('vida') || normalizado.includes('costo')) {
@@ -285,7 +374,21 @@ async function actualizarCategoriaGasto(
   idPrefix: string,
   categoriaTexto: string,
   profileId?: string | null
-) {
+): Promise<string> {
+  const idPrefixes = idPrefix
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (idPrefixes.length > 1) {
+    const resultados = await Promise.all(idPrefixes.map((id) => actualizarCategoriaGasto(supabase, id, categoriaTexto, profileId)));
+
+    return [
+      `Listo, intenté corregir ${idPrefixes.length} movimientos.`,
+      ...resultados.map((resultado) => resultado.replace(/^Listo, corregí la categoría\.\n?/, '').trim()),
+    ].join('\n\n');
+  }
+
   const categoria = normalizarCategoriaCorreccion(categoriaTexto);
 
   if (!categoria) {
@@ -332,11 +435,10 @@ async function actualizarCategoriaGasto(
     throw new Error(`No pude corregir el gasto: ${updateError.message}`);
   }
 
-  const categoriaPreferencia = categoria.categoria === 'Seguros' ? 'Futuro' : categoria.categoria;
   await guardarPreferenciaClasificacion({
     supabase,
     concepto: gasto.concepto,
-    categoria: categoriaPreferencia,
+    categoria: categoria.categoria,
     subcategoria: categoria.subcategoria,
     profileId,
   });
@@ -361,8 +463,32 @@ function obtenerUltimoGastoId(memoria: MensajeMemoria[]) {
   return mensajeConId?.content.match(/\bID:\s*([a-z0-9-]{4,})\b/i)?.[1];
 }
 
+function obtenerUltimosGastoIds(memoria: MensajeMemoria[], cantidad = 2) {
+  const ids: string[] = [];
+
+  for (const mensaje of [...memoria].reverse()) {
+    const metadataId = mensaje.metadata?.lastExpenseId;
+
+    if (metadataId && !ids.includes(metadataId)) {
+      ids.push(metadataId);
+    }
+
+    for (const match of mensaje.content.matchAll(/\bID:\s*([a-z0-9-]{1,})\b/gi)) {
+      const id = match[1];
+
+      if (id && !ids.includes(id)) {
+        ids.push(id);
+      }
+    }
+
+    if (ids.length >= cantidad) break;
+  }
+
+  return ids.slice(0, cantidad);
+}
+
 async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string, profileId?: string | null) {
-  const rango = rangoMesDesdeTexto(texto);
+  const rango = detectarPeriodoConsulta(texto);
   const categoria = detectarFiltroCategoria(texto);
 
   if (!categoria) {
@@ -374,7 +500,7 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string, 
     .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
     .gte('fecha', rango.inicio)
     .lt('fecha', rango.fin)
-    .eq('categoria', categoria);
+    .in('categoria', categoriasPersistidas(categoria));
   const { data, error } = await applyProfileFilter(query, profileId);
 
   if (error) {
@@ -393,8 +519,12 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string, 
     .slice(0, 5)
     .map((gasto) => `- ${formatearFecha(gasto.fecha)} · $${formatearMonto(gasto.monto)} · ${gasto.concepto}`);
 
+  const verbo = categoria === 'Futuro' && /\b(?:invert|inversi[oó]n|ahorr|aport)\w*/i.test(texto)
+    ? 'destinaste'
+    : 'gastaste';
+
   return [
-    `En ${rango.etiqueta} gastaste $${formatearMonto(total)} en ${nombreBolsa(categoria)}.`,
+    `En ${rango.etiqueta} ${verbo} $${formatearMonto(total)} en ${nombreBolsa(categoria)}.`,
     `Movimientos: ${gastos.length}.`,
     ...topGastos,
   ].join('\n');
@@ -590,7 +720,7 @@ function detectarPeriodoConsulta(texto: string) {
     .map(([, indice]) => indice)
     .sort((a, b) => a - b);
 
-  if (/\b(todo\s+el\s+a[nñ]o|en\s+el\s+a[nñ]o|anual|desde\s+enero|enero\s+para\s+ac[aá]|de\s+enero\s+para\s+ac[aá])\b/.test(normalizado)) {
+  if (/\b(todo\s+el\s+a[nñ]o|este\s+a[nñ]o|en\s+el\s+a[nñ]o|anual(?:mente)?|desde\s+enero|enero\s+para\s+ac[aá]|de\s+enero\s+para\s+ac[aá])\b/.test(normalizado)) {
     const endMonthIndex = mesesEncontrados.length ? Math.max(...mesesEncontrados) : ahora.getUTCMonth();
 
     return {
@@ -703,7 +833,7 @@ async function consultarMovimientosPeriodo({
     .limit(limit);
 
   if (categoria) {
-    gastosQuery = gastosQuery.eq('categoria', categoria);
+    gastosQuery = gastosQuery.in('categoria', categoriasPersistidas(categoria));
   }
 
   const ingresosQuery = supabase
@@ -878,6 +1008,9 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     .order('fecha', { ascending: false })
     .limit(8);
   const ultimoIngresoQuery = supabase.from('ingresos').select('monto, fecha').lt('fecha', periodo.fin).order('fecha', { ascending: false }).limit(1);
+  const personalizacionQuery = profileId
+    ? supabase.from('financial_personalization_profiles').select('birth_year, occupation, industry, work_model, income_sources, income_growth_goal, short_term_goals, medium_term_goals, long_term_goals, financial_concerns, valued_pleasures, pleasures_to_reduce, recurring_life_costs, recurring_investments, emergency_fund_status, investment_experience, risk_tolerance, recommendation_style').eq('profile_id', profileId).maybeSingle()
+    : Promise.resolve({ data: null, error: null });
 
   const [
     { data: ingresos, error: errorIngresos },
@@ -885,6 +1018,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     { data: ingresosPromedio, error: errorIngresosPromedio },
     { data: gastosRecientes, error: errorRecientes },
     { data: ultimoIngreso, error: errorUltimoIngreso },
+    { data: personalizacion },
   ] =
     await Promise.all([
       applyProfileFilter(ingresosPeriodoQuery, profileId),
@@ -892,6 +1026,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
       applyProfileFilter(ingresosPromedioQuery, profileId),
       applyProfileFilter(gastosRecientesQuery, profileId),
       applyProfileFilter(ultimoIngresoQuery, profileId).maybeSingle(),
+      personalizacionQuery,
     ]);
 
   if (errorIngresos) throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
@@ -944,6 +1079,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
       subcategoria: gasto.subcategoria || null,
       origen: gasto.origen,
     })),
+    perfilPersonalizado: personalizacion || null,
   };
 }
 
@@ -968,7 +1104,51 @@ async function responderConversacionAbierta({
   }
 
   const contexto = await obtenerContextoConversacional(supabase, texto, profileId);
-  const prompt = `
+
+  function respuestaLocal() {
+    const gastosTotal = Number(contexto.gastado.Vida || 0) + Number(contexto.gastado.Placeres || 0) + Number(contexto.gastado.Futuro || 0);
+    const restantes = Object.entries(contexto.restante || {})
+      .map(([bolsa, monto]) => `${bolsa}: $${formatearMonto(Number(monto || 0))}`)
+      .join(' · ');
+
+    if (texto.trim().toLowerCase() === 'hola') {
+      return 'Aquí estoy. Puedes mandarme un gasto, un ingreso, un abono a tarjeta, o preguntarme "cómo voy este mes".';
+    }
+
+    return [
+      `Lectura rápida de ${contexto.periodo}: ingresos $${formatearMonto(contexto.ingresosMes)}, gastos $${formatearMonto(gastosTotal)}, flujo $${formatearMonto(contexto.ingresosMes - gastosTotal)}.`,
+      restantes ? `Restante por bolsa: ${restantes}.` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  const system = `
+You are the conversational intelligence in Dashboard Financiero 33/33/33, Diego Gayoso's personal financial assistant.
+
+Operating context:
+${JSON.stringify({
+  financial_context: contexto,
+  business_rules: {
+    budget_rule: 'Each income month is divided equally into Vida, Placeres and Futuro.',
+    Vida: 'Only expenses explicitly corrected or labeled as Vida by the user.',
+    Placeres: 'Default for almost every expense unless it is a clear investment, emergency fund, insurance, or productive tool/software.',
+    Futuro: 'Investments, GBM, CETES, emergency fund, insurance, patrimonial savings and productive AI/software/cloud tools.',
+  },
+}, null, 2)}
+
+Behavior contract:
+- Respond in natural Mexican Spanish. Be direct, intelligent, warm, concrete and conversational.
+- Answer the actual message first. Do not sound like a command menu, tutorial or scripted bot.
+- Use only the supplied financial context for factual financial claims. Never invent balances, movements or actions.
+- Connect follow-ups to the recent conversation. Resolve pronouns and short references from that history when clear.
+- If Diego asks where a number comes from, show the exact breakdown from the context.
+- If he asks for an opinion, give a diagnosis, the main risk and one best next action.
+- If information is missing, ask exactly one useful clarifying question.
+- Never claim an operation was performed unless the context or conversation says it was completed.
+- You may explain that the assistant can register, query, reclassify and delete movements, but this response itself is conversational.
+- Do not provide guaranteed returns. Keep the answer under 8 short lines unless a detailed explanation is explicitly requested.
+- Plain text only; simple hyphen bullets are allowed when useful.`;
+
+  const legacyPrompt = `
 {
   "role": "financial_conversation_agent",
   "identity": {
@@ -987,18 +1167,22 @@ async function responderConversacionAbierta({
     "Use only the provided financial_context and recent_chat_memory. Do not invent data.",
     "Never say you cannot modify the database as a general rule. This Telegram bot can register movements when the router classifies the message as movement.",
     "Understand natural follow-ups such as 'y mayo?', 'pero completo', 'de dónde sale eso?', 'qué opinas?', 'está bien o mal?'.",
+    "Behave like an operator with memory: connect the user's current message to the immediately previous exchange when that is clearly what they mean.",
+    "When the user is frustrated or says the bot is wrong, diagnose the likely data or classification issue first, then give the next concrete action.",
+    "When the user asks what to do, recommend one immediate action and explain the tradeoff in one sentence.",
     "If the user asks where a number comes from, show the exact breakdown using ingresosDetalle, gastosPorBolsa or gastosRecientes.",
     "If the user asks for an opinion, give a diagnosis, the main risk, and the next best action. Do not repeat every dashboard number.",
     "If the user asks how much remains, compute from presupuestoMes and restante.",
-    "If information is missing, say what is missing and suggest the most useful next command.",
+    "If information is missing, ask exactly one clarifying question, with examples in Diego's language.",
     "Do not claim that you registered, deleted, or modified anything unless the provided context says the action already happened.",
-    "Do not provide regulated financial advice or guaranteed returns."
+    "Do not provide regulated financial advice or guaranteed returns.",
+    "Do not sound like a tutorial. Answer the actual message first."
   ],
   "business_rules": {
     "budget_rule": "Each income month is divided equally into Vida, Placeres and Futuro.",
-    "Vida": "Strict cost of living: rent, water, electricity, basic groceries/supermarket, necessary transport/gasoline, phone/internet, health and debt. Do not put AI, software, cloud or work tools in Vida.",
-    "Placeres": "Default for discretionary spending: OXXO/7 Eleven without a clear necessary-service signal, Mercado Pago/PayPal ambiguous purchases, restaurants, coffee, outings, trips, hotels, Uber/Didi rides, delivery and entertainment.",
-    "Futuro": "Investments, GBM, CETES, emergency fund, insurance, patrimonial savings, AI/software/cloud tools such as OpenAI, Codex, Opus, Claude, GitHub, Vercel and similar productive tools."
+    "Vida": "Only expenses explicitly corrected or labeled as Vida by the user.",
+    "Placeres": "Default for almost every expense unless it is a clear investment, emergency fund, insurance, or productive tool/software. This includes OXXO/7 Eleven, Mercado Pago/PayPal ambiguous purchases, restaurants, coffee, outings, trips, hotels, Uber/Didi rides, delivery, entertainment, supermarket, gas, phone, internet, utilities, health, clothes and unknown stores.",
+    "Futuro": "Clear investments, GBM, CETES, emergency fund, insurance, patrimonial savings, AI/software/cloud tools such as OpenAI, Codex, Twilio, Opus, Claude, GitHub, Vercel and similar productive tools."
   },
   "financial_context": ${JSON.stringify(contexto, null, 2)},
   "recent_chat_memory": ${JSON.stringify(memoria.slice(-8), null, 2)},
@@ -1007,15 +1191,32 @@ async function responderConversacionAbierta({
     "Respond in Spanish Mexican.",
     "Use concrete MXN numbers when available.",
     "Explain reasoning briefly when the user asks about a number.",
+    "Prefer short paragraphs over long bullet lists.",
     "Use plain text with simple hyphen bullets only if useful.",
-    "Keep the response concise but not robotic."
+    "Keep the response concise, conversational, and decisive."
   ]
 }
 `;
 
-  const message = limpiarFormatoTelegram(await generateGeminiText(apiKey, prompt));
+  try {
+    const llmMessages = [
+      ...memoria.slice(-10).map((mensaje) => ({
+        role: mensaje.role,
+        content: mensaje.content,
+      })),
+      { role: 'user' as const, content: texto },
+    ];
+    const result = await generateLlmChat({ apiKey, system, messages: llmMessages });
+    const message = limpiarFormatoTelegram(result.text);
 
-  return message || 'Estoy aquí. Puedo revisar tus bolsas, gastos, ingresos o ayudarte a registrar un movimiento.';
+    return message || 'Estoy aquí. Dime qué quieres entender o hacer con tus finanzas.';
+  } catch {
+    try {
+      return limpiarFormatoTelegram(await generateGeminiText(apiKey, legacyPrompt));
+    } catch {
+      return respuestaLocal();
+    }
+  }
 }
 
 function completarFollowUpMovimiento(texto: string, memoria: MensajeMemoria[]) {
@@ -1042,6 +1243,60 @@ function completarFollowUpMovimiento(texto: string, memoria: MensajeMemoria[]) {
   return ultimoUsuario ? `${ultimoUsuario.content} ${texto}` : texto;
 }
 
+function extraerMontoBasico(texto: string) {
+  const normalizado = texto.toLowerCase();
+  const milesMatch = normalizado.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)\s*(?:k|mil)\b/);
+
+  if (milesMatch?.[1]) return Number(milesMatch[1].replace(',', '.')) * 1000;
+
+  const montoMatch = normalizado.match(/\$?\s*(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/);
+
+  return montoMatch ? Number(montoMatch[1].replace(/,/g, '')) : 0;
+}
+
+function conceptoTentativoRegistro(texto: string) {
+  return texto
+    .toLowerCase()
+    .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*(?:k|mil)?\b/g, ' ')
+    .replace(/\b(?:agrega|agregar|añade|anade|registrame|regístrame|registra|registrar|guarda|guardar|pague|pagué|pago|gast[eé]|gaste|compr[eé]|compre|met[ií]|meti|invert[ií]|inverti|aporte|aport[eé]|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|ingreso|ingresos|gasto|gastos|abono|tarjeta|credito|crédito|tdc|de|en|a|al|la|el|un|una|por|para|hoy|ayer|anoche|antier|anteayer)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function aclaracionAntesDeEscribir(texto: string) {
+  const normalizado = normalizarTextoBasico(texto);
+
+  if (!esRegistroExplicito(normalizado)) return null;
+
+  const monto = extraerMontoBasico(texto);
+
+  if (!Number.isFinite(monto) || monto <= 0) {
+    return [
+      'Sí puedo registrarlo, pero me falta el monto.',
+      'Dímelo así: "gasté 250 en gasolina", "ingreso 10k de consultoría" o "abono 10k a tarjeta".',
+    ].join('\n');
+  }
+
+  const mencionaTipo = /\b(?:gasto|gastos|pague|pagué|pago|gast[eé]|gaste|compre|compr[eé]|ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|sueldo|nomina|n[oó]mina|abono|tarjeta|credito|cr[eé]dito|tdc|cetes|inversi[oó]n|invert[ií])\b/.test(normalizado);
+  const concepto = conceptoTentativoRegistro(texto);
+
+  if (!mencionaTipo && !concepto) {
+    return [
+      `Tengo el monto: $${formatearMonto(monto)}.`,
+      '¿Qué es: gasto, ingreso o abono a tarjeta? Escríbelo con una palabra de contexto y lo registro.',
+    ].join('\n');
+  }
+
+  if (!concepto && !/\b(?:abono|tarjeta|credito|cr[eé]dito|tdc|sueldo|nomina|n[oó]mina|cetes|inversi[oó]n)\b/.test(normalizado)) {
+    return [
+      `Tengo el monto: $${formatearMonto(monto)}.`,
+      'Me falta el concepto. Por ejemplo: "gasolina", "renta", "consultoría" o "tarjeta".',
+    ].join('\n');
+  }
+
+  return null;
+}
+
 export async function responderConversacionFinanciera({
   texto,
   apiKey,
@@ -1059,10 +1314,38 @@ export async function responderConversacionFinanciera({
   | { action: 'movement'; movement: MovementResult; message: string }
 > {
   const textoConContexto = completarFollowUpMovimiento(texto, memoria);
-  const intent = await detectarIntentInteligente(textoConContexto, apiKey);
+  const aclaracion = aclaracionAntesDeEscribir(textoConContexto);
+
+  if (aclaracion) {
+    return { action: 'reply', message: aclaracion };
+  }
+
+  const intent = await detectarIntentInteligente(textoConContexto, apiKey, memoria);
 
   if (intent.type === 'help') {
     return { action: 'reply', message: ayuda };
+  }
+
+  if (
+    profileId &&
+    ['category-total', 'expense-total', 'summary', 'list', 'conversation'].includes(intent.type)
+  ) {
+    try {
+      const agentResult = await runFinancialToolAgent({
+        text: 'text' in intent ? intent.text : textoConContexto,
+        memory: memoria,
+        supabase,
+        profileId,
+      });
+
+      if (agentResult.text) {
+        return { action: 'reply', message: agentResult.text };
+      }
+    } catch (error) {
+      console.error('[financial-tool-agent] agent loop failed', error);
+      if (process.env.OPENROUTER_API_KEY) throw error;
+      // Only use deterministic handlers when the agent provider is not configured.
+    }
   }
 
   if (intent.type === 'category-total') {
@@ -1074,12 +1357,14 @@ export async function responderConversacionFinanciera({
   }
 
   if (intent.type === 'update-category') {
-    const idPrefix = intent.idPrefix || obtenerUltimoGastoId(memoria);
+    const idPrefix = intent.idPrefix || (intent.plural ? obtenerUltimosGastoIds(memoria, 2).join(',') : obtenerUltimoGastoId(memoria));
 
     if (!idPrefix) {
       return {
         action: 'reply',
-        message: 'No tengo un último gasto claro para corregir. Mándame "últimos gastos" o usa "cambiar <id> a vida/placeres/futuro".',
+        message: intent.plural
+          ? 'No tengo claros los últimos gastos para corregirlos. Mándame "últimos gastos" o usa "cambiar <id> y <id> a vida/placeres/futuro".'
+          : 'No tengo un último gasto claro para corregir. Mándame "últimos gastos" o usa "cambiar <id> a vida/placeres/futuro".',
       };
     }
 
@@ -1112,7 +1397,7 @@ export async function responderConversacionFinanciera({
   }
 
   if (intent.type === 'movement') {
-    const movement = await clasificarMovimientoFinanciero(intent.text, apiKey);
+    const movement = await clasificarMovimientoFinanciero(intent.text, apiKey, { supabase, profileId });
     const tipo = movement.tipo === 'ingreso' ? 'ingreso' : `${movement.categoria} / ${movement.subcategoria}`;
 
     return {

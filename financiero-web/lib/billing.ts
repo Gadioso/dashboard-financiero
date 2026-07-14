@@ -29,19 +29,19 @@ const activeSubscriptionStatuses = new Set(activeSubscriptionStatusList);
 
 export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
   free: {
-    bankConnections: 0,
+    bankConnections: 1,
     gmailIntegrations: 1,
     telegramAccounts: 0,
     bankSyncLookbackDays: 30,
   },
   beta: {
-    bankConnections: 0,
+    bankConnections: 2,
     gmailIntegrations: 1,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
   },
   premium: {
-    bankConnections: 0,
+    bankConnections: 5,
     gmailIntegrations: 2,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
@@ -64,13 +64,15 @@ export const defaultBillingStatus: BillingStatus = {
 };
 
 export function isBillingConfigured() {
-  return Boolean(process.env.STRIPE_SECRET_KEY && (process.env.STRIPE_PRICE_BETA_MONTHLY || process.env.STRIPE_PRICE_PREMIUM_MONTHLY));
+  return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
 export function getBillingPriceConfig() {
+  const stripeReady = Boolean(process.env.STRIPE_SECRET_KEY);
+
   return {
-    beta: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_BETA_MONTHLY),
-    premium: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_PREMIUM_MONTHLY),
+    beta: stripeReady,
+    premium: stripeReady,
   };
 }
 

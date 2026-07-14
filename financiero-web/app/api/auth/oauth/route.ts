@@ -3,7 +3,7 @@ import type { Provider } from '@supabase/supabase-js';
 import { getSafeNext } from '@/lib/auth-session';
 import { getSupabaseAnonClient } from '@/lib/supabase-server';
 
-const supportedProviders = new Set(['google', 'github']);
+const supportedProviders = new Set(['google', 'apple']);
 
 function getProvider(value?: string | null): Provider | null {
   return value && supportedProviders.has(value) ? (value as Provider) : null;

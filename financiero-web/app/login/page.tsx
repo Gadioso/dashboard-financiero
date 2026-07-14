@@ -16,6 +16,10 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const safeLoginError = (value: unknown) => {
+    const text = typeof value === 'string' ? value.trim() : '';
+    return /supabase|api|schema|token|secret|key|oauth|env\b|configurad/i.test(text) ? 'El acceso no está disponible en este momento. Intenta nuevamente.' : text || 'No pude iniciar sesión.';
+  };
 
   async function submit(action: 'login' | 'signup' = accountAction, event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -41,7 +45,7 @@ function LoginForm() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        setError(result.error || 'No pude iniciar sesión.');
+        setError(safeLoginError(result.error));
         return;
       }
 
@@ -58,7 +62,7 @@ function LoginForm() {
     }
   }
 
-  function startOAuth(provider: 'google' | 'github') {
+  function startOAuth(provider: 'google' | 'apple') {
     setLoading(true);
     setError('');
     window.location.href = `/api/auth/oauth?provider=${provider}&next=${encodeURIComponent(next)}`;
@@ -110,7 +114,7 @@ function LoginForm() {
         <p className="text-sm font-semibold text-blue-700">Acceso financiero</p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Iniciar sesión</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Entra con tu cuenta para consultar solo tus datos. El token privado queda como acceso de emergencia.
+          Entra con tu cuenta para consultar únicamente tu información financiera.
         </p>
 
         <div className="mt-6 grid grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
@@ -126,7 +130,7 @@ function LoginForm() {
             onClick={() => chooseMode('private')}
             className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${mode === 'private' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
           >
-            Token privado
+            Acceso de respaldo
           </button>
         </div>
 
@@ -186,26 +190,26 @@ function LoginForm() {
           </div>
         ) : (
           <label className="mt-5 block text-sm font-medium text-slate-600">
-            Token de acceso
+            Código de acceso
             <input
               value={token}
               onChange={(event) => setToken(event.target.value)}
               type="password"
               autoComplete="current-password"
               className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-              placeholder="DASHBOARD_ACCESS_TOKEN"
+              placeholder="Código de acceso"
             />
           </label>
         )}
 
-        {(error || routeError) && <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error || routeError}</p>}
+        {(error || routeError) && <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error || safeLoginError(routeError)}</p>}
         {message && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
 
         {mode === 'account' && (
           <>
             <div className="my-5 flex items-center gap-3">
               <div className="h-px flex-1 bg-slate-200" />
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">OAuth</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">O continúa con</span>
               <div className="h-px flex-1 bg-slate-200" />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -219,11 +223,11 @@ function LoginForm() {
               </button>
               <button
                 type="button"
-                onClick={() => startOAuth('github')}
+                onClick={() => startOAuth('apple')}
                 disabled={loading}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                GitHub
+                Apple
               </button>
             </div>
           </>
@@ -238,7 +242,7 @@ function LoginForm() {
         </button>
         <div className="mt-5 flex justify-center gap-4 text-xs text-slate-500">
           <a href="/privacy" className="hover:text-blue-700">Privacidad</a>
-          <a href="/terms" className="hover:text-blue-700">Terminos</a>
+          <a href="/terms" className="hover:text-blue-700">Términos</a>
         </div>
       </form>
       </section>

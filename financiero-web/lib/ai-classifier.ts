@@ -1,4 +1,5 @@
 import { extraerJson, generateGeminiText } from '@/lib/gemini';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type CategoriaFinanciera,
   type ClasificacionMovimiento,
@@ -10,7 +11,7 @@ import {
 const categoriasValidas = ['Vida', 'Placeres', 'Futuro'];
 const tiposValidos = ['gasto', 'ingreso'];
 const herramientaProductivaRegex =
-  /\b(openai|chatgpt|codex|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/;
+  /\b(openai|chatgpt|codex|twilio|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/;
 
 function validarClasificacion(valor: unknown): ClasificacionMovimiento {
   const data = valor as Partial<ClasificacionMovimiento>;
@@ -46,26 +47,63 @@ function validarClasificacion(valor: unknown): ClasificacionMovimiento {
 }
 
 function limpiarConcepto(texto: string) {
+  const conceptoExplicito = extraerConceptoExplicito(texto);
+
+  if (conceptoExplicito) {
+    return conceptoExplicito;
+  }
+
   return texto
     .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*k\b/gi, '')
     .replace(/\$?\d+(?:[,.]\d{1,2})?/g, '')
-    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|quincena|efectivo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|a|al|la|el|un|una|por|para)\b/gi, ' ')
+    .replace(/\b(?:pesos?|mxn|m\.?n\.?)\b/gi, ' ')
+    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|concepto|quincena|efectivo|tuve|tengo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|con|a|al|la|el|un|una|por|para)\b/gi, ' ')
     .replace(/\b(?:vida|placeres?|futuro)\b\s*$/gi, ' ')
+    .replace(/[:"'“”‘’]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function extraerMonto(texto: string) {
-  const normalizado = texto.toLowerCase();
-  const milesMatch = normalizado.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)\s*k\b/);
+function limpiarConceptoExplicito(valor: string) {
+  return valor
+    .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*k\b/gi, '')
+    .replace(/\$?\d+(?:[,.]\d{1,2})?/g, '')
+    .replace(/\b(?:pesos?|mxn|m\.?n\.?)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[:\-\s"'“”‘’]+|[:\-\s"'“”‘’]+$/g, '');
+}
 
-  if (milesMatch?.[1]) {
-    return Number(milesMatch[1].replace(/,/g, '')) * 1000;
+function extraerConceptoExplicito(texto: string) {
+  const entreComillas = texto.match(/\bconcepto\s*[:=\-]?\s*["“”'‘’]([^"“”'‘’]+)["“”'‘’]/i);
+
+  if (entreComillas?.[1]) {
+    return limpiarConceptoExplicito(entreComillas[1]);
   }
 
-  const montoMatch = normalizado.match(/\$?\s*(\d+(?:[,.]\d{1,2})?)/);
+  const despuesDeConcepto = texto.match(/\bconcepto\s*[:=\-]?\s+(.+?)(?:\s+(?:de|por|con)\s+\$?\s*\d|\s+\$?\s*\d|$)/i);
 
-  return montoMatch ? Number(montoMatch[1].replace(/,/g, '')) : 0;
+  if (despuesDeConcepto?.[1]) {
+    return limpiarConceptoExplicito(despuesDeConcepto[1]);
+  }
+
+  return '';
+}
+
+function extraerMonto(texto: string) {
+  const normalizado = texto.toLowerCase();
+  const milesMatches = [...normalizado.matchAll(/\$?\s*(\d+(?:[,.]\d{1,2})?)\s*k\b/g)];
+  const lastMilesMatch = milesMatches.at(-1);
+
+  if (lastMilesMatch?.[1]) {
+    return Number(lastMilesMatch[1].replace(/,/g, '')) * 1000;
+  }
+
+  const moneyMatches = [...normalizado.matchAll(/\$?\s*(\d+(?:[,.]\d{1,2})?)(?=\s*(?:pesos?|mxn|m\.?n\.?)\b|$|[,.!?])/g)];
+  const contextualMatches = [...normalizado.matchAll(/\b(?:de|por|con|en)\s+\$?\s*(\d+(?:[,.]\d{1,2})?)\b/g)];
+  const amountMatch = moneyMatches.at(-1) || contextualMatches.at(-1) || [...normalizado.matchAll(/\$?\s*(\d+(?:[,.]\d{1,2})?)/g)].at(-1);
+
+  return amountMatch?.[1] ? Number(amountMatch[1].replace(/,/g, '')) : 0;
 }
 
 function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
@@ -126,14 +164,26 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
     };
   }
 
+  if (/\b(gasolina|gasolinera|combustible|combusti|pemex|bp\b|shell|mobil|hidrosina|petro|centauro)\b/.test(normalizado)) {
+    return {
+      concepto,
+      monto,
+      tipo: 'gasto',
+      categoria: 'Vida',
+      subcategoria: 'Transporte',
+      razon: 'Clasificado por regla local como gasto de transporte/combustible.',
+      ...(fechaMovimiento ? { fechaMovimiento } : {}),
+    };
+  }
+
   if (herramientaProductivaRegex.test(normalizado)) {
     return {
       concepto,
       monto,
       tipo: 'gasto',
       categoria: 'Futuro',
-      subcategoria: 'Inversion',
-      razon: 'Clasificado por regla local como herramienta/software de inversión productiva.',
+      subcategoria: 'Herramientas Software',
+      razon: 'Clasificado por regla local como herramienta/software productivo.',
       ...(fechaMovimiento ? { fechaMovimiento } : {}),
     };
   }
@@ -154,55 +204,86 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
     };
   }
 
-  if (/\boxxo\b/.test(normalizado)) {
-    if (/\b(recarga|telcel|at[&y]t|movistar|servicio|luz|agua|internet|dep[oó]sito|deposito|farmacia|medicina|gasolina)\b/.test(normalizado)) {
-      return {
-        concepto,
-        monto,
-        tipo: 'gasto',
-        categoria: 'Vida',
-        subcategoria: 'Costo de Vida',
-        razon: 'Clasificado por regla local: OXXO con señal de servicio, salud o gasto necesario.',
-        ...(fechaMovimiento ? { fechaMovimiento } : {}),
-      };
-    }
-
-    return {
-      concepto,
-      monto,
-      tipo: 'gasto',
-      categoria: 'Placeres',
-      subcategoria: 'Otros Placeres',
-      razon: 'Clasificado por regla local: OXXO sin señal de necesidad se trata como consumo discrecional.',
-      ...(fechaMovimiento ? { fechaMovimiento } : {}),
-    };
-  }
-
-  if (/\b(renta|luz|agua|super|s[uú]per|despensa|gasolina|transporte necesario|metro|camion|camión|deuda|doctor|medicina|telcel|at[&y]t|movistar|internet|izzi|totalplay|telmex)\b/.test(normalizado)) {
-    return {
-      concepto,
-      monto,
-      tipo: 'gasto',
-      categoria: 'Vida',
-      subcategoria: /\b(gasolina|transporte|metro|camion|camión)\b/.test(normalizado) ? 'Transporte' : 'Otros Vida',
-      razon: 'Clasificado por regla local de costo de vida.',
-      ...(fechaMovimiento ? { fechaMovimiento } : {}),
-    };
-  }
-
-  return null;
+  return {
+    concepto,
+    monto,
+    tipo: 'gasto',
+    categoria: 'Placeres',
+    subcategoria: 'Otros Placeres',
+    razon: 'Clasificado por regla local: por criterio actual de Diego, todo gasto no productivo/inversión cae en Placeres.',
+    ...(fechaMovimiento ? { fechaMovimiento } : {}),
+  };
 }
 
-export async function clasificarMovimientoFinanciero(texto: string, apiKey: string): Promise<ClasificacionMovimiento> {
+async function clasificarPorPreferenciaPersonal({
+  texto,
+  supabase,
+  profileId,
+}: {
+  texto: string;
+  supabase?: SupabaseClient | null;
+  profileId?: string | null;
+}): Promise<ClasificacionMovimiento | null> {
+  if (!supabase || !profileId) return null;
+  const monto = extraerMonto(texto);
+  if (!Number.isFinite(monto) || monto <= 0) return null;
+
+  const { data, error } = await supabase
+    .from('classification_preferences')
+    .select('matcher, categoria, subcategoria')
+    .eq('profile_id', profileId)
+    .order('updated_at', { ascending: false });
+
+  if (error) return null;
+  const normalizedText = normalizarComparacion(texto);
+  const preference = (data || []).find((row) => {
+    const matcher = normalizarComparacion(String(row.matcher || ''));
+    return matcher.length >= 2 && normalizedText.includes(matcher);
+  });
+  if (!preference) return null;
+
+  const fechaDetectada = extraerFechaMovimiento(texto);
+  return {
+    concepto: limpiarConcepto(texto) || String(preference.matcher),
+    monto,
+    tipo: 'gasto',
+    categoria: preference.categoria as CategoriaFinanciera,
+    subcategoria: String(preference.subcategoria || preference.categoria),
+    razon: `Clasificado según tu preferencia guardada para ${preference.matcher}.`,
+    ...(fechaDetectada ? { fechaMovimiento: fechaDetectada.toISOString() } : {}),
+  };
+}
+
+function normalizarComparacion(value: string) {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+async function obtenerCriteriosPersonales(supabase?: SupabaseClient | null, profileId?: string | null) {
+  if (!supabase || !profileId) return null;
+  const { data } = await supabase
+    .from('financial_personalization_profiles')
+    .select('occupation, industry, work_model, recurring_life_costs, work_essential_costs, valued_pleasures, recurring_investments, short_term_goals, medium_term_goals, long_term_goals')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  return data || null;
+}
+
+export async function clasificarMovimientoFinanciero(
+  texto: string,
+  apiKey: string,
+  context: { supabase?: SupabaseClient | null; profileId?: string | null } = {},
+): Promise<ClasificacionMovimiento> {
   if (esComandoAyuda(texto)) {
     throw new Error(
       'Listo para registrar movimientos. Puedes escribir: pagué 250 de gasolina, 150 tacos, metí 1000 a cetes, o 500 fondo emergencia.'
     );
   }
 
+  const criteriosPersonales = await obtenerCriteriosPersonales(context.supabase, context.profileId);
+
   const estructurado = parsearMovimientoEstructurado(texto);
 
-  if (estructurado.ok) {
+  if (estructurado.ok && !criteriosPersonales) {
     if (estructurado.tipo === 'gasto' && herramientaProductivaRegex.test(estructurado.concepto.toLowerCase())) {
       const fechaDetectada = extraerFechaMovimiento(texto);
 
@@ -211,8 +292,8 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
         monto: estructurado.monto,
         tipo: 'gasto',
         categoria: 'Futuro',
-        subcategoria: 'Inversion',
-        razon: 'Clasificado por regla local como herramienta/software de inversión productiva.',
+        subcategoria: 'Herramientas Software',
+        razon: 'Clasificado por regla local como herramienta/software productivo.',
         ...(fechaDetectada ? { fechaMovimiento: fechaDetectada.toISOString() } : {}),
       };
     }
@@ -230,7 +311,10 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     };
   }
 
-  const clasificacionLocal = clasificarPorReglas(texto);
+  const personalPreference = await clasificarPorPreferenciaPersonal({ texto, ...context });
+  if (personalPreference) return personalPreference;
+
+  const clasificacionLocal = criteriosPersonales ? null : clasificarPorReglas(texto);
 
   if (clasificacionLocal) {
     return clasificacionLocal;
@@ -249,33 +333,34 @@ export async function clasificarMovimientoFinanciero(texto: string, apiKey: stri
     "output_format": "raw_json_only",
     "no_markdown": true
   },
-  "objective": "Extract exactly one financial movement from the user's natural-language message for Diego's 33/33/33 financial system.",
+  "objective": "Extract and classify exactly one financial movement using the owner's personal financial criteria.",
+  "owner_context": ${JSON.stringify(criteriosPersonales, null, 2)},
   "categories": {
     "Vida": {
-      "description": "Strict required cost of living.",
-      "examples": ["rent", "utilities", "basic groceries", "necessary gas", "basic transport", "health", "debt"],
+      "description": "Necessary personal obligations listed in recurring_life_costs, or clearly essential living costs.",
+      "examples": ["rent", "essential groceries", "school", "health", "essential transport"],
       "subcategories": ["Renta", "Servicios", "Super", "Transporte", "Salud", "Deudas", "Otros Vida"]
     },
     "Placeres": {
-      "description": "Lifestyle, leisure, optional or discretionary consumption.",
-      "examples": ["restaurants", "coffee", "Starbucks", "cinema", "travel", "concerts", "delivery", "bars", "entertainment"],
+      "description": "Optional enjoyment, especially items matching valued_pleasures. Use as fallback for ambiguous discretionary purchases.",
+      "examples": ["restaurants", "coffee", "Starbucks", "cinema", "travel", "concerts", "delivery", "bars", "entertainment", "supermarket", "gasoline", "phone", "utilities", "unknown stores"],
       "subcategories": ["Restaurantes", "Cafe", "Entretenimiento", "Viajes", "Ropa", "Delivery", "Otros Placeres"]
     },
     "Futuro": {
-      "description": "Investing, saving, emergency fund, insurance, patrimonial allocations, productive tools and software.",
-      "examples": ["GBM", "CETES", "ETF", "stocks", "emergency fund", "insurance", "OpenAI", "Codex", "cloud/software tools"],
+      "description": "Savings, protection, investment, goals, or expenses essential to the owner's work and income generation.",
+      "examples": ["GBM", "CETES", "ETF", "stocks", "emergency fund", "insurance", "OpenAI", "Codex", "Twilio", "cloud/software tools"],
       "subcategories": ["Inversion", "Emergencia", "Seguros", "Ahorro", "Proyectos", "Herramientas Software", "Otros Futuro"]
     }
   },
   "classification_rules": [
+    "Personal criteria override generic examples. Use recurring_life_costs for Vida, valued_pleasures for Placeres, and recurring_investments or work_essential_costs for Futuro.",
+    "The same merchant can mean different things for different owners. Classify from owner_context and transaction concept, never from another user's preferences.",
     "If the message mentions salary, payroll, bonus, freelance, commission, 'gané', 'me pagaron', 'cobré', 'recibí' or income, set tipo='ingreso'.",
     "If it mentions CETES, GBM, inversión, invertí, stocks, ETF, crypto or patrimonial allocation, classify as Futuro/Inversion.",
     "If it mentions emergency fund, classify as Futuro/Emergencia.",
     "If it mentions insurance, classify as Futuro/Seguros.",
-    "OpenAI, ChatGPT, Codex, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Supabase, Cloudflare, Google Cloud, AWS, Notion, Zoom, Figma, Canva and similar work/software/cloud/AI tools are Futuro/Inversion.",
-    "OXXO is Placeres/Otros Placeres by default for Diego, unless the text clearly says it was a bill payment, phone top-up, medicine, pharmacy, gas or another necessary service.",
-    "Mercado Pago, PayPal, restaurants, travel, hotels, Uber/Didi rides, coffee, convenience stores and leisure purchases are Placeres unless the user explicitly says they were for a necessary living expense.",
-    "Vida is narrow: rent, water, electricity, basic groceries/supermarket, necessary transport/gasoline, phone/internet, health and debt. Do not put software, AI, cloud or work tools in Vida.",
+    "OpenAI, ChatGPT, Codex, Twilio, Fiverr, Opus, Claude, Cursor, GitHub, Vercel, Supabase, Cloudflare, Google Cloud, AWS, Notion, Zoom, Figma, Canva and similar work/software/cloud/AI tools are Futuro/Herramientas Software.",
+    "Default an expense to Placeres/Otros Placeres only when owner_context does not identify it as essential living, productive work, savings, protection, or investment.",
     "If there is no clear amount, use 0. Do not invent an amount.",
     "If the user says hoy, ayer, anoche, antier, anteayer, or gives an explicit date such as 21 de junio, include fechaMovimiento as an ISO date for that date in America/Mexico_City.",
     "Do not include relative date words such as ayer or hoy in concepto.",

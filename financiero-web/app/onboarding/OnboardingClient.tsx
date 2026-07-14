@@ -1,7 +1,10 @@
 "use client";
 
 import Link from 'next/link';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import PersonalizationInterview from './PersonalizationInterview';
+
+const fallbackBankConnectionLimit = 1;
 
 type AccountStatus = {
   success: boolean;
@@ -17,6 +20,20 @@ type AccountStatus = {
   telegramAccounts?: Array<{ id: string; chat_id: string; username?: string | null }>;
   gmailIntegrations?: Array<{ id: string; email: string; status: string; oauthConnected?: boolean; connected_at?: string | null }>;
   bankConnections?: Array<{ id: string; provider: string; institution_name?: string | null; status: string; last_sync_at?: string | null }>;
+  billing?: {
+    plan: 'free' | 'beta' | 'premium';
+    active: boolean;
+    limits?: {
+      bankConnections: number;
+      gmailIntegrations: number;
+      telegramAccounts: number;
+      bankSyncLookbackDays: number;
+    };
+  };
+  personalization?: {
+    completed: boolean;
+    completedAt?: string | null;
+  };
   financialCounts?: Record<string, number>;
   error?: string;
   errors?: string[];
@@ -38,7 +55,6 @@ type BankCountryOption = {
   code: BankCountryCode;
   label: string;
   providerPreference: string[];
-  banks: string[];
 };
 
 type PlaidHandler = {
@@ -58,50 +74,38 @@ declare global {
   }
 }
 
-const currencyFormatter = new Intl.NumberFormat('es-MX', {
-  maximumFractionDigits: 0,
-});
-
 const bankCountryOptions: BankCountryOption[] = [
-  { code: 'MX', label: 'Mexico', providerPreference: ['prometeo', 'finerio', 'belvo'], banks: ['BBVA', 'Santander', 'Banorte', 'Citibanamex', 'HSBC', 'Nu', 'Otro banco'] },
-  { code: 'US', label: 'Estados Unidos', providerPreference: ['plaid'], banks: ['Chase', 'Bank of America', 'Wells Fargo', 'Citi', 'Capital One', 'Otro banco'] },
-  { code: 'CO', label: 'Colombia', providerPreference: ['prometeo', 'belvo'], banks: ['Bancolombia', 'Davivienda', 'BBVA', 'Banco de Bogota', 'Otro banco'] },
-  { code: 'BR', label: 'Brasil', providerPreference: ['belvo', 'prometeo'], banks: ['Itau', 'Bradesco', 'Nubank', 'Banco do Brasil', 'Otro banco'] },
-  { code: 'CL', label: 'Chile', providerPreference: ['prometeo'], banks: ['Banco de Chile', 'Santander', 'BCI', 'Scotiabank', 'Otro banco'] },
-  { code: 'PE', label: 'Peru', providerPreference: ['prometeo'], banks: ['BCP', 'BBVA', 'Interbank', 'Scotiabank', 'Otro banco'] },
-  { code: 'AR', label: 'Argentina', providerPreference: ['prometeo'], banks: ['Galicia', 'Santander', 'BBVA', 'Macro', 'Otro banco'] },
-  { code: 'OTHER', label: 'Otro pais', providerPreference: ['prometeo'], banks: ['Otro banco'] },
+  { code: 'MX', label: 'Mexico', providerPreference: ['syncfy', 'belvo', 'finerio'] },
+  { code: 'US', label: 'Estados Unidos', providerPreference: ['plaid'] },
+  { code: 'CO', label: 'Colombia', providerPreference: ['prometeo', 'belvo'] },
+  { code: 'BR', label: 'Brasil', providerPreference: ['belvo', 'prometeo'] },
+  { code: 'CL', label: 'Chile', providerPreference: ['prometeo'] },
+  { code: 'PE', label: 'Peru', providerPreference: ['prometeo'] },
+  { code: 'AR', label: 'Argentina', providerPreference: ['prometeo'] },
+  { code: 'OTHER', label: 'Otro pais', providerPreference: ['prometeo'] },
 ];
 
-function formatCurrency(value: number) {
-  return `$${currencyFormatter.format(value)} MXN`;
-}
-
-function parseMoney(value: string) {
-  const numeric = Number(value.replace(/[,$\s]/g, ''));
-
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+function userSafeMessage(value: unknown, fallback: string) {
+  const message = typeof value === 'string' ? value.trim() : '';
+  return /supabase|syncfy|plaid|api|schema|migration|token|secret|key|provider|endpoint|webhook|oauth|env\b/i.test(message) ? fallback : message || fallback;
 }
 
 function statusTone(done: boolean) {
   return done
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-amber-200 bg-amber-50 text-amber-700';
+    ? 'border-emerald-200 bg-white text-emerald-700'
+    : 'border-slate-200 bg-white text-slate-500';
 }
 
 export default function OnboardingClient() {
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [bankProviders, setBankProviders] = useState<BankProvider[]>([]);
   const [bankCountry, setBankCountry] = useState<BankCountryCode>('MX');
-  const [bankName, setBankName] = useState('Santander');
   const [loading, setLoading] = useState(true);
-  const [savingProfile, setSavingProfile] = useState(false);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [connectingPlaid, setConnectingPlaid] = useState(false);
-  const [syncingBank, setSyncingBank] = useState(false);
-  const [syncingGmail, setSyncingGmail] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [monthlyTarget, setMonthlyTarget] = useState('60000');
+  const [syncfyOpening, setSyncfyOpening] = useState(false);
+  const [syncfyOverlayOpen, setSyncfyOverlayOpen] = useState(false);
+  const [disconnectingBankId, setDisconnectingBankId] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
   const [telegramExpiresAt, setTelegramExpiresAt] = useState('');
@@ -129,20 +133,16 @@ export default function OnboardingClient() {
       const data = (await response.json()) as AccountStatus;
 
       if (!response.ok || !data.success) {
-        setError(data.error || data.errors?.join(' · ') || 'No pude leer el estado de tu cuenta.');
+        setError(userSafeMessage(data.error || data.errors?.join(' · '), 'No pude cargar el estado de tu cuenta. Intenta nuevamente.'));
       }
 
       setStatus(data);
-      setFullName(data.profile?.full_name || '');
-      setMonthlyTarget(String(data.profile?.monthly_income_target || 60000));
 
-      if (data.profileScoped) {
-        const providersResponse = await fetchWithSessionRefresh('/api/bank/providers', { cache: 'no-store' });
-        const providersData = await providersResponse.json();
+      const providersResponse = await fetchWithSessionRefresh('/api/bank/providers', { cache: 'no-store' });
+      const providersData = await providersResponse.json();
 
-        if (providersResponse.ok && providersData.success) {
-          setBankProviders(providersData.providers || []);
-        }
+      if (providersResponse.ok && providersData.success) {
+        setBankProviders(providersData.providers || []);
       }
     } catch {
       setError('No pude conectar con el servidor.');
@@ -162,70 +162,87 @@ export default function OnboardingClient() {
     });
   }, [refreshStatus]);
 
-  const monthlyTargetNumber = parseMoney(monthlyTarget);
-  const third = monthlyTargetNumber / 3;
+  useEffect(() => {
+    function handleSyncfyMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+
+      const data = event.data as { type?: string; message?: string; movements?: number };
+
+      if (data.type === 'syncfy:ready') {
+        setSyncfyOpening(false);
+        return;
+      }
+
+      if (data.type === 'syncfy:closed') {
+        setSyncfyOverlayOpen(false);
+        setSyncfyOpening(false);
+        return;
+      }
+
+      if (data.type === 'syncfy:error') {
+        setError(userSafeMessage(data.message, 'No pude abrir la conexión bancaria. Intenta nuevamente.'));
+        setSyncfyOverlayOpen(false);
+        setSyncfyOpening(false);
+        return;
+      }
+
+      if (data.type === 'syncfy:success') {
+        const movements = data.movements ?? 0;
+        setMessage(`Banco conectado. Detecté ${movements} movimiento${movements === 1 ? '' : 's'} en la primera sincronización.`);
+        setError('');
+        setSyncfyOverlayOpen(false);
+        setSyncfyOpening(false);
+        void refreshStatus({ keepFeedback: true });
+      }
+    }
+
+    window.addEventListener('message', handleSyncfyMessage);
+
+    return () => window.removeEventListener('message', handleSyncfyMessage);
+  }, [refreshStatus]);
+
   const hasProfile = Boolean(status?.profileScoped && status.profile?.id);
-  const hasInitialBudget = Boolean((status?.financialCounts?.presupuestos_mensuales || 0) > 0);
+  const hasCompletedGoals = Boolean(status?.personalization?.completed);
   const hasTelegram = Boolean((status?.telegramAccounts || []).length > 0);
-  const activeGmailIntegrations = (status?.gmailIntegrations || []).filter((integration) => integration.status === 'active');
   const activeBankConnections = (status?.bankConnections || []).filter((connection) => connection.status === 'active');
-  const hasGmail = activeGmailIntegrations.length > 0;
-  const hasGmailOAuth = activeGmailIntegrations.some((integration) => integration.oauthConnected);
   const hasBankConnection = activeBankConnections.length > 0;
-  const hasBankFallback = hasBankConnection || hasGmail;
+  const bankConnectionLimit = status?.billing?.limits?.bankConnections ?? fallbackBankConnectionLimit;
+  const bankLimitReached = activeBankConnections.length >= bankConnectionLimit;
+  const planLabel = status?.billing?.plan === 'premium'
+    ? 'Premium'
+    : status?.billing?.plan === 'beta'
+      ? 'Beta'
+      : 'Gratis';
   const selectedBankCountry = bankCountryOptions.find((country) => country.code === bankCountry) || bankCountryOptions[0];
   const selectedCountryProvider = selectedBankCountry.providerPreference
     .map((providerId) => bankProviders.find((provider) => provider.id === providerId))
     .find(Boolean);
-  const canConnectSelectedCountry = selectedCountryProvider?.id === 'plaid' && selectedCountryProvider.configured;
-  const selectedCountryStatus = selectedCountryProvider
-    ? canConnectSelectedCountry
-      ? 'Listo para conectar'
-      : `${selectedCountryProvider.name} es la ruta recomendada; falta activar el flujo de conexion para este pais`
-    : 'Aun no disponible para este pais';
+  const canConnectSelectedCountry = Boolean(
+    selectedCountryProvider?.configured && (selectedCountryProvider.id === 'syncfy' || selectedCountryProvider.id === 'plaid')
+  );
+  const bankConnectionStatus = canConnectSelectedCountry
+    ? 'Conexión automática disponible'
+    : 'Conexión segura en preparación';
   const checklist = useMemo(
     () => [
       { label: 'Cuenta creada', done: hasProfile },
-      { label: 'Perfil automático', done: hasProfile && Boolean(status?.profile?.email) },
-      { label: 'Presupuesto inicial', done: hasInitialBudget },
+      { label: 'Metas definidas', done: hasCompletedGoals },
       { label: 'Telegram conectado', done: hasTelegram },
-      { label: 'Banco conectado', done: hasBankFallback },
+      { label: 'Banco conectado', done: hasBankConnection },
     ],
-    [hasBankFallback, hasInitialBudget, hasProfile, hasTelegram, status?.profile?.email]
+    [hasBankConnection, hasCompletedGoals, hasProfile, hasTelegram]
   );
   const completed = checklist.filter((item) => item.done).length;
-
-  async function saveProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSavingProfile(true);
-    setError('');
-    setMessage('');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/account/onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName,
-          monthlyIncomeTarget: monthlyTargetNumber,
-          initializeBudget: true,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setError(data.error || 'No pude guardar tu configuración inicial.');
-        return;
-      }
-
-      setMessage(data.budgetCreated ? 'Perfil guardado y presupuesto inicial creado.' : 'Perfil guardado. Tu presupuesto inicial ya existía.');
-      await refreshStatus();
-    } catch {
-      setError('No pude conectar con el servidor.');
-    } finally {
-      setSavingProfile(false);
-    }
-  }
+  const progressPct = Math.round((completed / checklist.length) * 100);
+  const accountLabel = status?.profile?.email || status?.profile?.full_name || 'Cuenta activa';
+  const bankConnectTitle = !hasProfile
+    ? 'Inicia sesión para agregar bancos.'
+    : bankLimitReached
+      ? `Tu plan ${planLabel} permite ${bankConnectionLimit} banco${bankConnectionLimit === 1 ? '' : 's'}.`
+    : canConnectSelectedCountry
+      ? 'Abrir conexión bancaria segura.'
+      : 'Pronto activaremos este país.';
+  const bankButtonDisabled = connectingPlaid || syncfyOpening || bankLimitReached;
 
   async function generateTelegramCode() {
     setLinkingTelegram(true);
@@ -240,7 +257,7 @@ export default function OnboardingClient() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setError(data.error || 'No pude generar el código de Telegram.');
+        setError(userSafeMessage(data.error, 'No pude generar el código. Intenta nuevamente.'));
         return;
       }
 
@@ -255,10 +272,6 @@ export default function OnboardingClient() {
     }
   }
 
-  function startGmailOAuth() {
-    window.location.href = '/api/account/gmail/oauth/start';
-  }
-
   function loadPlaidScript() {
     return new Promise<void>((resolve, reject) => {
       if (window.Plaid) {
@@ -270,7 +283,7 @@ export default function OnboardingClient() {
 
       if (existingScript) {
         existingScript.addEventListener('load', () => resolve(), { once: true });
-        existingScript.addEventListener('error', () => reject(new Error('No pude cargar la conexion bancaria.')), { once: true });
+        existingScript.addEventListener('error', () => reject(new Error('No pude cargar la conexión bancaria.')), { once: true });
         return;
       }
 
@@ -278,7 +291,7 @@ export default function OnboardingClient() {
       script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error('No pude cargar la conexion bancaria.'));
+      script.onerror = () => reject(new Error('No pude cargar la conexión bancaria.'));
       document.body.appendChild(script);
     });
   }
@@ -322,7 +335,7 @@ export default function OnboardingClient() {
             const exchangeData = await exchangeResponse.json();
 
             if (!exchangeResponse.ok || !exchangeData.success) {
-              setError(exchangeData.error || 'El banco autorizo la conexion, pero no pude guardarla en tu cuenta.');
+              setError(exchangeData.error || 'El banco autorizó la conexión, pero no pude guardarla en tu cuenta.');
               return;
             }
 
@@ -333,7 +346,7 @@ export default function OnboardingClient() {
           }
         },
         onExit: (plaidError) => {
-          if (plaidError?.error_message) setError(plaidError.error_message);
+          if (plaidError?.error_message) setError('La conexión fue cancelada o no pudo completarse. Intenta nuevamente.');
           setConnectingPlaid(false);
         },
       });
@@ -341,84 +354,98 @@ export default function OnboardingClient() {
       handler.open();
     } catch (plaidError: unknown) {
       const plaidMessage = plaidError instanceof Error ? plaidError.message : 'No pude iniciar la conexión bancaria.';
-      setError(plaidMessage);
+      setError(userSafeMessage(plaidMessage, 'No pude iniciar la conexión bancaria. Intenta nuevamente.'));
       setConnectingPlaid(false);
     }
   }
 
+  function closeSyncfyOverlay() {
+    setSyncfyOverlayOpen(false);
+    setSyncfyOpening(false);
+  }
+
+  function openSyncfyWidget() {
+    setSyncfyOpening(true);
+    setSyncfyOverlayOpen(true);
+    setError('');
+    setMessage('');
+  }
+
   function connectSelectedBank() {
+    if (!hasProfile) {
+      window.location.href = `/login?next=${encodeURIComponent('/onboarding')}`;
+      return;
+    }
+
+    if (bankLimitReached) {
+      setMessage('');
+      setError(`Tu plan ${planLabel} permite ${bankConnectionLimit} banco${bankConnectionLimit === 1 ? '' : 's'} conectado${bankConnectionLimit === 1 ? '' : 's'}. Elimina uno o mejora tu plan para agregar más.`);
+      return;
+    }
+
+    if (selectedCountryProvider?.id === 'syncfy') {
+      void openSyncfyWidget();
+      return;
+    }
+
     if (selectedCountryProvider?.id === 'plaid') {
       void connectPlaid();
       return;
     }
 
     setMessage('');
-    setError('La conexion bancaria para este pais ya esta mapeada internamente, pero todavia falta activar el flujo seguro de inicio de sesion.');
+    setError('Todavía estamos activando conexiones automáticas para este país.');
   }
 
-  async function syncBankNow() {
-    setSyncingBank(true);
+  async function disconnectBank(connectionId: string, institutionName?: string | null) {
+    const confirmation = window.confirm(`¿Eliminar ${institutionName || 'este banco'} de tu dashboard?`);
+
+    if (!confirmation) return;
+
+    setDisconnectingBankId(connectionId);
     setError('');
     setMessage('');
 
     try {
-      const response = await fetchWithSessionRefresh('/api/bank/plaid/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetchWithSessionRefresh(`/api/bank/connections/${encodeURIComponent(connectionId)}`, {
+        method: 'DELETE',
       });
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setError(data.error || data.results?.flatMap?.((result: { errors?: string[] }) => result.errors || []).join(' · ') || 'No pude sincronizar el banco.');
+        setError(userSafeMessage(data.error, 'No pude eliminar la conexión bancaria. Intenta nuevamente.'));
         return;
       }
 
-      setMessage(`Banco sincronizado: ${data.totals?.insertedOrUpdated || 0} movimientos actualizados.`);
-      await refreshStatus();
+      setMessage(`${institutionName || 'Banco'} eliminado de tus conexiones.`);
+      await refreshStatus({ keepFeedback: true });
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
-      setSyncingBank(false);
-    }
-  }
-
-  async function syncGmailNow() {
-    setSyncingGmail(true);
-    setError('');
-    setMessage('');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/email/gmail/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setError(data.error || 'No pude sincronizar Gmail/Banco.');
-        return;
-      }
-
-      const totals = data.totals || {};
-      const skippedReason = data.results?.find?.((result: { skipped?: string }) => result.skipped)?.skipped;
-
-      if (skippedReason === 'missing_oauth_tokens' || skippedReason === 'missing_refresh_token') {
-        setError('Gmail está vinculado por email, pero falta reconectarlo con Google para guardar tokens OAuth. Usa "Reconectar Google/Gmail".');
-        return;
-      }
-
-      const failed = totals.failed || 0;
-      const baseMessage = `Sincronización lista: ${totals.inserted || 0} nuevos, ${totals.duplicate || 0} duplicados, ${totals.ignored || 0} ignorados, ${totals.skippedMessages || 0} ya procesados.`;
-      setMessage(failed ? `${baseMessage} Fallaron ${failed}; revisa configuración o permisos.` : baseMessage);
-      await refreshStatus();
-    } catch {
-      setError('No pude conectar con el servidor.');
-    } finally {
-      setSyncingGmail(false);
+      setDisconnectingBankId('');
     }
   }
 
   return (
+    <>
+      {syncfyOverlayOpen && (
+        <div className="fixed inset-0 z-50 bg-[#eef3f7]">
+          <button
+            type="button"
+            onClick={closeSyncfyOverlay}
+            className="fixed right-4 top-4 z-[60] rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-white"
+          >
+            Volver a configuración
+          </button>
+          <iframe
+            title="Conexión bancaria segura"
+            src={`/bank/syncfy/embed?country=${encodeURIComponent(bankCountry)}`}
+            className="h-full w-full border-0"
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+          />
+        </div>
+      )}
+
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-slate-950">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
@@ -427,9 +454,9 @@ export default function OnboardingClient() {
               <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
               <p className="text-sm font-bold text-slate-900">Dashboard Financiero</p>
             </div>
-            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Configura tu dashboard</h1>
+            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Configuración financiera</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Deja lista tu cuenta, presupuesto inicial e integraciones para que tus movimientos queden separados de cualquier otro usuario.
+              Personaliza tus metas y administra tus integraciones desde un solo lugar.
             </p>
           </div>
           <Link
@@ -446,7 +473,7 @@ export default function OnboardingClient() {
         {!loading && !hasProfile && (
           <section className="rounded-lg border border-amber-200 bg-amber-50 p-5">
             <h2 className="text-lg font-semibold text-amber-900">Necesitas iniciar sesión</h2>
-            <p className="mt-1 text-sm text-amber-700">Entra con Google, GitHub o email para crear tu perfil automáticamente.</p>
+            <p className="mt-1 text-sm text-amber-700">Entra con Google, Apple o email para crear tu perfil automáticamente.</p>
             <Link
               href="/login?next=/onboarding"
               className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
@@ -456,11 +483,14 @@ export default function OnboardingClient() {
           </section>
         )}
 
-        <section className="grid gap-3 md:grid-cols-5">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {checklist.map((item) => (
             <div key={item.label} className={`rounded-lg border p-4 shadow-sm ${statusTone(item.done)}`}>
-              <p className="text-2xl font-bold">{item.done ? 'OK' : 'Pendiente'}</p>
-              <p className="mt-1 text-sm font-semibold">{item.label}</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-black">{item.done ? 'Listo' : 'Pendiente'}</p>
+                <span className={`size-2 rounded-full ${item.done ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              </div>
+              <p className="mt-2 text-sm font-semibold text-slate-700">{item.label}</p>
             </div>
           ))}
         </section>
@@ -469,60 +499,24 @@ export default function OnboardingClient() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-xl font-bold text-slate-950">Estado de configuración</h2>
-              <p className="text-sm text-slate-500">{loading ? 'Leyendo tu cuenta...' : `${completed} de ${checklist.length} pasos listos`}</p>
+              <p className="text-sm text-slate-500">{loading ? 'Leyendo tu cuenta...' : `${completed} de ${checklist.length} pasos listos · ${progressPct}%`}</p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
-              Perfil: {status?.profileId || 'sin sesión'}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600">
+              {hasProfile ? accountLabel : 'Sin sesión'}
             </div>
+          </div>
+          <div className="mt-4 h-2 rounded-full bg-slate-100">
+            <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} />
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-2">
-          <form onSubmit={saveProfile} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-950">Perfil y presupuesto</h2>
-            <p className="mt-1 text-sm text-slate-500">El presupuesto inicial se divide en Vida, Placeres y Futuro.</p>
-            <div className="mt-5 grid gap-4">
-              <label className="block text-sm font-medium text-slate-600">
-                Nombre
-                <input
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-                  placeholder="Tu nombre"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-600">
-                Meta mensual inicial
-                <input
-                  value={monthlyTarget}
-                  onChange={(event) => setMonthlyTarget(event.target.value)}
-                  inputMode="decimal"
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-                  placeholder="60000"
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {['Vida', 'Placeres', 'Futuro'].map((label) => (
-                  <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-semibold text-slate-500">{label}</p>
-                    <p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(third)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={!hasProfile || savingProfile}
-              className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingProfile ? 'Guardando...' : hasInitialBudget ? 'Guardar perfil' : 'Crear presupuesto inicial'}
-            </button>
-          </form>
+        <PersonalizationInterview enabled={hasProfile} request={fetchWithSessionRefresh} onCompleted={() => refreshStatus()} />
 
+        <div className="grid gap-6">
           <div className="grid gap-6">
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-xl font-bold text-slate-950">Telegram</h2>
-              <p className="mt-1 text-sm text-slate-500">Genera un código y mándaselo al bot para conectar tu chat sin copiar IDs técnicos.</p>
+              <p className="mt-1 text-sm text-slate-500">Genera un código y mándaselo al bot para conectar tu chat fácilmente.</p>
               {telegramCode && (
                 <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                   <p className="text-xs font-semibold text-emerald-700">Código para Telegram</p>
@@ -553,16 +547,15 @@ export default function OnboardingClient() {
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">Conexion bancaria</h2>
-              <p className="mt-1 text-sm text-slate-500">Primero dinos donde esta tu banco. Despues elegimos el proveedor mas adecuado para sincronizar movimientos.</p>
+              <h2 className="text-xl font-bold text-slate-950">Conexión bancaria</h2>
+              <p className="mt-1 text-sm text-slate-500">Agrega tus bancos y mantén tus movimientos actualizados automáticamente.</p>
               <label className="mt-5 block text-sm font-medium text-slate-600">
-                1. Pais de tu banco
+                1. País de tu banco
                 <select
                   value={bankCountry}
                   onChange={(event) => {
                     const nextCountry = bankCountryOptions.find((country) => country.code === event.target.value) || bankCountryOptions[0];
                     setBankCountry(nextCountry.code);
-                    setBankName(nextCountry.banks[0]);
                   }}
                   className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
                 >
@@ -573,86 +566,77 @@ export default function OnboardingClient() {
                   ))}
                 </select>
               </label>
-              <label className="mt-4 block text-sm font-medium text-slate-600">
-                2. Banco principal
-                <select
-                  value={bankName}
-                  onChange={(event) => setBankName(event.target.value)}
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
-                >
-                  {selectedBankCountry.banks.map((bank) => (
-                    <option key={bank} value={bank}>
-                      {bank}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">3. Ruta de conexion</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{selectedCountryProvider?.name || 'Proveedor por confirmar'} para {bankName}</p>
-                <p className="mt-1 text-sm text-slate-600">{selectedCountryStatus}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Tus credenciales bancarias se ingresan en una ventana segura del proveedor autorizado. El dashboard solo recibe acceso de lectura.
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-semibold text-emerald-800">{bankConnectionStatus}</p>
+                <p className="mt-1 text-xs text-emerald-700">
+                  Elige tu institución en una ventana segura. Tus credenciales se ingresan directamente ahí y el dashboard solo recibe movimientos y saldos con permiso de lectura.
                 </p>
               </div>
-              {activeBankConnections.length > 0 && (
-                <div className="mt-4 grid gap-2">
-                  {activeBankConnections.map((connection) => (
-                    <p key={connection.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                      Banco conectado: {connection.institution_name || connection.provider}
-                    </p>
-                  ))}
+              <div className="mt-4 grid gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Bancos conectados</p>
+                  <p className="text-xs font-semibold text-slate-500">Plan {planLabel}: {activeBankConnections.length}/{bankConnectionLimit}</p>
                 </div>
-              )}
-              {activeGmailIntegrations.length > 0 && (
-                <div className="mt-4 grid gap-2">
-                  {activeGmailIntegrations.map((integration) => (
-                    <p key={integration.id} className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
-                      Correo bancario {integration.oauthConnected ? 'conectado' : 'vinculado, pendiente de autorizacion'}: {integration.email}
-                    </p>
-                  ))}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={connectSelectedBank}
-                disabled={!hasProfile || !canConnectSelectedCountry || connectingPlaid}
-                className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {connectingPlaid ? 'Abriendo conexion segura...' : canConnectSelectedCountry ? `Conectar ${bankName}` : 'Conexion directa en preparacion'}
-              </button>
-              <button
-                type="button"
-                onClick={syncBankNow}
-                disabled={!hasProfile || !hasBankConnection || syncingBank}
-                className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {syncingBank ? 'Sincronizando movimientos...' : 'Actualizar movimientos bancarios'}
-              </button>
-              <div className="mt-5 border-t border-slate-200 pt-4">
-                <p className="text-sm font-semibold text-slate-900">Fallback por correo bancario</p>
-                <p className="mt-1 text-xs text-slate-500">Usalo solo si tu banco todavia no tiene conexion directa. Leemos correos bancarios autorizados y convertimos cargos/abonos en movimientos.</p>
-                <button
-                  type="button"
-                  onClick={startGmailOAuth}
-                  disabled={!hasProfile}
-                  className="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {hasGmail ? 'Agregar otro correo bancario' : 'Usar correo bancario'}
-                </button>
-                <button
-                  type="button"
-                  onClick={syncGmailNow}
-                  disabled={!hasProfile || !hasGmailOAuth || syncingGmail}
-                  className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {syncingGmail ? 'Sincronizando correos...' : 'Actualizar movimientos desde correo'}
-                </button>
+                {activeBankConnections.length > 0 ? (
+                  activeBankConnections.map((connection) => (
+                    <div key={connection.id} className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{connection.institution_name || 'Banco conectado'}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {connection.last_sync_at
+                            ? `Actualizado automáticamente: ${new Date(connection.last_sync_at).toLocaleString('es-MX')}`
+                            : 'Actualización automática activa'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void disconnectBank(connection.id, connection.institution_name)}
+                        disabled={disconnectingBankId === connection.id}
+                        className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {disconnectingBankId === connection.id ? 'Eliminando...' : 'Eliminar'}
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    Aún no has agregado bancos. Puedes conectar varios, uno por uno.
+                  </p>
+                )}
               </div>
+              {canConnectSelectedCountry ? (
+                <button
+                  type="button"
+                  onClick={connectSelectedBank}
+                  disabled={bankButtonDisabled}
+                  title={bankConnectTitle}
+                  className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {connectingPlaid || syncfyOpening
+                    ? 'Abriendo conexión segura...'
+                    : bankLimitReached
+                      ? 'Límite de bancos alcanzado'
+                      : !hasProfile
+                        ? 'Iniciar sesión para agregar banco'
+                      : activeBankConnections.length > 0
+                        ? 'Agregar otro banco'
+                        : 'Agregar conexión con tu banco'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title={bankConnectTitle}
+                  className="mt-5 w-full rounded-lg bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-500"
+                >
+                  Conexión segura en preparación
+                </button>
+              )}
             </section>
           </div>
         </div>
       </div>
     </main>
+    </>
   );
 }

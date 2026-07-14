@@ -13,6 +13,10 @@ function normalizeEmail(value?: string | null) {
 }
 
 export async function POST(request: Request) {
+  if (Date.now() > 0) {
+    return NextResponse.json({ success: false, disabled: true, error: 'La vinculación Gmail para Santander Ingest está desactivada.' }, { status: 410 });
+  }
+
   try {
     const supabase = getSupabaseServiceClient();
 

@@ -31,6 +31,19 @@ function safeJson(value?: Record<string, unknown>) {
   return value || {};
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message;
+  if (error && typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return 'Error desconocido.';
+    }
+  }
+  return String(error || 'Error desconocido.');
+}
+
 function requestPath(request?: Request) {
   if (!request) return null;
 
@@ -79,7 +92,7 @@ async function captureOperationalError({
   if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) return;
 
   const Sentry = await import('@sentry/nextjs');
-  const capturedError = error instanceof Error ? error : new Error(String(error || 'Error desconocido.'));
+  const capturedError = error instanceof Error ? error : new Error(errorMessage(error));
 
   Sentry.withScope((scope) => {
     scope.setLevel(severity === 'critical' ? 'fatal' : severity || 'error');
@@ -134,7 +147,7 @@ export async function logErrorEvent({
 
   if (!supabase) return;
 
-  const message = error instanceof Error ? error.message : String(error || 'Error desconocido.');
+  const message = errorMessage(error);
   const { error: insertError } = await supabase.from('error_events').insert({
     ...eventBase({ supabase, request, profileId, actorEmail }),
     action: action || null,
