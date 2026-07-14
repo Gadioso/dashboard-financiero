@@ -2976,9 +2976,11 @@ export default function DashboardFinanciero() {
                     <h2 className="text-lg font-bold text-slate-950">Tus objetivos financieros</h2>
                     <p className="mt-1 text-sm text-slate-500">Aquí aparecen automáticamente las metas que definiste al personalizar tu experiencia financiera.</p>
                   </div>
-                  <button type="button" onClick={() => setGoalsInterviewOpen(true)} className="shrink-0 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">
-                    {metasFinancieras.length > 0 ? 'Actualizar mi experiencia' : 'Comenzar entrevista'}
-                  </button>
+                  {metasFinancieras.length > 0 ? (
+                    <button type="button" onClick={() => setGoalsInterviewOpen(true)} className="shrink-0 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">
+                      Actualizar mi experiencia
+                    </button>
+                  ) : null}
                 </div>
                 <div className="space-y-3">
                   {metasFinancieras.length === 0 ? (
