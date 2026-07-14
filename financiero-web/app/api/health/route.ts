@@ -11,6 +11,8 @@ const requiredEnv = {
   telegramWebhook: 'TELEGRAM_WEBHOOK_SECRET',
   telegramNotifyChat: 'TELEGRAM_NOTIFY_CHAT_ID',
   emailIngest: 'EMAIL_INGEST_SECRET',
+  openrouter: 'OPENROUTER_API_KEY',
+  openai: 'OPENAI_API_KEY',
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   stripeSecret: 'STRIPE_SECRET_KEY',
   stripeWebhook: 'STRIPE_WEBHOOK_SECRET',
@@ -27,10 +29,33 @@ function envConfigured() {
   );
 }
 
+function capabilities() {
+  const env = envConfigured();
+  const hasTranscriptionProvider = Boolean(env.openrouter || env.openai || env.gemini);
+  const hasTelegramWebhook = Boolean(env.telegramBot && env.telegramWebhook);
+
+  return {
+    telegramText: hasTelegramWebhook,
+    telegramVoice: hasTelegramWebhook && hasTranscriptionProvider,
+    aiAnalysis: Boolean(env.openrouter || env.gemini),
+    transcriptionProviders: {
+      openrouter: Boolean(env.openrouter),
+      openai: Boolean(env.openai),
+      gemini: Boolean(env.gemini),
+      preferred: env.openrouter ? 'openrouter' : env.openai ? 'openai' : env.gemini ? 'gemini' : null,
+    },
+  };
+}
+
 export async function GET(request: Request) {
   const healthcheckSecret = process.env.HEALTHCHECK_SECRET || '';
+  const cronSecret = process.env.CRON_SECRET || '';
   const receivedSecret = request.headers.get('x-healthcheck-secret') || '';
-  const detailed = Boolean(healthcheckSecret && receivedSecret === healthcheckSecret);
+  const bearerToken = (request.headers.get('authorization') || '').replace(/^bearer\s+/i, '').trim();
+  const detailed = Boolean(
+    healthcheckSecret && receivedSecret === healthcheckSecret ||
+    cronSecret && bearerToken === cronSecret
+  );
 
   return NextResponse.json({
     success: true,
@@ -40,6 +65,7 @@ export async function GET(request: Request) {
     ...(detailed
       ? {
           env: envConfigured(),
+          capabilities: capabilities(),
         }
       : {}),
   });

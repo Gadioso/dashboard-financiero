@@ -54,6 +54,18 @@ function formatAlertMessage(events: ErrorEventRow[]) {
   return lines.join('\n');
 }
 
+function isNonActionableProviderEvent(event: ErrorEventRow) {
+  const action = event.action || '';
+  const message = event.message || '';
+  const code = event.code || '';
+
+  return action === 'investment_market_sync.run' &&
+    (
+      code === 'binance_region_unavailable' ||
+      /binance/i.test(message) && /\b451\b/.test(message)
+    );
+}
+
 async function sendTelegramAlert(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
   const chatId = process.env.TELEGRAM_NOTIFY_CHAT_ID || '';
@@ -105,20 +117,44 @@ export async function GET(request: Request) {
     }
 
     const events = (data || []) as ErrorEventRow[];
+    const suppressedEvents = events.filter(isNonActionableProviderEvent);
+    const alertableEvents = events.filter((event) => !isNonActionableProviderEvent(event));
 
-    if (events.length === 0) {
+    if (suppressedEvents.length > 0) {
+      const suppressedIds = suppressedEvents.map((event) => event.id);
+      await supabase
+        .from('error_events')
+        .update({
+          alerted_at: new Date().toISOString(),
+          resolved_at: new Date().toISOString(),
+        })
+        .in('id', suppressedIds);
+
+      await logAuditEvent({
+        supabase,
+        request,
+        action: 'ops.error_alerts.suppressed',
+        metadata: {
+          reason: 'non_actionable_provider_unavailable',
+          count: suppressedIds.length,
+          eventIds: suppressedIds,
+        },
+      });
+    }
+
+    if (alertableEvents.length === 0) {
       await logAuditEvent({
         supabase,
         request,
         action: 'ops.error_alerts.checked',
-        metadata: { unalerted: 0 },
+        metadata: { unalerted: 0, suppressed: suppressedEvents.length },
       });
 
-      return NextResponse.json({ success: true, alerted: false, count: 0 });
+      return NextResponse.json({ success: true, alerted: false, count: 0, suppressed: suppressedEvents.length });
     }
 
-    const telegram = await sendTelegramAlert(formatAlertMessage(events));
-    const eventIds = events.map((event) => event.id);
+    const telegram = await sendTelegramAlert(formatAlertMessage(alertableEvents));
+    const eventIds = alertableEvents.map((event) => event.id);
 
     if (telegram.sent) {
       await supabase
@@ -132,7 +168,9 @@ export async function GET(request: Request) {
       request,
       action: 'ops.error_alerts.sent',
       metadata: {
-        count: events.length,
+        count: alertableEvents.length,
+        alertable: alertableEvents.length,
+        suppressed: suppressedEvents.length,
         sent: telegram.sent,
         reason: telegram.reason,
         eventIds,
@@ -143,7 +181,8 @@ export async function GET(request: Request) {
       success: true,
       alerted: telegram.sent,
       reason: telegram.reason,
-      count: events.length,
+      count: alertableEvents.length,
+      suppressed: suppressedEvents.length,
     });
   } catch (error: unknown) {
     await logErrorEvent({

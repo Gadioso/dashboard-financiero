@@ -6,10 +6,12 @@ const cwd = process.cwd();
 const year = Number(process.env.AUDIT_YEAR || 2026);
 
 function readEnv() {
-  const envPath = path.join(cwd, '.env.local');
+  const envPaths = [path.join(cwd, '..', '.env'), path.join(cwd, '.env.local')];
   const env = { ...process.env };
 
-  if (fs.existsSync(envPath)) {
+  for (const envPath of envPaths) {
+    if (!fs.existsSync(envPath)) continue;
+
     for (const line of fs.readFileSync(envPath, 'utf8').split(/\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
@@ -19,6 +21,14 @@ function readEnv() {
       const value = trimmed.slice(index + 1).trim().replace(/^"|"$/g, '');
       if (value) env[key] = value;
     }
+  }
+
+  if (!env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_URL) {
+    env.NEXT_PUBLIC_SUPABASE_URL = env.SUPABASE_URL;
+  }
+
+  if (env.NEXT_PUBLIC_SUPABASE_URL) {
+    env.NEXT_PUBLIC_SUPABASE_URL = new URL(env.NEXT_PUBLIC_SUPABASE_URL).origin;
   }
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -73,7 +83,8 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
   const ingresosMes = ingresos.filter((row) => monthKey(row.fecha) === key);
   const gastosMes = gastos.filter((row) => monthKey(row.fecha) === key);
   const abonosMes = abonos.filter((row) => monthKey(row.fecha) === key);
-  const presupuesto = presupuestos.find((row) => String(row.mes_anio || '').startsWith(key));
+  const presupuestosMes = presupuestos.filter((row) => String(row.mes_anio || '').startsWith(key));
+  const presupuesto = presupuestosMes[0];
   const totalIngresos = money(ingresosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
   const totalGastos = money(gastosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
   const totalSantanderTdc = money(
@@ -91,6 +102,43 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
       }
     : null;
 
+  const profileKeys = [...new Set(ingresosMes.map((row) => row.profile_id || ''))];
+  const budgetIssues = profileKeys.flatMap((profileId) => {
+    const ingresosPerfil = ingresosMes.filter((row) => (row.profile_id || '') === profileId);
+    const totalPerfil = money(ingresosPerfil.reduce((sum, row) => sum + Number(row.monto || 0), 0));
+    const tercioPerfil = money(totalPerfil / 3);
+    const presupuestoPerfil = presupuestosMes.find((row) => (row.profile_id || '') === profileId);
+
+    if (!presupuestoPerfil) {
+      return [{
+        profileId: profileId || null,
+        issue: 'missing_budget',
+        totalIngresos: totalPerfil,
+        expected: tercioPerfil,
+        current: null,
+      }];
+    }
+
+    const current = {
+      Vida: money(presupuestoPerfil.techo_vida),
+      Placeres: money(presupuestoPerfil.techo_placeres),
+      Futuro: money(presupuestoPerfil.techo_futuro),
+    };
+    const outOfSync = Math.abs(current.Vida - tercioPerfil) > 0.01 ||
+      Math.abs(current.Placeres - tercioPerfil) > 0.01 ||
+      Math.abs(current.Futuro - tercioPerfil) > 0.01;
+
+    return outOfSync
+      ? [{
+          profileId: profileId || null,
+          issue: 'out_of_sync_budget',
+          totalIngresos: totalPerfil,
+          expected: tercioPerfil,
+          current,
+        }]
+      : [];
+  });
+
   return {
     mes: key,
     ingresos: totalIngresos,
@@ -101,11 +149,8 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
     deudaTdcEstimadaMes: money(Math.max(totalSantanderTdc - totalAbonosTdc, 0)),
     tercioEsperado: expectedTercio,
     presupuestoActual,
-    presupuestoDesfasado: presupuestoActual
-      ? Math.abs(presupuestoActual.Vida - expectedTercio) > 0.01 ||
-        Math.abs(presupuestoActual.Placeres - expectedTercio) > 0.01 ||
-        Math.abs(presupuestoActual.Futuro - expectedTercio) > 0.01
-      : totalIngresos > 0,
+    budgetIssues,
+    presupuestoDesfasado: budgetIssues.length > 0,
   };
 }
 
@@ -131,10 +176,10 @@ async function main() {
     { data: abonos, error: abonosError },
     { data: presupuestos, error: presupuestosError },
   ] = await Promise.all([
-    supabase.from('ingresos').select('id, concepto, monto, tipo, fecha').gte('fecha', start).lt('fecha', end),
+    supabase.from('ingresos').select('id, concepto, monto, tipo, fecha, profile_id').gte('fecha', start).lt('fecha', end),
     supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', start).lt('fecha', end),
     supabase.from('abonos_tarjeta_credito').select('id, concepto, monto, tarjeta, origen, fecha').gte('fecha', start).lt('fecha', end),
-    supabase.from('presupuestos_mensuales').select('id, mes_anio, techo_vida, techo_placeres, techo_futuro, fase_ahorro'),
+    supabase.from('presupuestos_mensuales').select('id, mes_anio, profile_id, techo_vida, techo_placeres, techo_futuro, fase_ahorro'),
   ]);
 
   for (const error of [ingresosError, gastosError, abonosError, presupuestosError].filter(Boolean)) {

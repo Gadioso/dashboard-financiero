@@ -1,5 +1,25 @@
 # SaaS roadmap status
 
+## Vision unicornio: plataforma financiera agentica
+
+Estado: definido.
+
+- Nueva tesis documentada en [agentic-finance-platform.md](./agentic-finance-platform.md).
+- El producto evoluciona de dashboard financiero personal a plataforma B2B2C/B2B-first.
+- La arquitectura objetivo usa orquestacion de subagentes: intake/clasificacion, AI CFO, presupuesto/metas, flujo de caja, fiscal-contable Mexico, integraciones, crecimiento, riesgo/anomalias, contador/despacho y compliance.
+- El modo personal y el modo negocio se vuelven ejes de producto.
+- SAT/CFDI, contador mexicano, open banking y portal de despacho quedan como rutas estrategicas para construir defensibilidad en Mexico/LatAm.
+- Wealth cockpit agregado: portafolio, inversiones, Binance read-only, Polymarket research/paper, research fundamental, analisis tecnico, riesgo de inversiones y ejecucion supervisada por fases.
+- Paper simulation/PnL agregado: `GET/POST /api/investments/paper-trades` abre simulaciones desde tesis y `PATCH /api/investments/paper-trades/[id]` cierra/cancela con PnL simulado.
+- Siguiente corte recomendado: separacion formal de agentes intake/AI CFO, scoring historico de oportunidades y post-mortem de tesis cerradas.
+- Base SQL iniciada: `20260630_agentic_business_wealth_foundation.sql` crea modo negocio, tareas/hallazgos de agentes, modelo de inversiones, paper trading, trade intents, limites de riesgo y disclosures.
+- Bundle operativo agregado: `npm run sql:agentic-foundation`.
+- Base CFDI manual agregada: `20260630190922_cfdi_manual_ingest_foundation.sql`, `GET/POST /api/cfdi/documents`, panel fiscal en Wealth cockpit y bundle `npm run sql:cfdi-foundation`.
+- Conciliacion banco-CFDI agregada: `POST /api/cfdi/reconcile`, eventos recientes en Wealth cockpit e indices anti-duplicado en `20260630194015_cfdi_reconciliation_dedupe_indexes.sql`.
+- Market sync read-only agregado: `GET/POST /api/investments/market-sync` sincroniza Binance Spot 24h y mercados publicos de Polymarket a `market_assets` y `market_data_snapshots`.
+- Investment research agent agregado: `GET/POST /api/investments/research-agent` crea tesis auditables en `investment_theses` desde snapshots, perfil de riesgo y activos permitidos.
+- Score historico/post-mortem agregado: `GET/POST /api/investments/paper-trades` devuelve scorecard de simulaciones y `PATCH /api/investments/paper-trades/[id]` cierra la tesis ligada con `evidence.postMortem`.
+
 ## Paso 1: Auditoria Supabase/Auth/OAuth
 
 Estado: listo.
@@ -23,6 +43,7 @@ Estado: listo.
 - Usuario Diego conserva data.
 - Telegram, Gmail/Banco y movimientos usan `profile_id`.
 - Build/lint/security check pasan.
+- Pendiente de SQL en producción: aplicar `20260630_profile_scoped_monthly_budgets.sql` para que `presupuestos_mensuales` permita una fila por `profile_id + mes_anio`; sin esto, un usuario beta con ingreso en el mismo mes que Diego no puede crear su propio presupuesto mensual.
 
 ## Paso 3: Onboarding
 
@@ -35,6 +56,7 @@ Estado: funcional, en mejora.
 - Gmail como fallback.
 - Banco por pais con proveedor interno.
 - Estado de configuracion.
+- Script operativo agregado: `npm run budget:sync` recalcula presupuestos por ingresos reales y crea presupuestos faltantes cuando el constraint por perfil ya está aplicado.
 
 ## Paso 4: Gmail OAuth real
 
@@ -101,4 +123,5 @@ Estado: en progreso.
 - Worker manual `POST /api/bank/transactions/classify` con lotes limitados.
 - Backpressure inicial con `BANK_CLASSIFICATION_BATCH_SIZE`.
 - Auditoria de procesadas, clasificadas, fallidas y pendientes restantes.
+- Clasificacion ajustada el 2026-06-30: todo gasto no identificado como herramienta, inversión, emergencia o seguro cae por defecto en `Placeres`.
 - Pendiente: cron/worker externo, monitoreo de costos por proveedor y clasificacion asincrona continua.

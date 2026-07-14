@@ -133,11 +133,11 @@ After successful apply, set these variables in Vercel Production:
 
 - ✅ Tables and migrations define `profiles`, `telegram_accounts`, `gmail_integrations`, and `profile_id`.
 - ✅ Financial routes use `profile_id` filters before returning or mutating user data.
-- ✅ Login uses Supabase Auth for email/password, Google, and GitHub.
+- ✅ Login uses Supabase Auth for email/password, Google, and Apple.
 - ✅ Production unauthenticated API requests return `401` instead of falling into Diego's private profile.
 - ✅ Telegram and Gmail/Santander now require a linked profile before writing production financial rows.
 - ⚠️ Live Supabase RLS must still be confirmed from Supabase SQL Editor with `npm run sql:saas-audit`.
-- ⚠️ `/api/account/status` must be checked after a real Google/GitHub login to confirm current-production `profileScoped: true`.
+- ⚠️ `/api/account/status` must be checked after a real Google/Apple login to confirm current-production `profileScoped: true`.
 
 ## OAuth Login For Commercial SaaS
 
@@ -145,13 +145,13 @@ The login UI supports Supabase Auth with:
 
 - Email and password.
 - Google OAuth through `/api/auth/oauth?provider=google`.
-- GitHub OAuth through `/api/auth/oauth?provider=github`.
+- Apple OAuth through `/api/auth/oauth?provider=apple`.
 
 Both OAuth providers return to `/auth/callback`, finalize the Supabase browser session, set `sb_access_token` and `sb_refresh_token` through `/api/auth/callback`, and upsert the `profiles` row using `auth.users.id` as the tenant `profile_id`.
 
 Supabase Dashboard setup:
 
-1. Enable Google and GitHub under Authentication -> Providers.
+1. Enable Google and Apple under Authentication -> Providers.
 2. Add the production callback URL to Authentication -> URL Configuration -> Redirect URLs:
 
 ```text
@@ -176,7 +176,7 @@ http://localhost:3000/auth/callback
 
 ## Paso 2 Private Beta Status
 
-- ✅ Login/signup UI separates sign in from account creation and keeps Google/GitHub OAuth available.
+- ✅ Login/signup UI separates sign in from account creation and keeps Google/Apple OAuth available.
 - ✅ `/api/account/status` returns `profileScoped`, linked Telegram/Gmail accounts, and per-profile financial row counts.
 - ✅ Dashboard data is read through profile-scoped API routes.
 - ✅ Supabase RLS and `profile_id` isolation are confirmed for all tenant tables.

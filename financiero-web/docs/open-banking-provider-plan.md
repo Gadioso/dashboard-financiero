@@ -4,10 +4,11 @@ Gmail queda como beta/fallback. La ruta fuerte para escalar el SaaS es conectar 
 
 ## Prioridad
 
-1. Plaid para Estados Unidos.
-2. Prometeo para cobertura regional LATAM.
-3. Belvo para LATAM, especialmente cuando la cobertura comercial convenga.
-4. Finerio Connect para Mexico, sujeto a alta comercial.
+1. Syncfy para Mexico.
+2. Plaid para Estados Unidos.
+3. Prometeo para cobertura regional LATAM.
+4. Belvo para LATAM, especialmente cuando la cobertura comercial convenga.
+5. Finerio Connect para Mexico, sujeto a alta comercial.
 
 ## Variables de entorno
 
@@ -18,6 +19,10 @@ PLAID_CLIENT_ID=
 PLAID_SECRET=
 PLAID_ENV=sandbox
 BANK_TOKEN_ENCRYPTION_KEY=
+
+SYNCFY_ENV=sandbox
+SYNCFY_BASE_URL=https://opendata-api.syncfy.com/v1
+SYNCFY_API_KEY=
 
 PROMETEO_API_KEY=
 PROMETEO_ENV=sandbox
@@ -47,6 +52,23 @@ Tablas nuevas:
 - `bank_sync_runs`: auditoria de sincronizaciones.
 
 Todas usan `profile_id` y RLS con `auth.uid()`.
+
+## Syncfy Mexico sandbox
+
+Syncfy es el proveedor principal para Mexico. La integracion queda read-only para el MVP:
+
+- base sandbox confirmada: `https://opendata-api.syncfy.com/v1`
+- autenticacion: header `Authorization: API_KEY api_key=...`
+- catalogo de paises: `GET /catalogues/countries`
+- catalogo de sitios por pais: `GET /catalogues/sites?country=MX`
+- organizaciones/sitios: `GET /sites?country=MX`
+- ruta interna inicial: `GET /api/bank/syncfy/catalogue?country=MX`
+- crear/reusar usuario Syncfy: `POST /v1/users`
+- crear sesion corta para widget: `POST /v1/sessions`
+- ruta interna de sesion: `POST /api/bank/syncfy/session`
+- pagina interna del widget: `/bank/syncfy`
+
+No se habilitan pagos, transferencias ni initiation flows en esta fase. El siguiente paso es usar el endpoint de `credentials/pulls` con usuarios sandbox de prueba y mapear cuentas/transacciones hacia `bank_accounts` y `bank_transactions_raw`.
 
 ## API interna inicial
 

@@ -6,13 +6,19 @@ const mode = process.argv.includes('--multi-user')
   ? 'multi-user'
   : process.argv.includes('--open-banking')
     ? 'open-banking'
-    : process.argv.includes('--classification-rules')
-      ? 'classification-rules'
-      : process.argv.includes('--billing')
-        ? 'billing'
-        : process.argv.includes('--operations')
-          ? 'operations'
-          : 'private-v1';
+    : process.argv.includes('--agentic-foundation')
+      ? 'agentic-foundation'
+      : process.argv.includes('--cfdi-foundation')
+      ? 'cfdi-foundation'
+      : process.argv.includes('--sat-core')
+        ? 'sat-core'
+        : process.argv.includes('--classification-rules')
+          ? 'classification-rules'
+          : process.argv.includes('--billing')
+            ? 'billing'
+            : process.argv.includes('--operations')
+              ? 'operations'
+              : 'private-v1';
 
 const migrationSets = {
   'private-v1': [
@@ -27,14 +33,28 @@ const migrationSets = {
   'multi-user': [
     '20260608_multi_user_foundation.sql',
     '20260612_self_serve_onboarding_integrations.sql',
+    '20260630_profile_scoped_monthly_budgets.sql',
   ],
   'open-banking': [
     '20260613_open_banking_foundation.sql',
     '20260614_add_bank_connection_sync_cursor.sql',
     '20260622_bank_transaction_classification_queue.sql',
+    '20260709_add_syncfy_open_banking_provider.sql',
+    '20260709_syncfy_users.sql',
+  ],
+  'agentic-foundation': [
+    '20260630_agentic_business_wealth_foundation.sql',
+  ],
+  'cfdi-foundation': [
+    '20260630190922_cfdi_manual_ingest_foundation.sql',
+    '20260630194015_cfdi_reconciliation_dedupe_indexes.sql',
+  ],
+  'sat-core': [
+    '20260713_sat_core_foundation.sql',
   ],
   'classification-rules': [
     '20260614_reclassify_tools_as_investments.sql',
+    '20260630_default_expenses_to_pleasure.sql',
   ],
   'billing': [
     '20260615_billing_foundation.sql',

@@ -111,5 +111,9 @@ Variables requeridas:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` recomendado para evitar bloqueos por RLS.
+- `OPENROUTER_API_KEY` recomendado para transcribir notas de voz con OpenRouter.
+- `OPENROUTER_TRANSCRIPTION_MODEL` opcional; por defecto usa `openai/whisper-large-v3`.
+- `OPENAI_API_KEY` opcional como segundo proveedor de transcripción.
 - `GOOGLE_API_KEY` o `GEMINI_API_KEY` para clasificación con IA cuando las reglas locales no alcanzan.
 - `GOOGLE_API_KEY` o `GEMINI_API_KEY` para conversación abierta con contexto financiero.
+- Para voz, el orden de proveedores es OpenRouter, OpenAI y Gemini; si todos fallan, el bot debe responder y pedir el movimiento por texto.

@@ -44,14 +44,27 @@ DASHBOARD_ACCESS_TOKEN="..."
 
 GOOGLE_API_KEY="..."
 GEMINI_API_KEY="..."
+GEMINI_MODEL="gemini-2.5-flash-lite"
+AI_GATEWAY_FINANCIAL_CHAT_MODELS="openai/gpt-5-mini"
+AI_GATEWAY_STRUCTURED_MODELS="google/gemini-2.5-flash-lite,openai/gpt-5-mini"
+OPENROUTER_API_KEY="..."
+OPENROUTER_FINANCIAL_AGENT_MODELS="openai/gpt-5-mini"
+OPENROUTER_TRANSCRIPTION_MODEL="openai/whisper-large-v3"
 
 TELEGRAM_BOT_TOKEN="..."
 TELEGRAM_WEBHOOK_SECRET="..."
+CRON_SECRET="..."
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` es obligatoria para operaciones servidor como dashboard, webhooks, registros y borrados. El frontend no debe leer tablas de Supabase con anon key.
 
 `DASHBOARD_ACCESS_TOKEN` protege el dashboard y las APIs internas con una cookie `httpOnly`. En producción debe existir en Vercel; Telegram y el webhook de Santander siguen usando sus propios secretos.
+
+El análisis financiero intenta proveedores en este orden: Vercel AI Gateway, OpenRouter, Gemini y, si todos fallan, un motor financiero interno con los datos del dashboard. En Vercel, AI Gateway usa OIDC automáticamente. El router separa tareas estructuradas, conversación y agente; usa modelos económicos por defecto y sólo habilita fallbacks premium con `AI_ALLOW_PREMIUM_FALLBACK=true`. Consulta `docs/cost-optimization.md`.
+
+La transcripción de voz en Telegram intenta proveedores en este orden: OpenRouter (`OPENROUTER_API_KEY`), OpenAI (`OPENAI_API_KEY`) y Gemini (`GEMINI_API_KEY` o `GOOGLE_API_KEY`). `OPENROUTER_TRANSCRIPTION_MODEL` permite fijar el modelo de voz; el valor por defecto es `openai/whisper-large-v3`.
+
+El CFO proactivo ejecuta `GET /api/agents/proactive-goal` diariamente a las 14:00 UTC. Vercel lo autentica con `Authorization: Bearer $CRON_SECRET`; el agente compara la meta mensual contra ingresos, ritmo del mes y promedio de tres meses, guarda una tarea y un hallazgo en el dashboard, y envía el siguiente paso por Telegram cuando existe una cuenta vinculada.
 
 ## Telegram
 

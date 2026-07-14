@@ -7,10 +7,12 @@ const cardPayments = process.argv.includes('--card-payments');
 const cwd = process.cwd();
 
 function readEnv() {
-  const envPath = path.join(cwd, '.env.local');
+  const envPaths = [path.join(cwd, '..', '.env'), path.join(cwd, '.env.local')];
   const env = { ...process.env };
 
-  if (fs.existsSync(envPath)) {
+  for (const envPath of envPaths) {
+    if (!fs.existsSync(envPath)) continue;
+
     for (const line of fs.readFileSync(envPath, 'utf8').split(/\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
@@ -20,6 +22,14 @@ function readEnv() {
       const value = trimmed.slice(index + 1).trim().replace(/^"|"$/g, '');
       if (value) env[key] = value;
     }
+  }
+
+  if (!env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_URL) {
+    env.NEXT_PUBLIC_SUPABASE_URL = env.SUPABASE_URL;
+  }
+
+  if (env.NEXT_PUBLIC_SUPABASE_URL) {
+    env.NEXT_PUBLIC_SUPABASE_URL = new URL(env.NEXT_PUBLIC_SUPABASE_URL).origin;
   }
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {

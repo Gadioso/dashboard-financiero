@@ -10,7 +10,7 @@ function readEnvFile(path) {
       .filter((line) => line && !line.startsWith('#') && line.includes('='))
       .map((line) => {
         const index = line.indexOf('=');
-        const key = line.slice(0, index).trim();
+        const key = line.slice(0, index).replace(/^export\s+/, '').trim();
         let value = line.slice(index + 1).trim();
         if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
@@ -21,6 +21,7 @@ function readEnvFile(path) {
 }
 
 const env = {
+  ...readEnvFile('../.env'),
   ...readEnvFile('.env.local'),
   ...process.env,
 };

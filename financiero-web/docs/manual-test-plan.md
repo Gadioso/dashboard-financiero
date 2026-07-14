@@ -60,6 +60,7 @@ Enviar al bot:
 - Sin cookie, `GET /api/email/santander` debe responder `401`.
 - `POST /api/email/santander` sin secret debe responder `401`.
 - `GET /api/health` debe responder `200` sin datos financieros.
+- `GET /api/health` con `x-healthcheck-secret` o `Authorization: Bearer <CRON_SECRET>` debe reportar `capabilities.telegramVoice=true` cuando exista al menos un proveedor de transcripción.
 - Supabase debe mostrar RLS habilitado en tablas financieras.
 - Con token válido, `launch:check` debe confirmar que `anon` no puede escribir en `gastos`.
 
@@ -68,7 +69,9 @@ Enviar al bot:
 ```bash
 npm run lint
 npm run build
+npm run test:card-payment-intent
 npm run test:santander-parser
+npm run ops:env-audit
 npm run security:secrets
 LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app npm run launch:check
 LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check
