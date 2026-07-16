@@ -115,6 +115,14 @@ function isCreditCardPaymentCounterpart(transaction: BankTransactionRaw) {
   return isCreditCard && isPaymentCredit;
 }
 
+function isDeterministicIncome(transaction: BankTransactionRaw) {
+  if (Number(transaction.amount || 0) <= 0) return false;
+
+  const movement = normalizeAccountText(`${transaction.description || ''} ${transaction.merchant_name || ''}`);
+
+  return /\b(?:cashback|reembolso|devolucion|nomina|sueldo|salario)\b/.test(movement);
+}
+
 async function registerBankCardPayment(supabase: Supabase, transaction: BankTransactionRaw): Promise<BankClassificationResult> {
   const amount = Math.abs(Number(transaction.amount));
   const date = postedDate(transaction).toISOString();
@@ -187,6 +195,29 @@ async function countPending({
     .eq('profile_id', profileId)
     .eq('normalized_status', 'pending')
     .gte('posted_at', normalizeMinPostedAt(minPostedAt));
+
+  return count || 0;
+}
+
+async function countRetryable({
+  supabase,
+  profileId,
+  minPostedAt,
+  retryFailed,
+}: {
+  supabase: Supabase;
+  profileId: string;
+  minPostedAt?: string | null;
+  retryFailed: boolean;
+}) {
+  const query = supabase
+    .from('bank_transactions_raw')
+    .select('id', { count: 'exact', head: true })
+    .eq('profile_id', profileId)
+    .gte('posted_at', normalizeMinPostedAt(minPostedAt));
+  const { count } = retryFailed
+    ? await query.in('normalized_status', ['pending', 'failed'])
+    : await query.eq('normalized_status', 'pending');
 
   return count || 0;
 }
@@ -280,7 +311,7 @@ async function classifyOne({
         profile_id: transaction.profile_id,
         concepto: movementConcept,
         monto: Number(movement.monto),
-        tipo: 'Banco',
+        tipo: 'Extra',
         fecha: movementDate,
         bank_transaction_raw_id: transaction.id,
       };
@@ -409,6 +440,8 @@ export async function processPendingBankTransactions({
   googleApiKey,
   minPostedAt,
   deterministicOnly = false,
+  retryFailed = false,
+  transactionId,
 }: {
   supabase: Supabase;
   profileId: string;
@@ -416,23 +449,37 @@ export async function processPendingBankTransactions({
   googleApiKey: string;
   minPostedAt?: string | null;
   deterministicOnly?: boolean;
+  retryFailed?: boolean;
+  transactionId?: string | null;
 }): Promise<ProcessBankTransactionsResult> {
   const normalizedLimit = normalizeLimit(limit);
   const normalizedMinPostedAt = normalizeMinPostedAt(minPostedAt);
-  const { data, error } = await supabase
+  let transactionsQuery = supabase
     .from('bank_transactions_raw')
     .select('id, profile_id, posted_at, description, merchant_name, amount, currency, classification_attempts, bank_account:bank_accounts(name, official_name, type, subtype)')
     .eq('profile_id', profileId)
-    .eq('normalized_status', 'pending')
     .gte('posted_at', normalizedMinPostedAt)
     .order('posted_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(normalizedLimit);
 
+  transactionsQuery = retryFailed
+    ? transactionsQuery.in('normalized_status', ['pending', 'failed'])
+    : transactionsQuery.eq('normalized_status', 'pending');
+
+  if (transactionId) {
+    transactionsQuery = transactionsQuery.eq('id', transactionId);
+  }
+
+  const { data, error } = await transactionsQuery;
+
   if (error) throw new Error(`No pude leer transacciones pendientes: ${error.message}`);
 
   const transactions = ((data || []) as BankTransactionRaw[]).filter((transaction) => (
-    !deterministicOnly || isCuentaFreeToLikeUCardPayment(transaction) || isCreditCardPaymentCounterpart(transaction)
+    !deterministicOnly
+    || isCuentaFreeToLikeUCardPayment(transaction)
+    || isCreditCardPaymentCounterpart(transaction)
+    || isDeterministicIncome(transaction)
   ));
   const results: BankClassificationResult[] = [];
 
@@ -440,7 +487,9 @@ export async function processPendingBankTransactions({
     results.push(await classifyOne({ supabase, transaction, googleApiKey }));
   }
 
-  const remainingPending = await countPending({ supabase, profileId, minPostedAt: normalizedMinPostedAt });
+  const remainingPending = retryFailed
+    ? await countRetryable({ supabase, profileId, minPostedAt: normalizedMinPostedAt, retryFailed })
+    : await countPending({ supabase, profileId, minPostedAt: normalizedMinPostedAt });
 
   return {
     processed: results.length,

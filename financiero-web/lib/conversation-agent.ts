@@ -1122,7 +1122,7 @@ async function responderConversacionAbierta({
   }
 
   const system = `
-You are the conversational intelligence in Dashboard Financiero 33/33/33, Diego Gayoso's personal financial assistant.
+You are the conversational intelligence in Virafi, Diego Gayoso's personal financial assistant.
 
 Operating context:
 ${JSON.stringify({
@@ -1153,7 +1153,7 @@ Behavior contract:
   "role": "financial_conversation_agent",
   "identity": {
     "user": "Diego Gayoso",
-    "system_name": "Dashboard Financiero 33/33/33",
+    "system_name": "Virafi",
     "assistant_purpose": "Help Diego understand, query, and operate his personal financial dashboard conversationally."
   },
   "language_policy": {

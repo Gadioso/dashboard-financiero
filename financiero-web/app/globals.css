@@ -1,26 +1,119 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --brand-cream: oklch(97% 0.012 85);
+  --brand-surface: oklch(98.5% 0.008 85);
+  --brand-soft: oklch(94.5% 0.014 85);
+  --brand-ink: oklch(22% 0.015 85);
+  --brand-muted: oklch(50% 0.018 85);
+  --brand-border: oklch(88% 0.018 85);
+  --brand-violet: oklch(58% 0.16 292);
+  --brand-violet-soft: oklch(93% 0.035 292);
+  --brand-wealth: oklch(58% 0.16 80);
+  --brand-fiscal: oklch(58% 0.16 160);
+  --brand-business: oklch(58% 0.16 40);
+  --background: var(--brand-cream);
+  --foreground: var(--brand-ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: var(--font-figtree), Arial, Helvetica, sans-serif;
+  --font-brand: var(--font-newsreader), Georgia, serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-virafi: var(--brand-violet);
+  --color-virafi-cream: var(--brand-cream);
+  --color-virafi-ink: var(--brand-ink);
+  --color-virafi-wealth: var(--brand-wealth);
+  --color-virafi-fiscal: var(--brand-fiscal);
+  --color-virafi-business: var(--brand-business);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-figtree), Arial, Helvetica, sans-serif;
+}
+
+h1,
+h2,
+.font-brand {
+  font-family: var(--font-newsreader), Georgia, serif;
+}
+
+h1,
+h2 {
+  font-weight: 550 !important;
+  letter-spacing: -0.025em;
+}
+
+::selection {
+  background: var(--brand-violet);
+  color: white;
+}
+
+:focus-visible {
+  outline-color: var(--brand-violet);
+}
+
+/* Virafi compatibility layer for the existing Tailwind vocabulary. */
+.bg-white { background-color: var(--brand-surface) !important; }
+.bg-slate-50 { background-color: var(--brand-soft) !important; }
+.bg-slate-100 { background-color: oklch(91.5% 0.018 85) !important; }
+.bg-slate-950 { background-color: var(--brand-ink) !important; }
+.text-slate-950,
+.text-slate-900,
+.text-slate-800 { color: var(--brand-ink) !important; }
+.text-slate-700,
+.text-slate-600 { color: oklch(40% 0.018 85) !important; }
+.text-slate-500 { color: var(--brand-muted) !important; }
+.text-slate-400 { color: oklch(62% 0.018 85) !important; }
+.border-slate-100,
+.border-slate-200,
+.border-slate-300 { border-color: var(--brand-border) !important; }
+
+.bg-blue-600 { background-color: var(--brand-violet) !important; }
+.bg-blue-700 { background-color: oklch(51% 0.17 292) !important; }
+.bg-blue-50,
+.bg-violet-50 { background-color: var(--brand-violet-soft) !important; }
+.text-blue-600,
+.text-blue-700,
+.text-blue-800,
+.text-violet-700 { color: oklch(48% 0.17 292) !important; }
+.border-blue-100,
+.border-blue-200,
+.border-blue-300,
+.border-violet-200 { border-color: oklch(82% 0.07 292) !important; }
+.border-t-blue-600 { border-top-color: var(--brand-violet) !important; }
+.focus\:border-blue-500:focus { border-color: var(--brand-violet) !important; }
+.focus\:ring-blue-400:focus,
+.focus\:ring-blue-500:focus { --tw-ring-color: oklch(72% 0.12 292) !important; }
+
+.bg-emerald-500,
+.bg-emerald-600 { background-color: var(--brand-fiscal) !important; }
+.text-emerald-600,
+.text-emerald-700,
+.text-emerald-800 { color: oklch(47% 0.14 160) !important; }
+.bg-amber-500,
+.bg-amber-600 { background-color: var(--brand-wealth) !important; }
+.text-amber-600,
+.text-amber-700,
+.text-amber-800 { color: oklch(45% 0.14 80) !important; }
+.bg-orange-500,
+.bg-orange-600 { background-color: var(--brand-business) !important; }
+
+.shadow-sm {
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--brand-ink) 6%, transparent) !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-view-panel {
+    animation: virafi-enter 260ms ease-out both;
+  }
+}
+
+@keyframes virafi-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }

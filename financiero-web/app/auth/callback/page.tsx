@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import VirafiBrand from '@/app/Components/VirafiBrand';
 
 function CallbackHandler() {
   const searchParams = useSearchParams();
@@ -62,9 +63,9 @@ function CallbackHandler() {
   }, [searchParams]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
+    <main className="flex min-h-screen items-center justify-center bg-[var(--brand-cream)] px-4 text-slate-950">
       <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
-        <div className="mx-auto grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+        <VirafiBrand className="items-center" />
         <p className="mt-4 text-sm font-semibold text-slate-600">{message}</p>
       </section>
     </main>
@@ -75,9 +76,9 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
+        <main className="flex min-h-screen items-center justify-center bg-[var(--brand-cream)] px-4 text-slate-950">
           <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
-            <div className="mx-auto grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
+            <VirafiBrand className="items-center" />
             <p className="mt-4 text-sm font-semibold text-slate-600">Completando acceso...</p>
           </section>
         </main>

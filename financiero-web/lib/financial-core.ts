@@ -381,13 +381,15 @@ export function nombreBolsa(categoria: string) {
 }
 
 export function nombreOrigen(origen: string, subcategoria?: string | null) {
-  if (origen === 'Santander_Email' || subcategoria === 'Santander') return 'Santander Email';
-  if (origen === 'Supabase') return 'Supabase';
+  void subcategoria;
+  if (origen === 'Santander_Email') return 'Correo Santander (retirado)';
+  if (origen === 'Supabase') return 'Web';
   if (origen === 'Telegram') return 'Telegram';
   if (origen === 'Web') return 'Web';
-  if (origen === 'Banco') return 'Banco';
+  if (origen === 'Banco' || origen === 'Banco conectado') return 'Banco';
+  if (origen.startsWith('Banco · ')) return origen;
 
-  return origen;
+  return origen ? `Banco · ${origen}` : 'Banco';
 }
 
 export function combinarMovimientos({
@@ -408,7 +410,7 @@ export function combinarMovimientos({
     categoria: 'Ingreso',
     subcategoria: ingreso.tipo || 'Ingreso',
     monto: ingreso.monto,
-    origen: 'Web',
+    origen: ingreso.bank_transaction_raw_id ? 'Banco' : 'Web',
     fecha: ingreso.fecha,
   }));
   const movimientosGasto: Movimiento[] = gastos.map((gasto) => ({

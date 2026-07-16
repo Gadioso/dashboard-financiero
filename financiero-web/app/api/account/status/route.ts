@@ -159,7 +159,6 @@ export async function GET(request: Request) {
         profileId: null,
         profile: null,
         telegramAccounts: [],
-        gmailIntegrations: [],
         businessEntities: [],
         investmentAccounts: [],
         agentTasks: [],
@@ -174,7 +173,6 @@ export async function GET(request: Request) {
     const [
       profileResult,
       telegramResult,
-      gmailResult,
       bankConnectionResult,
       bankAccountResult,
       businessEntitiesResult,
@@ -189,7 +187,6 @@ export async function GET(request: Request) {
     ] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
-      supabase.from('gmail_integrations').select('id, email, provider, status, watch_expires_at, updated_at, connected_at, access_token_encrypted, refresh_token_encrypted').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       supabase.from('bank_connections').select('id, provider, institution_name, status, last_sync_at, consent_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       supabase.from('bank_accounts').select('id, connection_id, name, official_name, type, subtype, currency, current_balance, available_balance, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       supabase.from('business_entities').select('id, name, entity_type, country, currency, status, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(12),
@@ -213,7 +210,6 @@ export async function GET(request: Request) {
     const errors = [
       profileResult.error,
       telegramResult.error,
-      gmailResult.error,
       missingOpenBankingTables ? null : bankConnectionResult.error,
       missingOpenBankingTables ? null : bankAccountResult.error,
       missingAgenticTables ? null : businessEntitiesResult.error,
@@ -235,16 +231,6 @@ export async function GET(request: Request) {
       profileId,
       profile: profileResult.data || null,
       telegramAccounts: telegramResult.data || [],
-      gmailIntegrations: (gmailResult.data || []).map((integration) => ({
-        id: integration.id,
-        email: integration.email,
-        provider: integration.provider,
-        status: integration.status,
-        watch_expires_at: integration.watch_expires_at,
-        updated_at: integration.updated_at,
-        connected_at: integration.connected_at,
-        oauthConnected: Boolean(integration.access_token_encrypted && integration.refresh_token_encrypted),
-      })),
       bankConnections: missingOpenBankingTables ? [] : dedupeBankConnections(bankConnectionResult.data || []),
       bankAccounts: missingOpenBankingTables ? [] : bankAccountResult.data || [],
       businessEntities: missingAgenticTables ? [] : (businessEntitiesResult.data || []) as BusinessEntityRow[],

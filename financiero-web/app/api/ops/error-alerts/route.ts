@@ -36,7 +36,7 @@ function formatAlertMessage(events: ErrorEventRow[]) {
   const critical = events.filter((event) => event.severity === 'critical').length;
   const errors = events.filter((event) => event.severity === 'error').length;
   const lines = [
-    'Alerta Dashboard Financiero',
+    'Alerta Virafi',
     `${events.length} errores nuevos sin resolver. Critical: ${critical}. Error: ${errors}.`,
     '',
     ...events.slice(0, 8).map((event) => {

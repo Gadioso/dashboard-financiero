@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link';
 import { Bell, ShieldCheck, Target } from '@phosphor-icons/react';
 import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview';
+import VirafiBrand from '@/app/Components/VirafiBrand';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -86,45 +87,6 @@ type DashboardApiResponse = {
   abonosTarjetaAnuales: AbonoTarjetaCredito[];
   fondosAcumulados?: FondoAcumulado[];
   movimientosBancarios?: BankTransactionRawView[];
-};
-
-type SantanderStatus = {
-  configured?: {
-    supabase: boolean;
-    emailIngestSecret: boolean;
-  };
-  supabaseSchema?: {
-    acceptsSantanderEmailOrigin: boolean;
-    acceptsRegla333333Phase: boolean;
-    acceptsAbonosTarjetaCredito?: boolean;
-    acceptsSantanderIngestLogs?: boolean;
-    acceptsSantanderIngestLatency?: boolean;
-    migrationRequired: boolean;
-  };
-  ingestLogs?: {
-    available: boolean;
-    error?: string | null;
-    logs: Array<{
-      id: string;
-      created_at: string;
-      status: 'inserted' | 'duplicate' | 'ignored' | 'error';
-      reason?: string | null;
-      movimiento_tipo?: string | null;
-      concepto?: string | null;
-      monto?: number | string | null;
-      categoria?: string | null;
-      subcategoria?: string | null;
-      telegram_notified?: boolean | null;
-      gmail_received_at?: string | null;
-      apps_script_detected_at?: string | null;
-      backend_received_at?: string | null;
-      telegram_sent_at?: string | null;
-      ingest_latency_ms?: number | null;
-      telegram_latency_ms?: number | null;
-      error?: string | null;
-    }>;
-  };
-  error?: string;
 };
 
 type BillingStatus = {
@@ -557,6 +519,7 @@ export default function DashboardFinanciero() {
   const [chatMessages, setChatMessages] = useState<DashboardChatMessage[]>([]);
   const [chatIncludesScreen, setChatIncludesScreen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
+  const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<MovementEditForm | null>(null);
@@ -586,7 +549,6 @@ export default function DashboardFinanciero() {
   const [abonosTarjetaAnuales, setAbonosTarjetaAnuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
-  const [, setSantanderStatus] = useState<SantanderStatus | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(0);
   const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
@@ -664,7 +626,7 @@ export default function DashboardFinanciero() {
       pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(19);
-      pdf.text('Dashboard Financiero', margin, 15);
+      pdf.text('Virafi', margin, 15);
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'normal');
       pdf.text(periodTitle, margin, 24);
@@ -963,21 +925,13 @@ export default function DashboardFinanciero() {
 
     async function fetchAccountAndBankStatus() {
       try {
-        const [bankResult, accountResult, riskProfileResult, marketResult] = await Promise.allSettled([
-          fetchWithSessionRefresh('/api/email/santander'),
+        const [accountResult, riskProfileResult, marketResult] = await Promise.allSettled([
           fetchWithSessionRefresh('/api/account/status'),
           fetchWithSessionRefresh('/api/investments/risk-profile'),
           fetchWithSessionRefresh('/api/investments/market-sync'),
         ]);
 
         if (mounted) {
-          const bankData = bankResult.status === 'fulfilled' ? await readJsonResponse(bankResult.value) : null;
-          if (bankData) {
-            setSantanderStatus(bankData);
-          } else {
-            setSantanderStatus({ error: 'No pude consultar estado bancario.' });
-          }
-
           const accountData = accountResult.status === 'fulfilled' ? await readJsonResponse<AccountStatus>(accountResult.value) : null;
           if (accountData) {
             if (accountData.billing) setBillingStatus(accountData.billing);
@@ -1003,8 +957,8 @@ export default function DashboardFinanciero() {
             setMarketSnapshots(marketData.snapshots);
           }
         }
-      } catch {
-        if (mounted) setSantanderStatus({ error: 'No pude consultar estado bancario.' });
+      } catch (error) {
+        console.error('No pude cargar el estado de la cuenta:', error);
       }
     }
 
@@ -1469,6 +1423,40 @@ export default function DashboardFinanciero() {
       setMensajeStatus('No pude eliminar el movimiento. Intenta nuevamente.');
     } finally {
       setDeletingId(null);
+      setTimeout(() => setMensajeStatus(''), 5000);
+    }
+  };
+
+  const reintentarMovimientoBancario = async (movimiento: Movimiento) => {
+    const transactionId = movimiento.id.replace('banco-', '');
+    setClassifyingId(movimiento.id);
+    setMensajeStatus('Reintentando clasificación...');
+
+    try {
+      const response = await fetchWithSessionRefresh('/api/bank/transactions/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionId,
+          retryFailed: true,
+          minPostedAt: movimiento.fecha.slice(0, 10),
+          limit: 1,
+        }),
+      });
+      const result = await response.json();
+      const classified = result.results?.[0]?.status === 'classified';
+
+      if (!classified) {
+        setMensajeStatus(formatActionError(result, result.results?.[0]?.error || 'No pude clasificar el movimiento.'));
+        return;
+      }
+
+      setMensajeStatus('Movimiento clasificado correctamente.');
+      await fetchData();
+    } catch {
+      setMensajeStatus('No pude reintentar la clasificación. Intenta nuevamente.');
+    } finally {
+      setClassifyingId(null);
       setTimeout(() => setMensajeStatus(''), 5000);
     }
   };
@@ -2578,7 +2566,7 @@ export default function DashboardFinanciero() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
+    <div className="min-h-screen bg-[var(--brand-cream)] text-slate-950">
       {billingAction && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-5 text-center shadow-xl">
@@ -2595,11 +2583,7 @@ export default function DashboardFinanciero() {
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[220px_1fr]">
         <aside className="hidden border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
           <div className="flex h-16 items-center gap-3 px-5">
-            <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-            <div>
-              <p className="text-sm font-bold leading-tight">Dashboard</p>
-              <p className="text-sm font-bold leading-tight">Financiero</p>
-            </div>
+            <VirafiBrand compact />
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5 text-sm font-medium text-slate-500" aria-label="Secciones del dashboard">
             {desktopNavItems.map((item) => (
@@ -2650,11 +2634,8 @@ export default function DashboardFinanciero() {
             <div className="flex min-h-16 flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
               <div className="relative flex items-center justify-between gap-3 md:hidden">
                 <div className="flex items-center gap-3">
-                  <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-                  <div>
-                    <p className="text-sm font-bold leading-tight">Dashboard Financiero</p>
-                    <p className="text-xs font-medium text-slate-500">Plan {planLabel}</p>
-                  </div>
+                  <VirafiBrand compact />
+                  <p className="text-xs font-medium text-slate-500">Plan {planLabel}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={toggleNotificationTray} aria-label={`Notificaciones${unreadNotifications.length ? `, ${unreadNotifications.length} nuevas` : ''}`} className="relative grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm">
@@ -2748,7 +2729,7 @@ export default function DashboardFinanciero() {
                 <div>
                   <p className="text-sm font-bold text-blue-700">{activeNav.label}</p>
                   <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
-                    {vistaActiva === 'resumen' ? 'Tu tablero financiero' :
+                    {vistaActiva === 'resumen' ? 'Tu rumbo financiero' :
                       vistaActiva === 'movimientos' ? 'Movimientos del mes' :
                       vistaActiva === 'presupuestos' ? 'Presupuestos y bolsas' :
                       vistaActiva === 'metas' ? 'Metas financieras' :
@@ -2788,7 +2769,7 @@ export default function DashboardFinanciero() {
             <section id="resumen" className={`${vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.4fr_1fr]`}>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
+                    <h1 className="text-2xl tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
                   <p className="mt-1 text-sm text-slate-500">
                     {loading ? 'Actualizando datos...' : `Resumen de ${selectedMonthName.toLowerCase()} 2026 con regla 33/33/33.`}
                   </p>
@@ -3012,7 +2993,7 @@ export default function DashboardFinanciero() {
 
             {goalsInterviewOpen && (
               <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Entrevista de personalización financiera">
-                <div className="mx-auto max-w-6xl rounded-xl bg-[#f5f7fb] p-3 shadow-2xl sm:p-5">
+                <div className="mx-auto max-w-6xl rounded-xl bg-[var(--brand-cream)] p-3 shadow-2xl sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-4 px-2">
                     <div>
                       <p className="text-sm font-bold text-blue-700">Metas</p>
@@ -3224,7 +3205,7 @@ export default function DashboardFinanciero() {
                   <Link href="/onboarding" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">{cuentasActivas > 0 ? 'Administrar conexión' : 'Conectar cuenta'}</Link>
                 </div>
                 <p className="mt-3 text-xs text-slate-500">
-                  {lastBankRefreshAt ? `Dashboard revisado ${new Date(lastBankRefreshAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}.` : 'Preparando actualización bancaria...'}
+                  {lastBankRefreshAt ? `Virafi actualizado ${new Date(lastBankRefreshAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}.` : 'Preparando actualización bancaria...'}
                 </p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -3415,7 +3396,7 @@ export default function DashboardFinanciero() {
                   </div>)}</div>
                   <div className="mt-5 flex gap-3 rounded-xl bg-emerald-50 p-4">
                     <ShieldCheck className="size-6 shrink-0 text-emerald-700" weight="regular" aria-hidden="true" />
-                    <p className="text-sm leading-6 text-emerald-900">Dashboard Financiero no recibe ni guarda tu dinero. Antes de salir verás cuánto corresponde a esa inversión y qué debes revisar.</p>
+                    <p className="text-sm leading-6 text-emerald-900">Virafi no recibe ni guarda tu dinero. Antes de salir verás cuánto corresponde a esa inversión y qué debes revisar.</p>
                   </div>
                 </div>
               </div>}
@@ -3539,7 +3520,7 @@ export default function DashboardFinanciero() {
                     <header className="bg-blue-600 px-6 py-6 text-white sm:px-10">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <p className="text-sm font-bold text-blue-100">Dashboard Financiero</p>
+                          <p className="font-brand text-lg font-medium italic text-blue-100">Virafi</p>
                           <h3 className="mt-1 text-2xl font-black">{reportScope === 'year' ? 'Reporte anual 2026' : `Reporte mensual · ${selectedMonthName} 2026`}</h3>
                         </div>
                         <p className="text-sm text-blue-100">Diego Martínez · MXN</p>
@@ -3837,14 +3818,26 @@ export default function DashboardFinanciero() {
                         {movimiento.tipo === 'abono_tarjeta' ? (
                           <span className="text-xs font-bold text-violet-700">No cuenta como gasto</span>
                         ) : movimiento.readOnly ? (
-                          <button
-                            type="button"
-                            onClick={() => void eliminarMovimientoBancario(movimiento)}
-                            disabled={deletingId === movimiento.id}
-                            className="min-h-9 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {movimiento.bankStatus === 'failed' && (
+                              <button
+                                type="button"
+                                onClick={() => void reintentarMovimientoBancario(movimiento)}
+                                disabled={classifyingId === movimiento.id}
+                                className="min-h-9 rounded-lg border border-blue-200 px-3 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                              >
+                                {classifyingId === movimiento.id ? 'Reintentando' : 'Reintentar'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void eliminarMovimientoBancario(movimiento)}
+                              disabled={deletingId === movimiento.id}
+                              className="min-h-9 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
+                            </button>
+                          </div>
                         ) : <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -3936,14 +3929,26 @@ export default function DashboardFinanciero() {
                             {movimiento.tipo === 'abono_tarjeta' ? (
                               <span className="text-xs font-bold text-violet-700">No afecta gastos</span>
                             ) : movimiento.readOnly ? (
-                              <button
-                                type="button"
-                                onClick={() => void eliminarMovimientoBancario(movimiento)}
-                                disabled={deletingId === movimiento.id}
-                                className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                              >
-                                {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
-                              </button>
+                              <div className="flex justify-end gap-2">
+                                {movimiento.bankStatus === 'failed' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void reintentarMovimientoBancario(movimiento)}
+                                    disabled={classifyingId === movimiento.id}
+                                    className="rounded-md border border-blue-200 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                  >
+                                    {classifyingId === movimiento.id ? 'Reintentando' : 'Reintentar'}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => void eliminarMovimientoBancario(movimiento)}
+                                  disabled={deletingId === movimiento.id}
+                                  className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                                >
+                                  {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
+                                </button>
+                              </div>
                             ) : <div className="flex justify-end gap-2">
                               <button
                                 type="button"

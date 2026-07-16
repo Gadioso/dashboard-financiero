@@ -26,17 +26,12 @@ Ejecutar después de aplicar SQL/RLS y antes de considerar v1 lista.
 - Eliminar el gasto de prueba.
 - Eliminar el ingreso de prueba.
 
-## Santander / Gmail
+## Origen de movimientos
 
-- Ejecutar Apps Script `santanderIngest`.
-- Confirmar que un correo Santander real crea:
-  - gasto si es compra/cargo,
-  - abono TDC si es pago a tarjeta,
-  - ingreso si realmente entra dinero.
-- Confirmar que Telegram manda alerta al usuario `945363158`.
-- Confirmar que duplicados no crean doble gasto.
-- Confirmar en el dashboard que el evento muestra latencia de `Ingesta` y `Telegram`.
-- Ejecutar Apps Script `crearTriggerSantanderCadaMinuto` y confirmar que existe un trigger de `santanderIngest` cada 1 minuto.
+- Confirmar que los movimientos automáticos del proveedor muestran `Banco` o `Banco · <institución>`.
+- Confirmar que los movimientos registrados por el bot muestran `Telegram`.
+- Confirmar que los movimientos registrados manualmente muestran `Web`.
+- Confirmar que ningún movimiento muestra `Santander Email`.
 
 ## Telegram
 
@@ -57,8 +52,8 @@ Enviar al bot:
 ## Seguridad
 
 - Sin cookie, `GET /api/dashboard?mes=2026-06` debe responder `401`.
-- Sin cookie, `GET /api/email/santander` debe responder `401`.
-- `POST /api/email/santander` sin secret debe responder `401`.
+- Sin sesión, `GET /api/email/santander` debe responder `401`.
+- Con sesión, `GET` y `POST /api/email/santander` deben responder `410` y no crear movimientos.
 - `GET /api/health` debe responder `200` sin datos financieros.
 - `GET /api/health` con `x-healthcheck-secret` o `Authorization: Bearer <CRON_SECRET>` debe reportar `capabilities.telegramVoice=true` cuando exista al menos un proveedor de transcripción.
 - Supabase debe mostrar RLS habilitado en tablas financieras.

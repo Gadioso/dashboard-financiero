@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: 'Sentry no está configurado.' }, { status: 503 });
   }
 
-  const eventId = Sentry.captureException(new Error('Dashboard Financiero Sentry integration test'));
+  const eventId = Sentry.captureException(new Error('Virafi Sentry integration test'));
   await Sentry.flush(2_000);
 
   return NextResponse.json({ success: true, eventId });

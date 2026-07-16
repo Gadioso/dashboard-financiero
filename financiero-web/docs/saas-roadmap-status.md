@@ -53,21 +53,18 @@ Estado: funcional, en mejora.
 - Perfil automatico.
 - Presupuestos iniciales.
 - Telegram self-serve.
-- Gmail como fallback.
+- Banco read-only como origen automático; Telegram y web como captura directa.
 - Banco por pais con proveedor interno.
 - Estado de configuracion.
 - Script operativo agregado: `npm run budget:sync` recalcula presupuestos por ingresos reales y crea presupuestos faltantes cuando el constraint por perfil ya está aplicado.
 
-## Paso 4: Gmail OAuth real
+## Paso 4: Gmail OAuth retirado
 
-Estado: beta/fallback.
+Estado: retirado del producto multiusuario.
 
-- OAuth con Google implementado.
-- Tokens por usuario cifrados.
-- Lectura de correos por usuario.
-- Dedupe por `gmail_message_id`.
-- Logs por usuario en `santander_ingest_logs`.
-- Limitante: verificacion de Google para uso masivo con `gmail.readonly`.
+- Los endpoints de OAuth, sincronización e ingesta responden `410 Gone`.
+- El origen canónico de movimientos queda limitado a `Banco`, `Telegram` o `Web`.
+- Los registros históricos `Santander_Email` migran a `Banco`.
 
 ## Paso 5: Telegram multiusuario
 

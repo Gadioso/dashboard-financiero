@@ -1,6 +1,6 @@
 # Open Banking / Open Finance provider plan
 
-Gmail queda como beta/fallback. La ruta fuerte para escalar el SaaS es conectar bancos con proveedores Open Banking en modo read-only.
+Gmail/Santander queda retirado. La ruta para escalar el SaaS es conectar bancos con proveedores Open Banking en modo read-only; los otros orígenes de captura son Telegram y web.
 
 ## Prioridad
 

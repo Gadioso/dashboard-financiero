@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PersonalizationInterview from './PersonalizationInterview';
+import VirafiBrand from '@/app/Components/VirafiBrand';
 
 const fallbackBankConnectionLimit = 1;
 
@@ -18,14 +19,12 @@ type AccountStatus = {
     monthly_income_target?: number | string | null;
   } | null;
   telegramAccounts?: Array<{ id: string; chat_id: string; username?: string | null }>;
-  gmailIntegrations?: Array<{ id: string; email: string; status: string; oauthConnected?: boolean; connected_at?: string | null }>;
   bankConnections?: Array<{ id: string; provider: string; institution_name?: string | null; status: string; last_sync_at?: string | null }>;
   billing?: {
     plan: 'free' | 'beta' | 'premium';
     active: boolean;
     limits?: {
       bankConnections: number;
-      gmailIntegrations: number;
       telegramAccounts: number;
       bankSyncLookbackDays: number;
     };
@@ -157,8 +156,7 @@ export default function OnboardingClient() {
       const routeError = params.get('error');
 
       if (routeError) setError(decodeURIComponent(routeError));
-      if (params.get('gmail') === 'connected') setMessage('Gmail/Banco conectado con Google.');
-      void refreshStatus({ keepFeedback: Boolean(routeError || params.get('gmail')) });
+      void refreshStatus({ keepFeedback: Boolean(routeError) });
     });
   }, [refreshStatus]);
 
@@ -446,14 +444,11 @@ export default function OnboardingClient() {
         </div>
       )}
 
-    <main className="min-h-screen bg-[#f5f7fb] px-4 py-8 text-slate-950">
+    <main className="min-h-screen bg-[var(--brand-cream)] px-4 py-8 text-slate-950">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-              <p className="text-sm font-bold text-slate-900">Dashboard Financiero</p>
-            </div>
+            <VirafiBrand compact />
             <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Configuración financiera</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
               Personaliza tus metas y administra tus integraciones desde un solo lugar.

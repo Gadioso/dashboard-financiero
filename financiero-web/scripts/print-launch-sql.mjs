@@ -41,6 +41,7 @@ const migrationSets = {
     '20260622_bank_transaction_classification_queue.sql',
     '20260709_add_syncfy_open_banking_provider.sql',
     '20260709_syncfy_users.sql',
+    '20260714210000_retire_santander_email_origin.sql',
   ],
   'agentic-foundation': [
     '20260630_agentic_business_wealth_foundation.sql',

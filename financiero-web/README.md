@@ -1,4 +1,4 @@
-# Dashboard Financiero
+# Virafi
 
 Dashboard personal para aplicar la regla 33/33/33 con captura por Web, Telegram y agente financiero.
 

@@ -57,6 +57,7 @@ export async function GET(request: Request) {
     const gastosQuery = supabase
       .from('gastos')
       .select('id, concepto, monto, categoria, subcategoria, origen, fecha, bank_transaction_raw_id')
+      .neq('origen', 'Santander_Email')
       .gte('fecha', inicio2026)
       .lt('fecha', fin2026);
     const abonosQuery = supabase

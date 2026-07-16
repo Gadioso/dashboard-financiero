@@ -52,7 +52,7 @@ async function transcribirConOpenRouter({
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app',
-      'X-Title': 'Dashboard Financiero',
+      'X-Title': 'Virafi',
     },
     body: JSON.stringify({
       input_audio: {

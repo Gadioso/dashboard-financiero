@@ -44,7 +44,7 @@ async function getOrCreateSyncfyUser({
   }
 
   const idExternal = buildSyncfyExternalId(profileId);
-  const name = email ? `Dashboard Financiero - ${email}` : 'Dashboard Financiero User';
+  const name = email ? `Virafi - ${email}` : 'Virafi User';
   const syncfyUser = await createSyncfyUser({ name, idExternal });
 
   const created = await supabase

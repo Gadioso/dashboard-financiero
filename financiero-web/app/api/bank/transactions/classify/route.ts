@@ -29,6 +29,10 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const retryFailed = (body as { retryFailed?: unknown }).retryFailed === true;
+    const transactionId = typeof (body as { transactionId?: unknown }).transactionId === 'string'
+      ? (body as { transactionId: string }).transactionId.trim()
+      : null;
     const result = await processPendingBankTransactions({
       supabase,
       profileId: tenant.profileId,
@@ -37,6 +41,8 @@ export async function POST(request: Request) {
         ? (body as { minPostedAt: string }).minPostedAt
         : undefined,
       googleApiKey: aiApiKey,
+      retryFailed,
+      transactionId,
     });
 
     await logAuditEvent({
@@ -56,6 +62,8 @@ export async function POST(request: Request) {
         minPostedAt: typeof (body as { minPostedAt?: unknown }).minPostedAt === 'string'
           ? (body as { minPostedAt: string }).minPostedAt
           : undefined,
+        retryFailed,
+        transactionId,
       },
     });
 

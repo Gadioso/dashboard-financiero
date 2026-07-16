@@ -196,7 +196,7 @@ async function main() {
   checks.push(
     assertCheck(
       blockedSantanderStatus.response.status === 401,
-      'Estado Santander interno rechaza acceso sin cookie',
+      'API Santander retirada conserva protección sin cookie',
       `status=${blockedSantanderStatus.response.status}`
     )
   );
@@ -231,35 +231,13 @@ async function main() {
       const santanderStatus = await request('/api/email/santander', {
         headers: { Cookie: cookie },
       });
-      let santanderStatusPayload = null;
-      try {
-        santanderStatusPayload = JSON.parse(santanderStatus.text);
-      } catch {
-        santanderStatusPayload = null;
-      }
       checks.push(
         assertCheck(
-          santanderStatus.response.status === 200 && santanderStatus.text.includes('"success":true'),
-          'Estado Santander responde con cookie válida',
+          santanderStatus.response.status === 410 && santanderStatus.text.includes('"disabled":true'),
+          'Cookie válida no reactiva Santander Email',
           `status=${santanderStatus.response.status}`
         )
       );
-      if (santanderStatusPayload?.supabaseSchema) {
-        checks.push(
-          assertCheck(
-            santanderStatusPayload.supabaseSchema.migrationRequired === false,
-            'Migraciones launch aplicadas',
-            JSON.stringify(santanderStatusPayload.supabaseSchema)
-          )
-        );
-        checks.push(
-          assertCheck(
-            santanderStatusPayload.supabaseSchema.publicWritesBlocked === true,
-            'Escrituras públicas anon bloqueadas en Supabase',
-            santanderStatusPayload.supabaseSchema.publicWritesReason || ''
-          )
-        );
-      }
     }
   } else {
     checks.push({

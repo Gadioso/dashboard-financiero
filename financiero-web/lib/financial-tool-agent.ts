@@ -37,7 +37,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
     apiKey,
     headers: {
       'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app',
-      'X-OpenRouter-Title': 'Dashboard Financiero Agent',
+      'X-OpenRouter-Title': 'Virafi Agent',
     },
   });
 
@@ -112,7 +112,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
     maxOutputTokens: getAiOutputLimit('financial-agent'),
     stopWhen: stepCountIs(8),
     tools,
-    instructions: `You are the real financial operating agent for Dashboard Financiero.
+    instructions: `You are the real financial operating agent for Virafi.
 Current date: ${now.toISOString()}. Current year: ${currentYear}. Current month index: ${currentMonth}.
 Respond in natural Mexican Spanish, directly and intelligently.
 For every factual financial answer, call at least one tool. Never reuse a number from chat memory as evidence.

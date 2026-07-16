@@ -24,7 +24,7 @@ La ruta comercial recomendada es B2B2C/B2B-first sin abandonar el B2C:
 - El orquestador decide que agente interviene, cruza hallazgos y evita respuestas contradictorias.
 - El modo personal y el modo negocio comparten identidad, bancos e historial, pero separan reglas, reportes y permisos.
 - SAT/CFDI y contabilidad mexicana son una ventaja competitiva, no un modulo accesorio.
-- Gmail debe quedar como fallback/beta; la ruta escalable es open banking, SAT/CFDI, conectores contables y APIs oficiales/proveedores autorizados.
+- Gmail/Santander está retirado como origen. La ruta escalable es open banking, SAT/CFDI, conectores contables y APIs oficiales/proveedores autorizados.
 - Inversiones y trading deben empezar como read-only, research y paper trading. La ejecucion real requiere permisos explicitos, controles de riesgo, cumplimiento regulatorio y, probablemente, partners regulados.
 - El producto puede sugerir tesis, escenarios y alertas, pero debe distinguir entre educacion financiera, research general, recomendacion personalizada y ejecucion regulada.
 

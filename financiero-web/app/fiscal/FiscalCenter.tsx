@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import VirafiBrand from '@/app/Components/VirafiBrand';
 
 type Overview = {
   fiscalFoundationReady: boolean;
@@ -126,10 +127,10 @@ export default function FiscalCenter() {
   const opinion = overview?.complianceOpinion?.opinion_status;
   const syncfyFiscal = overview?.integrations.find((item) => item.integration_type === 'open_fiscal' && item.provider === 'syncfy');
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-[var(--brand-cream)] text-slate-950">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <div><p className="text-xs font-black uppercase tracking-widest text-blue-700">SAT Core</p><h1 className="text-xl font-black">Centro fiscal inteligente</h1></div>
+          <div className="flex items-center gap-4"><VirafiBrand compact /><div><p className="text-xs font-black uppercase tracking-widest text-[var(--brand-fiscal)]">Virafi Fiscal</p><h1 className="text-xl">Centro fiscal inteligente</h1></div></div>
           <Link href="/" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">Volver al dashboard</Link>
         </div>
       </header>

@@ -57,7 +57,7 @@ export async function createPlaidLinkToken({
     expiration: string;
     request_id: string;
   }>('/link/token/create', {
-    client_name: 'Dashboard Financiero',
+    client_name: 'Virafi',
     language: 'es',
     country_codes: ['US'],
     products: ['transactions'],

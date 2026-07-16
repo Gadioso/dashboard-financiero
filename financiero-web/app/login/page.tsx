@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
+import VirafiBrand from '@/app/Components/VirafiBrand';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -75,28 +76,22 @@ function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-screen bg-[#f5f7fb] text-slate-950 lg:grid-cols-[1fr_480px]">
-      <section className="hidden border-r border-slate-200 bg-white p-10 lg:flex lg:flex-col lg:justify-between">
+    <main className="grid min-h-screen bg-[var(--brand-cream)] text-slate-950 lg:grid-cols-[1fr_480px]">
+      <section className="hidden border-r border-slate-200 bg-[var(--brand-ink)] p-10 text-[var(--brand-cream)] lg:flex lg:flex-col lg:justify-between">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-            <div>
-              <p className="text-base font-bold leading-tight">Dashboard</p>
-              <p className="text-base font-bold leading-tight">Financiero</p>
-            </div>
-          </div>
+          <VirafiBrand inverse showTagline />
           <div className="mt-20 max-w-xl">
-            <h1 className="text-5xl font-bold tracking-tight text-slate-950">Control financiero claro para todos tus movimientos.</h1>
-            <p className="mt-5 text-base leading-7 text-slate-500">
-              Entra para ver tu balance, registrar movimientos con IA y mantener separadas tus bolsas Vida, Placeres y Futuro.
+            <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">Tu CFO personal para ver con claridad hacia dónde va tu patrimonio.</h1>
+            <p className="mt-5 max-w-lg text-base leading-7 text-white/60">
+              Conecta cuentas, movimientos, presupuesto, ahorro, inversión y tu lado fiscal en un solo rumbo.
             </p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {['33/33/33', 'Banco', 'IA'].map((item) => (
-            <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-bold text-slate-900">{item}</p>
-              <p className="mt-1 text-xs text-slate-500">Activo</p>
+          {['Claridad', 'Rumbo', 'Progreso'].map((item) => (
+            <div key={item} className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <p className="text-sm font-semibold text-[var(--brand-cream)]">{item}</p>
+              <p className="mt-1 text-xs text-white/45">A tu ritmo</p>
             </div>
           ))}
         </div>
@@ -105,14 +100,10 @@ function LoginForm() {
       <section className="flex min-h-screen items-center justify-center px-4 py-10">
       <form onSubmit={(event) => submit(mode === 'account' ? accountAction : 'login', event)} className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3 lg:hidden">
-          <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-          <div>
-            <p className="font-bold leading-tight">Dashboard</p>
-            <p className="font-bold leading-tight">Financiero</p>
-          </div>
+          <VirafiBrand compact />
         </div>
-        <p className="text-sm font-semibold text-blue-700">Acceso financiero</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Iniciar sesión</h1>
+        <p className="text-sm font-semibold text-blue-700">Tu rumbo financiero</p>
+        <h1 className="mt-3 text-3xl tracking-tight text-slate-950">Iniciar sesión</h1>
         <p className="mt-2 text-sm text-slate-500">
           Entra con tu cuenta para consultar únicamente tu información financiera.
         </p>
@@ -254,8 +245,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
-          <p className="text-sm text-slate-500">Cargando acceso...</p>
+        <main className="flex min-h-screen items-center justify-center bg-[var(--brand-cream)] px-4 text-slate-950">
+          <VirafiBrand showTagline />
         </main>
       }
     >

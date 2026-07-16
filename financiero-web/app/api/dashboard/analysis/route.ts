@@ -146,7 +146,7 @@ async function generateOpenRouterText(prompt: string) {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app',
-          'X-OpenRouter-Title': 'Dashboard Financiero',
+          'X-OpenRouter-Title': 'Virafi',
         },
         body: JSON.stringify({
           model,

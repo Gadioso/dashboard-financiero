@@ -12,6 +12,8 @@ const categoriasValidas = ['Vida', 'Placeres', 'Futuro'];
 const tiposValidos = ['gasto', 'ingreso'];
 const herramientaProductivaRegex =
   /\b(openai|chatgpt|codex|twilio|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/;
+const senalIngresoRegex =
+  /(?<![\p{L}\p{N}])(?:gan[eé]|gener[eé]|ingres[eé]|me\s+pagaron|pagaron|cobr[eé]|recib[ií]|depositaron|dep[oó]sito|sueldo|salario|n[oó]mina|quincena|bono|freelance|ingresos?|utilidad|comisi[oó]n|cashback|reembolso|devoluci[oó]n)(?![\p{L}\p{N}])/u;
 
 function validarClasificacion(valor: unknown): ClasificacionMovimiento {
   const data = valor as Partial<ClasificacionMovimiento>;
@@ -57,7 +59,7 @@ function limpiarConcepto(texto: string) {
     .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*k\b/gi, '')
     .replace(/\$?\d+(?:[,.]\d{1,2})?/g, '')
     .replace(/\b(?:pesos?|mxn|m\.?n\.?)\b/gi, ' ')
-    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|concepto|quincena|efectivo|tuve|tengo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|con|a|al|la|el|un|una|por|para)\b/gi, ' ')
+    .replace(/(?<![\p{L}\p{N}])(reg[ií]strame|registrame|registra|registrar|ingresos?|ingres[eé]|concepto|quincena|efectivo|tuve|tengo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|gener[eé]|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|con|a|al|la|el|un|una|por|para)(?![\p{L}\p{N}])/giu, ' ')
     .replace(/\b(?:vida|placeres?|futuro)\b\s*$/gi, ' ')
     .replace(/[:"'“”‘’]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -116,7 +118,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
   const fechaDetectada = extraerFechaMovimiento(texto);
   const fechaMovimiento = fechaDetectada ? fechaDetectada.toISOString() : undefined;
 
-  if (/\b(reg[ií]strame|registrame|registra|registrar|gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision)\b/.test(normalizado) && /\b(ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance)\b/.test(normalizado)) {
+  if (senalIngresoRegex.test(normalizado)) {
     return {
       concepto,
       monto,
@@ -281,6 +283,11 @@ export async function clasificarMovimientoFinanciero(
 
   const criteriosPersonales = await obtenerCriteriosPersonales(context.supabase, context.profileId);
 
+  const ingresoLocal = clasificarPorReglas(texto);
+  if (ingresoLocal?.tipo === 'ingreso') {
+    return ingresoLocal;
+  }
+
   const estructurado = parsearMovimientoEstructurado(texto);
 
   if (estructurado.ok && !criteriosPersonales) {
@@ -355,7 +362,7 @@ export async function clasificarMovimientoFinanciero(
   "classification_rules": [
     "Personal criteria override generic examples. Use recurring_life_costs for Vida, valued_pleasures for Placeres, and recurring_investments or work_essential_costs for Futuro.",
     "The same merchant can mean different things for different owners. Classify from owner_context and transaction concept, never from another user's preferences.",
-    "If the message mentions salary, payroll, bonus, freelance, commission, 'gané', 'me pagaron', 'cobré', 'recibí' or income, set tipo='ingreso'.",
+    "If the message mentions salary, payroll, bonus, freelance, commission, cashback, refund, 'gané', 'generé', 'ingresé', 'me pagaron', 'cobré', 'recibí' or income, set tipo='ingreso'.",
     "If it mentions CETES, GBM, inversión, invertí, stocks, ETF, crypto or patrimonial allocation, classify as Futuro/Inversion.",
     "If it mentions emergency fund, classify as Futuro/Emergencia.",
     "If it mentions insurance, classify as Futuro/Seguros.",
