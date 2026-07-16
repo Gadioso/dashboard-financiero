@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Bank, CheckCircle, Circle, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
+import { ArrowRight, Bank, CheckCircle, Circle, Gear, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
 import PersonalizationInterview from './PersonalizationInterview';
+import ProfileSettings from './ProfileSettings';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 
 const fallbackBankConnectionLimit = 1;
@@ -17,6 +18,12 @@ type AccountStatus = {
     id: string;
     email?: string | null;
     full_name?: string | null;
+    avatar_path?: string | null;
+    bio?: string | null;
+    professional_headline?: string | null;
+    location?: string | null;
+    website_url?: string | null;
+    financial_why?: string | null;
     monthly_income_target?: number | string | null;
   } | null;
   telegramAccounts?: Array<{ id: string; chat_id: string; username?: string | null }>;
@@ -91,6 +98,7 @@ function userSafeMessage(value: unknown, fallback: string) {
 }
 
 export default function OnboardingClient() {
+  const [activeTab, setActiveTab] = useState<'profile' | 'finance'>('finance');
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [bankProviders, setBankProviders] = useState<BankProvider[]>([]);
   const [bankCountry, setBankCountry] = useState<BankCountryCode>('MX');
@@ -149,6 +157,7 @@ export default function OnboardingClient() {
     void Promise.resolve().then(() => {
       const params = new URLSearchParams(window.location.search);
       const routeError = params.get('error');
+      if (params.get('tab') === 'profile') setActiveTab('profile');
 
       if (routeError) setError(decodeURIComponent(routeError));
       void refreshStatus({ keepFeedback: Boolean(routeError) });
@@ -195,6 +204,7 @@ export default function OnboardingClient() {
   }, [refreshStatus]);
 
   const hasProfile = Boolean(status?.profileScoped && status.profile?.id);
+  const hasIdentityProfile = Boolean(status?.profile?.full_name && (status.profile.bio || status.profile.professional_headline || status.profile.financial_why));
   const hasCompletedGoals = Boolean(status?.personalization?.completed);
   const hasTelegram = Boolean((status?.telegramAccounts || []).length > 0);
   const activeBankConnections = (status?.bankConnections || []).filter((connection) => connection.status === 'active');
@@ -219,12 +229,12 @@ export default function OnboardingClient() {
   const accountLabel = status?.profile?.email || status?.profile?.full_name || 'Cuenta activa';
   const checklist = useMemo(
     () => [
-      { label: 'Tu cuenta', description: hasProfile ? accountLabel : 'Inicia sesión para guardar tu configuración.', done: hasProfile, href: hasProfile ? '/' : '/login?next=/onboarding', icon: UserCircle, action: hasProfile ? 'Ver dashboard' : 'Iniciar sesión' },
+      { label: 'Tu perfil', description: hasProfile ? accountLabel : 'Inicia sesión para guardar tu identidad y preferencias.', done: hasIdentityProfile, href: hasProfile ? '/onboarding?tab=profile' : '/login?next=/onboarding', icon: UserCircle, action: hasIdentityProfile ? 'Actualizar' : hasProfile ? 'Completar perfil' : 'Iniciar sesión' },
       { label: 'Tu plan financiero', description: 'Cuéntale a Virafi tus metas y prioridades para recibir recomendaciones personales.', done: hasCompletedGoals, href: '#personalizacion', icon: Target, action: hasCompletedGoals ? 'Actualizar' : 'Definir metas' },
       { label: 'Asistente en Telegram', description: 'Registra movimientos y consulta tus finanzas desde tu chat.', done: hasTelegram, href: '#telegram', icon: TelegramLogo, action: hasTelegram ? 'Administrar' : 'Conectar' },
       { label: 'Cuentas bancarias', description: 'Consulta saldos y movimientos con conexiones de solo lectura.', done: hasBankConnection, href: '#bancos', icon: Bank, action: hasBankConnection ? 'Administrar' : 'Conectar' },
     ],
-    [accountLabel, hasBankConnection, hasCompletedGoals, hasProfile, hasTelegram]
+    [accountLabel, hasBankConnection, hasCompletedGoals, hasIdentityProfile, hasProfile, hasTelegram]
   );
   const completed = checklist.filter((item) => item.done).length;
   const progressPct = Math.round((completed / checklist.length) * 100);
@@ -444,9 +454,9 @@ export default function OnboardingClient() {
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
             <VirafiBrand compact />
-            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Configuración financiera</h1>
+            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">{activeTab === 'profile' ? 'Tu perfil' : 'Configuración financiera'}</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Personaliza tus metas y administra tus integraciones desde un solo lugar.
+              {activeTab === 'profile' ? 'Define quién eres y qué quieres que Virafi tome en cuenta.' : 'Personaliza tus metas y administra tus integraciones desde un solo lugar.'}
             </p>
           </div>
           <Link
@@ -459,6 +469,15 @@ export default function OnboardingClient() {
 
         {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
         {message && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
+
+        <nav aria-label="Secciones de configuración" className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+          <button type="button" onClick={() => setActiveTab('profile')} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors ${activeTab === 'profile' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <UserCircle aria-hidden="true" className="size-5" weight="duotone" /> Perfil
+          </button>
+          <button type="button" onClick={() => setActiveTab('finance')} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors ${activeTab === 'finance' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <Gear aria-hidden="true" className="size-5" weight="duotone" /> Finanzas e integraciones
+          </button>
+        </nav>
 
         {!loading && !hasProfile && (
           <section className="rounded-lg border border-amber-200 bg-amber-50 p-5">
@@ -473,6 +492,9 @@ export default function OnboardingClient() {
           </section>
         )}
 
+        {activeTab === 'profile' && <ProfileSettings enabled={hasProfile} request={fetchWithSessionRefresh} onSaved={() => refreshStatus({ keepFeedback: true })} />}
+
+        {activeTab === 'finance' && <>
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5 md:p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -642,6 +664,7 @@ export default function OnboardingClient() {
             </section>
           </div>
         </div>
+        </>}
       </div>
     </main>
     </>

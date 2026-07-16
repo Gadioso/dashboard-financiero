@@ -1011,6 +1011,9 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
   const personalizacionQuery = profileId
     ? supabase.from('financial_personalization_profiles').select('birth_year, occupation, industry, work_model, income_sources, income_growth_goal, short_term_goals, medium_term_goals, long_term_goals, financial_concerns, valued_pleasures, pleasures_to_reduce, recurring_life_costs, recurring_investments, emergency_fund_status, investment_experience, risk_tolerance, recommendation_style').eq('profile_id', profileId).maybeSingle()
     : Promise.resolve({ data: null, error: null });
+  const identidadQuery = profileId
+    ? supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', profileId).maybeSingle()
+    : Promise.resolve({ data: null, error: null });
 
   const [
     { data: ingresos, error: errorIngresos },
@@ -1019,6 +1022,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     { data: gastosRecientes, error: errorRecientes },
     { data: ultimoIngreso, error: errorUltimoIngreso },
     { data: personalizacion },
+    { data: identidad },
   ] =
     await Promise.all([
       applyProfileFilter(ingresosPeriodoQuery, profileId),
@@ -1027,6 +1031,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
       applyProfileFilter(gastosRecientesQuery, profileId),
       applyProfileFilter(ultimoIngresoQuery, profileId).maybeSingle(),
       personalizacionQuery,
+      identidadQuery,
     ]);
 
   if (errorIngresos) throw new Error(`No pude consultar ingresos: ${errorIngresos.message}`);
@@ -1080,6 +1085,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
       origen: gasto.origen,
     })),
     perfilPersonalizado: personalizacion || null,
+    identidadPerfil: identidad || null,
   };
 }
 
@@ -1122,7 +1128,7 @@ async function responderConversacionAbierta({
   }
 
   const system = `
-You are the conversational intelligence in Virafi, Diego Gayoso's personal financial assistant.
+You are the conversational intelligence in Virafi, the authenticated user's personal financial assistant.
 
 Operating context:
 ${JSON.stringify({
@@ -1139,9 +1145,10 @@ Behavior contract:
 - Respond in natural Mexican Spanish. Be direct, intelligent, warm, concrete and conversational.
 - Answer the actual message first. Do not sound like a command menu, tutorial or scripted bot.
 - Use only the supplied financial context for factual financial claims. Never invent balances, movements or actions.
+- Use identidadPerfil as personal context for tone, priorities and recommendations. It never overrides explicit financial amounts, movements or goals.
 - Connect follow-ups to the recent conversation. Resolve pronouns and short references from that history when clear.
-- If Diego asks where a number comes from, show the exact breakdown from the context.
-- If he asks for an opinion, give a diagnosis, the main risk and one best next action.
+- If the user asks where a number comes from, show the exact breakdown from the context.
+- If the user asks for an opinion, give a diagnosis, the main risk and one best next action.
 - If information is missing, ask exactly one useful clarifying question.
 - Never claim an operation was performed unless the context or conversation says it was completed.
 - You may explain that the assistant can register, query, reclassify and delete movements, but this response itself is conversational.
@@ -1152,9 +1159,9 @@ Behavior contract:
 {
   "role": "financial_conversation_agent",
   "identity": {
-    "user": "Diego Gayoso",
+    "user": "Authenticated Virafi user",
     "system_name": "Virafi",
-    "assistant_purpose": "Help Diego understand, query, and operate his personal financial dashboard conversationally."
+    "assistant_purpose": "Help the authenticated user understand, query, and operate their personal financial dashboard conversationally."
   },
   "language_policy": {
     "instructions_language": "English",
@@ -1173,7 +1180,7 @@ Behavior contract:
     "If the user asks where a number comes from, show the exact breakdown using ingresosDetalle, gastosPorBolsa or gastosRecientes.",
     "If the user asks for an opinion, give a diagnosis, the main risk, and the next best action. Do not repeat every dashboard number.",
     "If the user asks how much remains, compute from presupuestoMes and restante.",
-    "If information is missing, ask exactly one clarifying question, with examples in Diego's language.",
+    "If information is missing, ask exactly one clarifying question, with natural examples in the user's language.",
     "Do not claim that you registered, deleted, or modified anything unless the provided context says the action already happened.",
     "Do not provide regulated financial advice or guaranteed returns.",
     "Do not sound like a tutorial. Answer the actual message first."

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   if (!supabase || !tenant.profileId) return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
   const [personalizationResult, profileResult] = await Promise.all([
     supabase.from('financial_personalization_profiles').select('*').eq('profile_id', tenant.profileId).maybeSingle(),
-    supabase.from('profiles').select('full_name, monthly_income_target').eq('id', tenant.profileId).maybeSingle(),
+    supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', tenant.profileId).maybeSingle(),
   ]);
   if (personalizationResult.error || profileResult.error) return NextResponse.json({ success: false, error: 'No pude cargar tu perfil financiero.' }, { status: 500 });
   return NextResponse.json({ success: true, personalization: { ...(personalizationResult.data || {}), ...(profileResult.data || {}) } });
@@ -64,7 +64,7 @@ export async function PUT(request: Request) {
     };
     const [personalizationResult, profileResult] = await Promise.all([
       supabase.from('financial_personalization_profiles').upsert(payload, { onConflict: 'profile_id' }).select('*').single(),
-      supabase.from('profiles').update(profilePayload).eq('id', tenant.profileId).select('full_name, monthly_income_target').single(),
+      supabase.from('profiles').update(profilePayload).eq('id', tenant.profileId).select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').single(),
     ]);
     if (personalizationResult.error || profileResult.error) return NextResponse.json({ success: false, error: 'No pude guardar tus respuestas. Intenta nuevamente.' }, { status: 500 });
     const data = { ...personalizationResult.data, ...profileResult.data };

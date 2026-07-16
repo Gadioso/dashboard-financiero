@@ -85,7 +85,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       inputSchema: z.object({}),
       execute: async () => {
         const [profileResult, goalsResult, riskResult] = await Promise.all([
-          supabase.from('profiles').select('full_name, monthly_income_target').eq('id', profileId).maybeSingle(),
+          supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', profileId).maybeSingle(),
           supabase.from('fondos_acumulados').select('*').eq('profile_id', profileId),
           supabase.from('advisor_disclosures').select('metadata, accepted_at').eq('profile_id', profileId).eq('disclosure_type', 'risk_profile').order('accepted_at', { ascending: false }).limit(1).maybeSingle(),
         ]);
@@ -119,7 +119,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       inputSchema: z.object({}),
       execute: async () => {
         const [profileResult, personalizationResult, fundsResult, goalsResult] = await Promise.all([
-          supabase.from('profiles').select('full_name, monthly_income_target').eq('id', profileId).maybeSingle(),
+          supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', profileId).maybeSingle(),
           supabase.from('financial_personalization_profiles').select('birth_year, occupation, industry, work_model, income_sources, income_growth_goal, short_term_goals, medium_term_goals, long_term_goals, financial_concerns, valued_pleasures, pleasures_to_reduce, recurring_life_costs, recurring_investments, emergency_fund_status, investment_experience, risk_tolerance, recommendation_style, interview_completed_at').eq('profile_id', profileId).maybeSingle(),
           supabase.from('fondos_acumulados').select('*').eq('profile_id', profileId),
           supabase.from('financial_goals').select('name, current_amount, target_amount, target_date, horizon_months, source, status, sort_order').eq('profile_id', profileId).order('sort_order'),
@@ -197,6 +197,7 @@ You can inspect the full read-only Virafi workspace for this authenticated profi
 For "anual", "anualmente" or "este año", use January 1 through the first day of next month (year-to-date), unless the user names another year.
 Futuro includes persisted categories Futuro and Seguros.
 The profile field monthly_income_target is the user's monthly income goal. The risk-profile field monthlyContribution is only the planned monthly investment contribution. Never confuse those two numbers.
+The identity profile fields bio, professional_headline, location and financial_why are context for prioritization and explanation. Never turn them into invented amounts or goals; explicit saved financial data remains the source of truth.
 Money allocated to Futuro is capital allocation or spending, not earned income and not automatic progress toward the monthly income goal. Explain that distinction whenever the user connects Futuro with the income goal.
 Explain the conclusion first, then the evidence, then one useful next action when relevant.
 Do not invent returns, balances, movements, connections or goals.

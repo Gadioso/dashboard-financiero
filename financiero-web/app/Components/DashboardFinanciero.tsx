@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowRight,
   ArrowsDownUp,
@@ -253,6 +254,11 @@ type AccountStatus = {
   profile?: {
     id: string;
     full_name?: string | null;
+    avatarUrl?: string | null;
+    professional_headline?: string | null;
+    bio?: string | null;
+    location?: string | null;
+    financial_why?: string | null;
     monthly_income_target?: number | string | null;
   } | null;
   billing?: BillingStatus;
@@ -558,6 +564,7 @@ export default function DashboardFinanciero() {
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [accountProfile, setAccountProfile] = useState<NonNullable<AccountStatus['profile']> | null>(null);
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(0);
   const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -944,7 +951,10 @@ export default function DashboardFinanciero() {
           const accountData = accountResult.status === 'fulfilled' ? await readJsonResponse<AccountStatus>(accountResult.value) : null;
           if (accountData) {
             if (accountData.billing) setBillingStatus(accountData.billing);
-            if (accountData.profile) setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
+            if (accountData.profile) {
+              setAccountProfile(accountData.profile);
+              setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
+            }
             if (accountData.bankConnections) setBankConnections(accountData.bankConnections);
             if (accountData.bankAccounts) setBankAccounts(accountData.bankAccounts);
             if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
@@ -1709,6 +1719,9 @@ export default function DashboardFinanciero() {
     : billingStatus?.plan === 'beta'
       ? 'Beta'
       : 'Gratis';
+  const accountName = accountProfile?.full_name?.trim() || 'Tu perfil';
+  const accountFirstName = accountName === 'Tu perfil' ? '' : accountName.split(/\s+/)[0];
+  const accountInitials = accountName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'V';
   const activeBankConnections = bankConnections.filter((connection) => connection.status === 'active').length;
   const bankStatusLabel = activeBankConnections === 0
     ? 'Sin bancos conectados'
@@ -2668,15 +2681,15 @@ export default function DashboardFinanciero() {
             <button type="button" onClick={cerrarSesion} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50">
               Salir
             </button>
-            <div className="mt-3 rounded-lg border border-slate-200 bg-[var(--brand-cream)] p-3">
+            <Link href="/onboarding?tab=profile" className="mt-3 block rounded-lg border border-slate-200 bg-[var(--brand-cream)] p-3 transition-colors hover:border-blue-200 hover:bg-blue-50" aria-label="Abrir mi perfil">
               <div className="flex items-center gap-3">
-                <div className="grid size-9 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">DM</div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Diego Martínez</p>
+                <div className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-blue-600 text-sm font-bold text-white">{accountProfile?.avatarUrl ? <Image src={accountProfile.avatarUrl} alt={`Foto de ${accountName}`} fill sizes="36px" unoptimized className="object-cover" /> : accountInitials}</div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{accountName}</p>
                   <p className="text-xs text-slate-500">Plan {planLabel}</p>
                 </div>
               </div>
-            </div>
+            </Link>
           </div>
         </aside>
 
@@ -2703,7 +2716,7 @@ export default function DashboardFinanciero() {
                 )}
               </div>
               <div className="hidden min-w-0 flex-1 md:block">
-                <p className="font-brand truncate text-2xl text-slate-950">{vistaActiva === 'resumen' ? 'Hola, Diego.' : activeNav.label}</p>
+                <p className="font-brand truncate text-2xl text-slate-950">{vistaActiva === 'resumen' ? `Hola${accountFirstName ? `, ${accountFirstName}` : ''}.` : activeNav.label}</p>
                 {vistaActiva !== 'resumen' && <p className="mt-0.5 text-xs font-semibold text-slate-400">Virafi · {selectedMonthName} 2026</p>}
               </div>
               <div className="hidden items-center gap-2 md:flex">
@@ -2763,7 +2776,7 @@ export default function DashboardFinanciero() {
                   <p className="text-sm font-bold text-slate-950">Plan {planLabel}</p>
                   <p className="text-xs font-bold text-emerald-700">{billingStatus?.active ? 'Activo' : 'Disponible'}</p>
                 </div>
-                <div className="grid size-10 place-items-center rounded-full bg-slate-950 text-sm font-bold text-white" aria-label="Diego Martínez">DM</div>
+                <Link href="/onboarding?tab=profile" className="relative grid size-10 place-items-center overflow-hidden rounded-full bg-slate-950 text-sm font-bold text-white" aria-label={`Abrir perfil de ${accountName}`}>{accountProfile?.avatarUrl ? <Image src={accountProfile.avatarUrl} alt={`Foto de ${accountName}`} fill sizes="40px" unoptimized className="object-cover" /> : accountInitials}</Link>
               </div>
             </div>
           </header>
@@ -2936,7 +2949,7 @@ export default function DashboardFinanciero() {
             <section aria-hidden="true" className="hidden">
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div>
-                    <h1 className="text-2xl tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
+                    <h1 className="text-2xl tracking-tight text-slate-950 md:text-3xl">Hola{accountFirstName ? `, ${accountFirstName}` : ''}.</h1>
                   <p className="mt-1 text-sm text-slate-500">
                     {loading ? 'Actualizando datos...' : `Resumen de ${selectedMonthName.toLowerCase()} 2026 con regla 33/33/33.`}
                   </p>
@@ -3810,7 +3823,7 @@ export default function DashboardFinanciero() {
                           <p className="font-brand text-lg font-medium italic text-blue-100">Virafi</p>
                           <h3 className="mt-1 text-2xl font-black">{reportScope === 'year' ? 'Reporte anual 2026' : `Reporte mensual · ${selectedMonthName} 2026`}</h3>
                         </div>
-                        <p className="text-sm text-blue-100">Diego Martínez · MXN</p>
+                        <p className="text-sm text-blue-100">{accountName} · MXN</p>
                       </div>
                     </header>
 

@@ -185,7 +185,7 @@ export async function GET(request: Request) {
       billingResult,
       countResults,
     ] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
+      supabase.from('profiles').select('id, email, full_name, avatar_path, bio, professional_headline, location, website_url, financial_why, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
       supabase.from('bank_connections').select('id, provider, institution_name, status, last_sync_at, consent_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       supabase.from('bank_accounts').select('id, connection_id, name, official_name, type, subtype, currency, current_balance, available_balance, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
@@ -229,7 +229,10 @@ export async function GET(request: Request) {
       configured: true,
       profileScoped: errors.length === 0 && profileResult.data?.id === profileId,
       profileId,
-      profile: profileResult.data || null,
+      profile: profileResult.data ? {
+        ...profileResult.data,
+        avatarUrl: profileResult.data.avatar_path ? `/api/account/profile/avatar?v=${encodeURIComponent(profileResult.data.updated_at || '')}` : null,
+      } : null,
       telegramAccounts: telegramResult.data || [],
       bankConnections: missingOpenBankingTables ? [] : dedupeBankConnections(bankConnectionResult.data || []),
       bankAccounts: missingOpenBankingTables ? [] : bankAccountResult.data || [],
