@@ -382,7 +382,7 @@ export function nombreBolsa(categoria: string) {
 
 export function nombreOrigen(origen: string, subcategoria?: string | null) {
   void subcategoria;
-  if (origen === 'Santander_Email') return 'Correo Santander (retirado)';
+  if (origen === 'Santander_Email') return 'Santander Email';
   if (origen === 'Supabase') return 'Web';
   if (origen === 'Telegram') return 'Telegram';
   if (origen === 'Web') return 'Web';
