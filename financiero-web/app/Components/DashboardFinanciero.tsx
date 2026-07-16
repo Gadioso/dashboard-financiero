@@ -2,7 +2,30 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Bell, ShieldCheck, Target } from '@phosphor-icons/react';
+import {
+  ArrowRight,
+  ArrowsDownUp,
+  Bank,
+  Bell,
+  CalendarBlank,
+  ChartDonut,
+  ChartLineUp,
+  ChatCircleDots,
+  CheckCircle,
+  CreditCard,
+  Eye,
+  FileText,
+  Gear,
+  House,
+  PencilSimple,
+  Plant,
+  Receipt,
+  ShieldCheck,
+  Sparkle,
+  Target,
+  Wallet,
+  X,
+} from '@phosphor-icons/react';
 import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 import {
@@ -340,38 +363,19 @@ function esAbonoTarjetaSospechoso(abono: AbonoTarjetaCredito) {
 }
 
 function GearIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-      <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06a1.8 1.8 0 0 0-1.17-1.64 1.8 1.8 0 0 0-1.89.38l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.9 15a1.8 1.8 0 0 0-1.65-1.08H2.1a2.1 2.1 0 0 1 0-4.2h.06A1.8 1.8 0 0 0 3.8 8.55a1.8 1.8 0 0 0-.38-1.89l-.04-.04a2.1 2.1 0 1 1 2.97-2.97l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.45 2.4V2.1a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.08h.06a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z" />
-    </svg>
-  );
+  return <Gear aria-hidden="true" className="size-5" weight="regular" />;
 }
 
 function ChatIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.6 8.6 0 0 1-7.7 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.1a8.4 8.4 0 0 1-.9-3.8 8.6 8.6 0 0 1 4.7-7.7 8.4 8.4 0 0 1 3.8-.9h.5A8.5 8.5 0 0 1 21 11v.5Z" />
-    </svg>
-  );
+  return <ChatCircleDots aria-hidden="true" className="size-5" weight="regular" />;
 }
 
 function EditIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
+  return <PencilSimple aria-hidden="true" className="size-4" weight="regular" />;
 }
 
 function CloseIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
+  return <X aria-hidden="true" className="size-5" weight="regular" />;
 }
 
 function valorNumerico(...values: Array<number | string | null | undefined>) {
@@ -1855,35 +1859,35 @@ export default function DashboardFinanciero() {
       used: resumen.gastado.Placeres,
       limit: resumen.presupuesto.Placeres,
       remaining: restantes.Placeres,
-      color: 'bg-blue-600',
-      tint: 'bg-blue-50 text-blue-700',
+      color: 'bg-orange-500',
+      tint: 'bg-orange-50 text-orange-700',
     },
     {
       label: 'Futuro',
       used: resumen.gastado.Futuro,
       limit: resumen.presupuesto.Futuro,
       remaining: restantes.Futuro,
-      color: 'bg-violet-600',
-      tint: 'bg-violet-50 text-violet-700',
+      color: 'bg-amber-500',
+      tint: 'bg-amber-50 text-amber-700',
     },
   ], [restantes.Futuro, restantes.Placeres, restantes.Vida, resumen.gastado.Futuro, resumen.gastado.Placeres, resumen.gastado.Vida, resumen.presupuesto.Futuro, resumen.presupuesto.Placeres, resumen.presupuesto.Vida]);
-  const desktopNavItems: Array<{ label: string; view: DashboardView; mark: string }> = [
-    { label: 'Resumen', view: 'resumen', mark: 'R' },
-    { label: 'Movimientos', view: 'movimientos', mark: 'M' },
-    { label: 'Presupuestos', view: 'presupuestos', mark: 'P' },
-    { label: 'Metas', view: 'metas', mark: 'G' },
-    { label: 'Análisis', view: 'analisis', mark: 'A' },
-    { label: 'Cuentas', view: 'cuentas', mark: 'C' },
-    { label: 'Wealth', view: 'wealth', mark: 'W' },
-    { label: 'Planes', view: 'planes', mark: 'P' },
-    { label: 'Reportes', view: 'reportes', mark: 'R' },
+  const desktopNavItems: Array<{ label: string; view: DashboardView; icon: React.ElementType }> = [
+    { label: 'Resumen', view: 'resumen', icon: House },
+    { label: 'Movimientos', view: 'movimientos', icon: ArrowsDownUp },
+    { label: 'Presupuestos', view: 'presupuestos', icon: ChartDonut },
+    { label: 'Metas', view: 'metas', icon: Target },
+    { label: 'Análisis', view: 'analisis', icon: ChartLineUp },
+    { label: 'Cuentas', view: 'cuentas', icon: Bank },
+    { label: 'Virafi Wealth', view: 'wealth', icon: Plant },
+    { label: 'Planes', view: 'planes', icon: CalendarBlank },
+    { label: 'Reportes', view: 'reportes', icon: FileText },
   ];
   const mobileNavItems = [
-    { label: 'Inicio', view: 'resumen' as const, mark: 'I' },
-    { label: 'Mov.', view: 'movimientos' as const, mark: 'M' },
-    { label: 'Metas', view: 'metas' as const, mark: 'G' },
-    { label: 'Cuentas', view: 'cuentas' as const, mark: 'C' },
-    { label: 'Wealth', view: 'wealth' as const, mark: 'W' },
+    { label: 'Inicio', view: 'resumen' as const, icon: House },
+    { label: 'Mov.', view: 'movimientos' as const, icon: ArrowsDownUp },
+    { label: 'Metas', view: 'metas' as const, icon: Target },
+    { label: 'Cuentas', view: 'cuentas' as const, icon: Bank },
+    { label: 'Wealth', view: 'wealth' as const, icon: Plant },
   ];
   const activeNav = desktopNavItems.find((item) => item.view === vistaActiva) || desktopNavItems[0];
   const monthScopedViews: DashboardView[] = ['resumen', 'movimientos', 'presupuestos', 'analisis', 'reportes'];
@@ -2169,6 +2173,21 @@ export default function DashboardFinanciero() {
   const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
   const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
   const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
+  const fondosVisibles = fondosAcumulados.reduce((total, fondo) => total + fondoActual(fondo), 0);
+  const patrimonioVisible = cuentasReales.length > 0
+    ? saldoCuentas + fondosVisibles
+    : (currentMonthSummary?.saldoAcumulado || flujoNetoMes) + fondosVisibles;
+  const presupuestoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.limit, 0);
+  const gastoPresupuestadoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.used, 0);
+  const presupuestoUtilizado = presupuestoTotal > 0 ? Math.min((gastoPresupuestadoTotal / presupuestoTotal) * 100, 100) : 0;
+  const recomendacionResumen = flujoNetoMes > 0
+    ? `Con tu flujo actual, podrías dirigir ${formatoDineroCorto(Math.max(flujoNetoMes * 0.25, 0))} extra a tu meta prioritaria este mes.`
+    : flujoNetoMes < 0
+      ? `Tu flujo está ${formatoDineroCorto(Math.abs(flujoNetoMes))} por debajo de cero. Conviene ajustar primero la bolsa con más presión.`
+      : 'Tu flujo está en equilibrio. El siguiente paso es registrar ingresos y gastos para que Virafi pueda recomendarte un movimiento concreto.';
+  const recomendacionDetalle = bolsaMasPresionada && calcularPorcentaje(bolsaMasPresionada.used, bolsaMasPresionada.limit) > avanceMes
+    ? `${bolsaMasPresionada.label} va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes; revisa sus movimientos antes de aumentar aportaciones.`
+    : 'Tu ritmo de gasto está alineado con el avance del mes. Mantén los límites y revisa de nuevo en una semana.';
   const openAgentTasks = agentTasks.filter((task) => ['open', 'in_progress', 'waiting_user'].includes(task.status));
   const taskNotifications = openAgentTasks.filter((task) => task.agent_key === 'movement_monitor');
   const movementNotifications = ultimosMovimientos.slice(0, 20).map((movement) => ({
@@ -2580,44 +2599,57 @@ export default function DashboardFinanciero() {
           </div>
         </div>
       )}
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[220px_1fr]">
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_1fr]">
         <aside className="hidden border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-          <div className="flex h-16 items-center gap-3 px-5">
-            <VirafiBrand compact />
+          <div className="border-b border-slate-100 px-6 pb-5 pt-6">
+            <VirafiBrand />
+            <p className="mt-4 text-sm leading-5 text-slate-500">Tu dinero, con claridad y rumbo.</p>
           </div>
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5 text-sm font-medium text-slate-500" aria-label="Secciones del dashboard">
-            {desktopNavItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => setVistaActiva(item.view)}
-                aria-current={vistaActiva === item.view ? 'page' : undefined}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                  vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <span aria-hidden="true" className={`grid size-7 place-items-center rounded-lg text-xs font-black ${
-                  vistaActiva === item.view ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
-                }`}>
-                  {item.mark}
-                </span>
-                {item.label}
-              </button>
-            ))}
+          <nav className="flex-1 overflow-y-auto px-3 py-4 text-sm font-semibold text-slate-600" aria-label="Secciones del dashboard">
+            {desktopNavItems.map((item, index) => {
+              const Icon = item.icon;
+
+              return (
+                <React.Fragment key={item.label}>
+                  {index === 5 && <div className="my-3 border-t border-slate-100" aria-hidden="true" />}
+                  <button
+                    type="button"
+                    onClick={() => setVistaActiva(item.view)}
+                    aria-current={vistaActiva === item.view ? 'page' : undefined}
+                    className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <Icon aria-hidden="true" className="size-5 shrink-0" weight={vistaActiva === item.view ? 'duotone' : 'regular'} />
+                    <span>{item.label}</span>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+            <Link href="/fiscal" className="mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+              <Receipt aria-hidden="true" className="size-5" weight="regular" />
+              <span>Centro fiscal</span>
+            </Link>
+            <button type="button" onClick={() => setChatOpen(true)} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+              <ChatCircleDots aria-hidden="true" className="size-5" weight="regular" />
+              <span className="flex-1">Asistente financiero</span>
+              <span className="text-xs font-bold text-blue-700">Nuevo</span>
+            </button>
+            <button type="button" onClick={toggleNotificationTray} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+              <Bell aria-hidden="true" className="size-5" weight="regular" />
+              <span className="flex-1">Notificaciones</span>
+              {unreadNotifications.length > 0 && <span className="grid min-w-6 place-items-center rounded-full bg-blue-600 px-1 text-xs font-black leading-6 text-white">{Math.min(unreadNotifications.length, 99)}</span>}
+            </button>
           </nav>
           <div className="border-t border-slate-100 px-4 pb-4 pt-3">
             <Link href="/onboarding" aria-label="Configuración" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <GearIcon />
               <span>Configuración</span>
             </Link>
-            <Link href="/fiscal" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-              <span className="grid size-5 place-items-center text-xs font-black text-blue-700">SAT</span>
-              <span>Centro fiscal</span>
-            </Link>
             <button type="button" onClick={cerrarSesion} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50">
               Salir
             </button>
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mt-3 rounded-lg border border-slate-200 bg-[var(--brand-cream)] p-3">
               <div className="flex items-center gap-3">
                 <div className="grid size-9 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">DM</div>
                 <div>
@@ -2630,8 +2662,8 @@ export default function DashboardFinanciero() {
         </aside>
 
         <main className="min-w-0 pb-24 lg:pb-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-            <div className="flex min-h-16 flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+            <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
               <div className="relative flex items-center justify-between gap-3 md:hidden">
                 <div className="flex items-center gap-3">
                   <VirafiBrand compact />
@@ -2652,8 +2684,8 @@ export default function DashboardFinanciero() {
                 )}
               </div>
               <div className="hidden min-w-0 flex-1 md:block">
-                <p className="text-xs font-semibold uppercase text-slate-400">Vista actual</p>
-                <p className="truncate text-base font-bold text-slate-950">{activeNav.label}</p>
+                <p className="font-brand truncate text-2xl text-slate-950">{vistaActiva === 'resumen' ? 'Hola, Diego.' : activeNav.label}</p>
+                {vistaActiva !== 'resumen' && <p className="mt-0.5 text-xs font-semibold text-slate-400">Virafi · {selectedMonthName} 2026</p>}
               </div>
               <div className="hidden items-center gap-2 md:flex">
                 <div className="relative">
@@ -2708,23 +2740,23 @@ export default function DashboardFinanciero() {
                     {premiumActive ? 'Facturación' : 'Mejorar plan'}
                   </button>
                 )}
-                <span className={`hidden rounded-lg px-3 py-2 text-sm font-semibold md:inline-flex ${
-                  premiumActive ? 'bg-violet-50 text-violet-700' : 'bg-emerald-50 text-emerald-700'
-                }`}>
-                  {planLabel}
-                </span>
+                <div className="hidden min-w-28 border-l border-slate-200 pl-4 md:block">
+                  <p className="text-sm font-bold text-slate-950">Plan {planLabel}</p>
+                  <p className="text-xs font-bold text-emerald-700">{billingStatus?.active ? 'Activo' : 'Disponible'}</p>
+                </div>
+                <div className="grid size-10 place-items-center rounded-full bg-slate-950 text-sm font-bold text-white" aria-label="Diego Martínez">DM</div>
               </div>
             </div>
           </header>
 
-          <div className="space-y-5 p-3 sm:p-4 md:p-6 lg:p-8">
+          <div className="mx-auto max-w-[1800px] space-y-5 p-3 sm:p-4 md:p-6 lg:p-7">
             {mensajeStatus && (
               <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${statusToneClass[statusTone]}`}>
                 {mensajeStatus}
               </div>
             )}
 
-            <section key={vistaActiva} className={`${vistaActiva === 'wealth' ? 'hidden' : 'dashboard-view-panel'} rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5`}>
+            <section key={vistaActiva} className={`${['wealth', 'resumen'].includes(vistaActiva) ? 'hidden' : 'dashboard-view-panel'} rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5`}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-sm font-bold text-blue-700">{activeNav.label}</p>
@@ -2766,7 +2798,119 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section id="resumen" className={`${vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.4fr_1fr]`}>
+            <section id="resumen" className={(vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden') + ' scroll-mt-28 gap-4 xl:grid-cols-[minmax(270px,0.82fr)_minmax(420px,1.28fr)_minmax(350px,1fr)]'}>
+              <article className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl text-slate-950">Balance mensual</h2>
+                  <button type="button" aria-label="Mostrar u ocultar balance" className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-950">
+                    <Eye aria-hidden="true" className="size-5" weight="regular" />
+                  </button>
+                </div>
+                <div className="mt-8">
+                  <p className="text-sm font-semibold text-slate-500">Patrimonio visible</p>
+                  <p className="mt-1 break-words font-brand text-[clamp(2.25rem,4vw,3.35rem)] leading-none tracking-tight text-slate-950">{formatoDineroCorto(patrimonioVisible)}</p>
+                  <p className={'mt-3 text-sm font-bold ' + (patrimonioVisible < 0 ? 'text-rose-600' : tendenciaTone(tendencias.flujo))}>
+                    {tendencias.flujo} <span className="font-medium text-slate-500">vs. mes anterior</span>
+                  </p>
+                </div>
+                <div className="mt-7 grid gap-3 rounded-xl bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-600">Ingresos</span>
+                    <strong className="text-emerald-700">{formatoDineroCorto(resumen.ingresosMes)}</strong>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-600">Gastos</span>
+                    <strong className="text-slate-950">{formatoDineroCorto(totalGastadoMes)}</strong>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setVistaActiva('analisis')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-5 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ver detalle <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+
+              <article className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl text-slate-950">Resumen del mes</h2>
+                    <p className="mt-1 text-sm text-slate-500">Ingresos, gastos y flujo real</p>
+                  </div>
+                  <select aria-label="Mes del resumen" value={mesActivo} onChange={(event) => changeMesActivo(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500">
+                    {meses2026.map((mes) => (
+                      <option key={mes.etiqueta} value={'2026-' + String(mes.indice + 1).padStart(2, '0')}>{mes.etiqueta} 2026</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-7">
+                  <p className="text-sm font-semibold text-slate-500">Flujo mensual</p>
+                  <p className={'mt-1 font-brand text-4xl leading-none ' + (flujoNetoMes < 0 ? 'text-rose-600' : 'text-emerald-700')}>{formatoDineroCorto(flujoNetoMes)}</p>
+                </div>
+                <div className="relative mt-6 flex h-32 items-end gap-2 border-b border-slate-200 pb-5">
+                  {!hasMonthlyData && <p className="absolute inset-x-0 top-8 text-center text-xs font-semibold text-slate-400">Sin historial suficiente</p>}
+                  {resumenMensual.slice(0, 12).map((mes, index) => {
+                    const fallbackHeight = 18 + ((index % 4) * 11);
+                    const resultado = mes.resultado;
+                    const height = hasMonthlyData ? Math.max((Math.abs(resultado) / maxMonthlyBar) * 88, resultado ? 8 : 2) : fallbackHeight;
+                    return (
+                      <div key={mes.mes} className="flex min-w-4 flex-1 flex-col items-center justify-end gap-2">
+                        <span
+                          className={'w-full max-w-3 rounded-t-sm ' + (hasMonthlyData ? resultado >= 0 ? 'bg-blue-600' : 'bg-slate-300' : index % 3 === 0 ? 'bg-blue-200' : 'bg-slate-200')}
+                          style={{ height: height + 'px' }}
+                          title={mes.mes + ': ' + formatoDineroCorto(resultado)}
+                        />
+                        <span className={'text-[10px] font-bold ' + (mes.mes === selectedMonthName ? 'text-blue-700' : 'text-slate-400')}>{mes.mes.slice(0, 1)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => setVistaActiva('analisis')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ver análisis completo <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+
+              <article id="presupuesto" className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl text-slate-950">Presupuesto por categoría</h2>
+                    <p className="mt-1 text-sm text-slate-500">{presupuestoUtilizado.toFixed(0)}% utilizado</p>
+                  </div>
+                  <span className="text-base font-black text-blue-700">33/33/33</span>
+                </div>
+                <div className="mt-6 grid items-center gap-6 sm:grid-cols-[150px_1fr] xl:grid-cols-1 2xl:grid-cols-[160px_1fr]">
+                  <div
+                    className="relative mx-auto grid size-40 place-items-center rounded-full"
+                    style={{ background: 'conic-gradient(var(--brand-fiscal) 0 33.333%, var(--brand-business) 33.333% 66.666%, var(--brand-wealth) 66.666% 100%)' }}
+                    role="img"
+                    aria-label="Distribución equilibrada del presupuesto en Vida, Placeres y Futuro"
+                  >
+                    <div className="grid size-24 place-items-center rounded-full bg-white text-center">
+                      <div>
+                        <p className="font-brand text-xl leading-none text-slate-950">{formatoDineroCorto(gastoPresupuestadoTotal)}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Gasto total</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {budgetBuckets.map((bucket) => (
+                      <div key={bucket.label} className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className={'size-3 shrink-0 rounded-full ' + bucket.color} />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-950">{bucket.label}</p>
+                            <p className="text-xs text-slate-500">33% · {formatoDineroCorto(bucket.limit)}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">{formatoDineroCorto(bucket.used)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button type="button" onClick={() => setVistaActiva('presupuestos')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ver presupuestos <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+            </section>
+
+            <section aria-hidden="true" className="hidden">
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div>
                     <h1 className="text-2xl tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
@@ -3025,7 +3169,127 @@ export default function DashboardFinanciero() {
               </div>
             )}
 
-            <section className={`${vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden'} gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-6`}>
+            <section className={(vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden') + ' gap-4 xl:grid-cols-[1.14fr_0.9fr_1.06fr]'}>
+              <article className="flex min-h-[390px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl text-slate-950">Movimientos recientes</h2>
+                  <button type="button" onClick={() => setVistaActiva('movimientos')} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Ver todos <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </button>
+                </div>
+                <div className="mt-4 divide-y divide-slate-100">
+                  {ultimosMovimientos.length === 0 ? (
+                    <div className="grid min-h-56 place-items-center rounded-xl bg-slate-50 p-6 text-center">
+                      <div>
+                        <ArrowsDownUp aria-hidden="true" className="mx-auto size-8 text-slate-400" weight="regular" />
+                        <p className="mt-3 font-bold text-slate-950">Aún no hay movimientos</p>
+                        <p className="mt-1 text-sm text-slate-500">Conecta una cuenta o registra tu primer gasto.</p>
+                      </div>
+                    </div>
+                  ) : ultimosMovimientos.slice(0, 5).map((movimiento) => {
+                    const MovementIcon = movimiento.tipo === 'ingreso' ? Wallet : movimiento.tipo === 'abono_tarjeta' ? CreditCard : Receipt;
+                    const tone = movimiento.tipo === 'ingreso'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : nombreBolsa(movimiento.categoria) === 'Futuro'
+                        ? 'bg-amber-50 text-amber-700'
+                        : nombreBolsa(movimiento.categoria) === 'Placeres'
+                          ? 'bg-orange-50 text-orange-700'
+                          : 'bg-blue-50 text-blue-700';
+
+                    return (
+                      <div key={movimiento.id} className="flex items-center gap-3 py-3">
+                        <span className={'grid size-10 shrink-0 place-items-center rounded-full ' + tone}>
+                          <MovementIcon aria-hidden="true" className="size-5" weight="regular" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-950">{movimiento.concepto}</p>
+                          <p className="truncate text-xs text-slate-500">{movimiento.subcategoria || nombreBolsa(movimiento.categoria)}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className={'text-sm font-bold ' + (movimiento.tipo === 'ingreso' ? 'text-emerald-700' : 'text-slate-950')}>
+                            {movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}{formatoDineroCorto(Number(movimiento.monto))}
+                          </p>
+                          <p className="text-xs text-slate-400">{formatearFecha(movimiento.fecha)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={abrirGastoManual} className="mt-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                  Agregar movimiento
+                </button>
+              </article>
+
+              <article className="flex min-h-[390px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-xl text-slate-950">Virafi sugiere</h2>
+                <div className="mt-5 flex flex-1 flex-col rounded-xl bg-slate-50 p-5">
+                  <span className="grid size-11 place-items-center rounded-full bg-blue-600 text-white">
+                    <Sparkle aria-hidden="true" className="size-5" weight="fill" />
+                  </span>
+                  <p className="mt-6 font-brand text-2xl leading-8 text-slate-950">{recomendacionResumen}</p>
+                  <p className="mt-5 text-sm leading-6 text-slate-600">{recomendacionDetalle}</p>
+                  <div className="mt-auto pt-6">
+                    <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-500">
+                      <span>Meta mensual</span>
+                      <span>{avanceMetaMensual.toFixed(0)}%</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+                      <div className="h-full rounded-full bg-blue-600" style={{ width: avanceMetaMensual + '%' }} />
+                    </div>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setChatOpen(true)} className="inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ir a asesoría personalizada <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+
+              <div className="grid gap-4">
+                <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-xl text-slate-950">Cuentas conectadas</h2>
+                    <button type="button" onClick={() => setVistaActiva('cuentas')} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                      Ver todas <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                    </button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {cuentasReales.length === 0 ? (
+                      <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4">
+                        <span className="grid size-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><Bank aria-hidden="true" className="size-5" /></span>
+                        <div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-950">Sin cuentas sincronizadas</p><p className="text-xs text-slate-500">Conecta tu banco para ver saldos reales.</p></div>
+                        <Link href="/onboarding" className="text-xs font-bold text-blue-700">Conectar</Link>
+                      </div>
+                    ) : cuentasReales.slice(0, 2).map((account) => (
+                      <div key={account.id} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700"><Bank aria-hidden="true" className="size-5" weight="regular" /></span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-950">{account.name || account.official_name || 'Cuenta bancaria'}</p>
+                          <p className="truncate text-xs text-slate-500">{bankConnections.find((connection) => connection.id === account.connection_id)?.institution_name || account.type || 'Institución bancaria'}</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-bold text-slate-950">{formatoDineroCorto(valorNumerico(account.current_balance))}</p>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-xl text-slate-950">Centro fiscal</h2>
+                  <div className="mt-4 flex items-start gap-3">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700">
+                      {cuentasActivas > 0 ? <CheckCircle aria-hidden="true" className="size-6" weight="regular" /> : <Receipt aria-hidden="true" className="size-6" weight="regular" />}
+                    </span>
+                    <div>
+                      <p className="font-bold text-emerald-700">{cuentasActivas > 0 ? 'Información financiera disponible' : 'Listo para configurar'}</p>
+                      <p className="mt-1 text-sm leading-5 text-slate-500">Consulta documentos y el estado de tus conexiones fiscales desde un solo lugar.</p>
+                    </div>
+                  </div>
+                  <Link href="/fiscal" className="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Ver centro fiscal <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </Link>
+                </article>
+              </div>
+            </section>
+
+            <section className="hidden">
               {kpiCards.map((card) => (
                 <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -4061,22 +4325,24 @@ export default function DashboardFinanciero() {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden"
       >
         <div className="grid grid-cols-5 gap-2">
-          {mobileNavItems.map((item) => (
-            <button
-              key={item.view}
-              type="button"
-              onClick={() => setVistaActiva(item.view)}
-              aria-current={vistaActiva === item.view ? 'page' : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-blue-700'
-              }`}
-            >
-              <span aria-hidden="true" className={`grid size-7 place-items-center rounded-lg text-[11px] ${
-                vistaActiva === item.view ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-              }`}>{item.mark}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
+          {mobileNavItems.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <button
+                key={item.view}
+                type="button"
+                onClick={() => setVistaActiva(item.view)}
+                aria-current={vistaActiva === item.view ? 'page' : undefined}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-blue-700'
+                }`}
+              >
+                <Icon aria-hidden="true" className="size-6" weight={vistaActiva === item.view ? 'duotone' : 'regular'} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
       <style jsx global>{`
