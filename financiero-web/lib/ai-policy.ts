@@ -1,8 +1,9 @@
-export type AiFeature = 'financial-chat' | 'financial-agent' | 'structured' | 'dashboard-analysis' | 'audio-transcription';
+export type AiFeature = 'financial-chat' | 'financial-agent' | 'financial-attachment' | 'structured' | 'dashboard-analysis' | 'audio-transcription';
 
 const defaults: Record<AiFeature, string[]> = {
   'financial-chat': ['openai/gpt-5-mini'],
   'financial-agent': ['openai/gpt-5-mini'],
+  'financial-attachment': ['google/gemini-2.5-flash-lite'],
   structured: ['google/gemini-2.5-flash-lite', 'openai/gpt-5-mini'],
   'dashboard-analysis': ['openai/gpt-5-mini', 'google/gemini-2.5-flash-lite'],
   'audio-transcription': ['google/gemini-2.5-flash-lite'],
@@ -11,6 +12,7 @@ const defaults: Record<AiFeature, string[]> = {
 const outputLimits: Record<AiFeature, number> = {
   'financial-chat': 800,
   'financial-agent': 800,
+  'financial-attachment': 1_200,
   structured: 350,
   'dashboard-analysis': 600,
   'audio-transcription': 1_200,

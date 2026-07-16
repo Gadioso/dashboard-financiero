@@ -33,6 +33,44 @@ final result: passed
 
 ---
 
+# Virafi assistant, balance privacy and financial settings design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/jv/9dlx6_gx68b8v1vnsj3m1frr0000gn/T/TemporaryItems/NSIRD_screencaptureui_syDYdB/Captura de pantalla 2026-07-16 a la(s) 4.40.38 p.m..png` (832 × 520 assistant reference).
+- Assistant implementation screenshot: `/private/tmp/virafi-assistant-qa.png` (browser viewport 1280 × 720, authenticated summary, assistant open).
+- Financial settings implementation screenshot: `/private/tmp/virafi-onboarding-qa-final.png` (browser viewport 1280 × 720, authenticated, 75% prepared).
+- Full-view comparison evidence: the source and implementation were opened together in one comparison output; the assistant keeps the supplied dark header, warm surfaces, rounded message panel and compact composer while removing the obsolete checkbox and adding attachment and microphone controls.
+- Focused-region comparison: no separate crop was needed because the complete assistant and all composer controls are readable at native size in the comparison output.
+
+## Findings
+
+- No actionable P0, P1 or P2 findings remain.
+- Fonts and typography: the existing Virafi Newsreader/Figtree hierarchy is preserved; the compact assistant uses the same small UI weights and readable line height as the dashboard.
+- Spacing and layout rhythm: the assistant remains a compact bottom-right workspace. Attachment, input, microphone and send controls share an aligned 44 px row without overflow at the tested viewport.
+- Colors and visual tokens: the warm cream, ink header, violet action and neutral borders stay within the established Virafi palette. Emerald configuration states remain semantic rather than decorative.
+- Image quality and asset fidelity: all new visible controls use the installed Phosphor icon family; there are no placeholder assets, text glyph icons or handcrafted SVG approximations.
+- Copy and content: `Usar esta vista` and the internal status-card language are gone. Configuration now describes user outcomes, and the balance explicitly says it represents connected bank accounts and excludes unconnected assets.
+- Interaction and accessibility: the eye toggles both the balance and monthly income/expense values and updates its accessible name. The assistant exposes uniquely named attachment, microphone, send and close controls. The configuration links target the appropriate sections.
+
+## Browser verification
+
+- Primary interactions tested: opened the assistant from the sidebar; confirmed attachment and microphone controls; toggled `Ocultar saldos` to `Mostrar saldos`; verified masked values; restored values; opened `/onboarding`; verified all four configuration actions and anchors.
+- The document/image picker is present with the intended accepted formats and multi-file support. No personal file was transmitted during visual QA.
+- Browser console errors and warnings: none.
+- ESLint: passed.
+- Production build and TypeScript: passed.
+
+## Comparison history
+
+- Initial settings pass found a P2 accessibility duplication: the retired internal `Estado de configuración` block was visually hidden but still present in the accessibility tree.
+- Fix: removed the duplicate block entirely, leaving the user-facing configuration journey as the single status surface.
+- Post-fix evidence: `/private/tmp/virafi-onboarding-qa-final.png`; DOM verification confirmed the duplicate heading is absent and the browser console remains clean.
+
+final result: passed
+
+---
+
 # Virafi login OAuth branding design QA
 
 ## Evidence

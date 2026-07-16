@@ -43,7 +43,7 @@ function getGeminiModel(apiKey: string, modelName = getGeminiModelName()) {
   return ai.getGenerativeModel({ model: modelName });
 }
 
-type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+export type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
 export type LlmChatMessage = {
   role: 'user' | 'assistant';
@@ -294,8 +294,8 @@ export async function generateGeminiText(apiKey: string, prompt: string, feature
   throw lastError;
 }
 
-export async function generateGeminiParts(apiKey: string, parts: GeminiPart[]) {
-  const preferredModel = getGeminiModelName('audio-transcription');
+export async function generateGeminiParts(apiKey: string, parts: GeminiPart[], feature: AiFeature = 'audio-transcription') {
+  const preferredModel = getGeminiModelName(feature);
   const fallbackModels = activeGeminiModels;
   const models = [preferredModel, ...fallbackModels.filter((model) => model !== preferredModel)];
   let lastError: unknown;
@@ -306,14 +306,14 @@ export async function generateGeminiParts(apiKey: string, parts: GeminiPart[]) {
       const model = getGeminiModel(apiKey, modelName);
       const response = await model.generateContent({
         contents: [{ role: 'user', parts }],
-        generationConfig: { maxOutputTokens: getAiOutputLimit('audio-transcription') },
+        generationConfig: { maxOutputTokens: getAiOutputLimit(feature) },
       });
 
       const usage = response.response.usageMetadata;
-      recordAiUsage({ feature: 'audio-transcription', provider: 'gemini', model: modelName, inputTokens: usage?.promptTokenCount, outputTokens: usage?.candidatesTokenCount, totalTokens: usage?.totalTokenCount, latencyMs: Date.now() - startedAt, success: true });
+      recordAiUsage({ feature, provider: 'gemini', model: modelName, inputTokens: usage?.promptTokenCount, outputTokens: usage?.candidatesTokenCount, totalTokens: usage?.totalTokenCount, latencyMs: Date.now() - startedAt, success: true });
       return response.response.text();
     } catch (error) {
-      recordAiUsage({ feature: 'audio-transcription', provider: 'gemini', model: modelName, latencyMs: Date.now() - startedAt, success: false });
+      recordAiUsage({ feature, provider: 'gemini', model: modelName, latencyMs: Date.now() - startedAt, success: false });
       lastError = error;
     }
   }

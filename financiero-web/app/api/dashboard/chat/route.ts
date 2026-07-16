@@ -8,6 +8,7 @@ import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 import { notifyDetectedMovement } from '@/lib/movement-notifications';
+import { analyzeFinancialAttachments, validateFinancialAttachments } from '@/lib/financial-attachment-analysis';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,40 @@ function screenContextText(value: unknown) {
   if (!value || typeof value !== 'object') return '';
 
   return JSON.stringify(value).slice(0, 2500);
+}
+
+async function parseChatRequest(request: Request) {
+  const contentType = request.headers.get('content-type') || '';
+
+  if (!contentType.includes('multipart/form-data')) {
+    const body = await request.json().catch(() => ({}));
+    return {
+      text: String(body.text || '').trim(),
+      messages: cleanMessages(body.messages),
+      screenContext: screenContextText(body.screenContext),
+      attachments: [] as File[],
+    };
+  }
+
+  const formData = await request.formData();
+  const rawMessages = String(formData.get('messages') || '[]');
+  const rawScreenContext = String(formData.get('screenContext') || '');
+  const attachments = formData
+    .getAll('attachments')
+    .filter((value): value is File => value instanceof File && value.size > 0);
+
+  let messages: unknown = [];
+  let screenContext: unknown = null;
+
+  try { messages = JSON.parse(rawMessages); } catch { messages = []; }
+  try { screenContext = rawScreenContext ? JSON.parse(rawScreenContext) : null; } catch { screenContext = null; }
+
+  return {
+    text: String(formData.get('text') || '').trim(),
+    messages: cleanMessages(messages),
+    screenContext: screenContextText(screenContext),
+    attachments,
+  };
 }
 
 type MultiExpenseDraft = {
@@ -139,19 +174,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => ({}));
-    const text = String(body.text || '').trim();
-    const screenContext = screenContextText(body.screenContext);
+    const parsed = await parseChatRequest(request);
+    const { text, screenContext, attachments } = parsed;
 
-    if (!text) {
+    if (!text && attachments.length === 0) {
       return NextResponse.json({ success: false, error: 'Escribe un mensaje para el asistente.' }, { status: 400 });
     }
 
+    const attachmentError = validateFinancialAttachments(attachments);
+    if (attachmentError) {
+      return NextResponse.json({ success: false, error: attachmentError }, { status: 400 });
+    }
+
+    const attachmentAnalysis = attachments.length
+      ? await analyzeFinancialAttachments({ files: attachments, userPrompt: text })
+      : '';
+
     const shouldUseScreenContext = screenContext && /\b(?:pantalla|vista|dashboard|tablero|aqui|aqu[ií]|esto|este|esta|ese|esa|cambia|corrige|edita|arregla|ayuda|explica)\b/i.test(text);
+    const textoBase = text || 'Analiza los archivos adjuntos y explícame lo importante.';
     const texto = shouldUseScreenContext
-      ? `${text}\n\nContexto visible del dashboard: ${screenContext}`
-      : text;
-    const memoria = cleanMessages(body.messages);
+      ? `${textoBase}\n\nContexto visible del dashboard: ${screenContext}`
+      : textoBase;
+    const memoria = parsed.messages;
+
+    if (attachmentAnalysis) {
+      const respuesta = await responderConversacionFinanciera({
+        texto,
+        apiKey: aiApiKey,
+        supabase,
+        memoria,
+        profileId: tenant.profileId,
+        readOnlyAttachmentContext: attachmentAnalysis,
+      });
+
+      return NextResponse.json({
+        success: true,
+        action: 'attachment-analysis',
+        message: respuesta.message,
+        attachments: attachments.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+      });
+    }
 
     if (esAbonoTarjetaCredito(text)) {
       const monto = extraerMontoAbonoTarjeta(text);

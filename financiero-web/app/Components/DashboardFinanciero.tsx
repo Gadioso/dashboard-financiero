@@ -14,9 +14,12 @@ import {
   CheckCircle,
   CreditCard,
   Eye,
+  EyeSlash,
   FileText,
   Gear,
   House,
+  Microphone,
+  Paperclip,
   PencilSimple,
   Plant,
   Receipt,
@@ -521,7 +524,8 @@ export default function DashboardFinanciero() {
   const [escuchandoVoz, setEscuchandoVoz] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<DashboardChatMessage[]>([]);
-  const [chatIncludesScreen, setChatIncludesScreen] = useState(true);
+  const [chatAttachments, setChatAttachments] = useState<File[]>([]);
+  const [balanceVisible, setBalanceVisible] = useState(true);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
   const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -598,6 +602,7 @@ export default function DashboardFinanciero() {
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioStopTimeoutRef = useRef<number | null>(null);
   const statusTimeoutRef = useRef<number | null>(null);
+  const chatFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem('dashboard_notifications_seen_at_v2');
@@ -1908,63 +1913,52 @@ export default function DashboardFinanciero() {
     setMovimientosPage((current) => Math.max(current - 1, 0));
   };
 
-  const crearContextoVisibleChat = () => ({
-    vista: activeNav.label,
-    mesActivo,
-    mes: `${selectedMonthName} 2026`,
-    resumen: {
-      ingresos: resumen.ingresosMes,
-      egresos: totalGastadoMes,
-      flujoNeto: flujoNetoMes,
-      presupuesto: resumen.presupuesto,
-      gastado: resumen.gastado,
-      restante: restantes,
-      metaMensualIngresos: metaMensualActiva,
-      progresoMetaMensualPct: avanceMetaMensual,
-      brechaMetaMensual,
-      promedioIngresosUltimos3Meses: resumen.promedioIngresosUltimos3Meses,
-    },
-    movimientosVisibles: ultimosMovimientos.slice(0, 10).map((movimiento) => ({
-      id: movimiento.id,
-      tipo: movimiento.tipo,
-      concepto: movimiento.concepto,
-      categoria: nombreBolsa(movimiento.categoria),
-      subcategoria: movimiento.subcategoria,
-      monto: Number(movimiento.monto || 0),
-      origen: nombreOrigen(movimiento.origen, movimiento.subcategoria),
-      fecha: movimiento.fecha,
-    })),
-  });
+  const agregarAdjuntosChat = (files: File[]) => {
+    const uniqueFiles = [...chatAttachments, ...files].filter((file, index, all) => (
+      all.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size) === index
+    )).slice(0, 4);
+    const oversized = uniqueFiles.find((file) => file.size > 10 * 1024 * 1024);
+    const totalBytes = uniqueFiles.reduce((total, file) => total + file.size, 0);
+
+    if (oversized) {
+      setMensajeStatus(`${oversized.name} supera el límite de 10 MB.`);
+      return;
+    }
+    if (totalBytes > 20 * 1024 * 1024) {
+      setMensajeStatus('Los archivos no pueden superar 20 MB en total.');
+      return;
+    }
+
+    setChatAttachments(uniqueFiles);
+  };
 
   const enviarMensajeChat = async (event: React.FormEvent) => {
     event.preventDefault();
     const texto = inputIA.trim();
+    const attachmentsToSend = [...chatAttachments];
 
-    if (!texto || procesando) return;
+    if ((!texto && attachmentsToSend.length === 0) || procesando) return;
 
     const userMessage: DashboardChatMessage = {
       id: createClientId('user'),
       role: 'user',
-      content: texto,
+      content: texto || `Analiza ${attachmentsToSend.length === 1 ? 'este archivo' : 'estos archivos'}: ${attachmentsToSend.map((file) => file.name).join(', ')}`,
       createdAt: new Date().toISOString(),
     };
     const nextMessages = [...chatMessages, userMessage].slice(-12);
 
     setChatMessages(nextMessages);
     setInputIA('');
+    setChatAttachments([]);
     setProcesando(true);
     setMensajeStatus('Procesando con IA financiera...');
 
     try {
-      const response = await fetchWithSessionRefresh('/api/dashboard/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: texto,
-          messages: nextMessages,
-          screenContext: chatIncludesScreen ? crearContextoVisibleChat() : null,
-        }),
-      });
+      const payload = new FormData();
+      payload.set('text', texto);
+      payload.set('messages', JSON.stringify(nextMessages));
+      attachmentsToSend.forEach((file) => payload.append('attachments', file));
+      const response = await fetchWithSessionRefresh('/api/dashboard/chat', { method: 'POST', body: payload });
       const data = await response.json();
       const reply = typeof data.message === 'string' && data.message.trim()
         ? data.message.trim()
@@ -1992,6 +1986,7 @@ export default function DashboardFinanciero() {
         await fetchData();
       }
     } catch {
+      setChatAttachments(attachmentsToSend);
       setMensajeStatus('No pude conectar con el chat financiero.');
       const assistantMessage: DashboardChatMessage = {
         id: createClientId('assistant'),
@@ -2173,10 +2168,7 @@ export default function DashboardFinanciero() {
   const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
   const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
   const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
-  const fondosVisibles = fondosAcumulados.reduce((total, fondo) => total + fondoActual(fondo), 0);
-  const patrimonioVisible = cuentasReales.length > 0
-    ? saldoCuentas + fondosVisibles
-    : (currentMonthSummary?.saldoAcumulado || flujoNetoMes) + fondosVisibles;
+  const patrimonioVisible = saldoCuentas;
   const presupuestoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.limit, 0);
   const gastoPresupuestadoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.used, 0);
   const presupuestoUtilizado = presupuestoTotal > 0 ? Math.min((gastoPresupuestadoTotal / presupuestoTotal) * 100, 100) : 0;
@@ -2499,7 +2491,7 @@ export default function DashboardFinanciero() {
           <div className="max-h-[46vh] space-y-3 overflow-y-auto bg-slate-50 p-4">
             {chatMessages.length === 0 && !procesando ? (
               <div className="rounded-lg bg-white p-3 text-sm text-slate-600 shadow-sm">
-                Háblame normal: registra movimientos, pregúntame de dónde sale un número o corrige el último gasto.
+                Pregúntame por tus movimientos, cuentas, metas o situación fiscal. También puedo analizar imágenes y documentos.
               </div>
             ) : (
               chatMessages.map((message) => (
@@ -2533,26 +2525,43 @@ export default function DashboardFinanciero() {
             ) : null}
           </div>
           <form onSubmit={enviarMensajeChat} className="border-t border-slate-100 bg-white p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <input
-                  type="checkbox"
-                  checked={chatIncludesScreen}
-                  onChange={(event) => setChatIncludesScreen(event.target.checked)}
-                  className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                Usar esta vista
-              </label>
+            {chatAttachments.length > 0 ? (
+              <div className="mb-2 flex flex-wrap gap-2" aria-label="Archivos adjuntos">
+                {chatAttachments.map((file) => (
+                  <span key={`${file.name}-${file.size}`} className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700">
+                    <FileText aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="max-w-44 truncate">{file.name}</span>
+                    <button type="button" onClick={() => setChatAttachments((current) => current.filter((item) => item !== file))} aria-label={`Quitar ${file.name}`} className="grid size-5 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700">
+                      <X aria-hidden="true" className="size-3.5" weight="bold" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <input
+              ref={chatFileInputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf,text/plain,text/csv,text/markdown,text/html,application/json,.pdf,.txt,.csv,.md,.json"
+              onChange={(event) => {
+                agregarAdjuntosChat(Array.from(event.target.files || []));
+                event.target.value = '';
+              }}
+              aria-hidden="true"
+              className="sr-only"
+              tabIndex={-1}
+            />
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-2">
               <button
                 type="button"
-                onClick={alternarDictadoMovimiento}
+                onClick={() => chatFileInputRef.current?.click()}
                 disabled={procesando}
-                className={`h-8 rounded-lg px-3 text-xs font-black transition-colors disabled:opacity-60 ${escuchandoVoz ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'}`}
+                aria-label="Adjuntar documentos o imágenes"
+                title="Adjuntar documentos o imágenes"
+                className="grid size-11 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
               >
-                {escuchandoVoz ? 'Detener' : 'Hablar'}
+                <Paperclip aria-hidden="true" className="size-5" weight="bold" />
               </button>
-            </div>
-            <div className="grid grid-cols-[1fr_auto] gap-2">
               <input
                 type="text"
                 value={inputIA}
@@ -2562,8 +2571,18 @@ export default function DashboardFinanciero() {
                 className="h-11 min-w-0 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
               />
               <button
+                type="button"
+                onClick={alternarDictadoMovimiento}
+                disabled={procesando}
+                aria-label={escuchandoVoz ? 'Detener grabación' : 'Hablar con Virafi'}
+                title={escuchandoVoz ? 'Detener grabación' : 'Hablar con Virafi'}
+                className={`grid size-11 place-items-center rounded-lg border transition disabled:opacity-50 ${escuchandoVoz ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'}`}
+              >
+                <Microphone aria-hidden="true" className="size-5" weight={escuchandoVoz ? 'fill' : 'bold'} />
+              </button>
+              <button
                 type="submit"
-                disabled={procesando || !inputIA.trim()}
+                disabled={procesando || (!inputIA.trim() && chatAttachments.length === 0)}
                 className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {procesando ? 'Pensando' : 'Enviar'}
@@ -2802,25 +2821,29 @@ export default function DashboardFinanciero() {
               <article className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-xl text-slate-950">Balance mensual</h2>
-                  <button type="button" aria-label="Mostrar u ocultar balance" className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-950">
-                    <Eye aria-hidden="true" className="size-5" weight="regular" />
+                  <button type="button" onClick={() => setBalanceVisible((visible) => !visible)} aria-label={balanceVisible ? 'Ocultar saldos' : 'Mostrar saldos'} className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-950">
+                    {balanceVisible
+                      ? <Eye aria-hidden="true" className="size-5" weight="regular" />
+                      : <EyeSlash aria-hidden="true" className="size-5" weight="regular" />}
                   </button>
                 </div>
                 <div className="mt-8">
-                  <p className="text-sm font-semibold text-slate-500">Patrimonio visible</p>
-                  <p className="mt-1 break-words font-brand text-[clamp(2.25rem,4vw,3.35rem)] leading-none tracking-tight text-slate-950">{formatoDineroCorto(patrimonioVisible)}</p>
-                  <p className={'mt-3 text-sm font-bold ' + (patrimonioVisible < 0 ? 'text-rose-600' : tendenciaTone(tendencias.flujo))}>
-                    {tendencias.flujo} <span className="font-medium text-slate-500">vs. mes anterior</span>
+                  <p className="text-sm font-semibold text-slate-500">Saldo visible en cuentas conectadas</p>
+                  <p className="mt-1 break-words font-brand text-[clamp(2.25rem,4vw,3.35rem)] leading-none tracking-tight text-slate-950">{balanceVisible ? formatoDineroCorto(patrimonioVisible) : '••••••'}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-500">
+                    {cuentasReales.length > 0
+                      ? `Incluye ${cuentasReales.length} ${cuentasReales.length === 1 ? 'cuenta conectada' : 'cuentas conectadas'}. No incluye efectivo, inversiones ni cuentas sin conectar.`
+                      : 'Aún no hay una cuenta bancaria conectada. El flujo mensual no se usa como patrimonio.'}
                   </p>
                 </div>
                 <div className="mt-7 grid gap-3 rounded-xl bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-semibold text-slate-600">Ingresos</span>
-                    <strong className="text-emerald-700">{formatoDineroCorto(resumen.ingresosMes)}</strong>
+                    <strong className="text-emerald-700">{balanceVisible ? formatoDineroCorto(resumen.ingresosMes) : '••••'}</strong>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-semibold text-slate-600">Gastos</span>
-                    <strong className="text-slate-950">{formatoDineroCorto(totalGastadoMes)}</strong>
+                    <strong className="text-slate-950">{balanceVisible ? formatoDineroCorto(totalGastadoMes) : '••••'}</strong>
                   </div>
                 </div>
                 <button type="button" onClick={() => setVistaActiva('analisis')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-5 text-sm font-bold text-blue-700 hover:text-blue-800">

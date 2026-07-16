@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Bank, CheckCircle, Circle, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
 import PersonalizationInterview from './PersonalizationInterview';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 
@@ -87,12 +88,6 @@ const bankCountryOptions: BankCountryOption[] = [
 function userSafeMessage(value: unknown, fallback: string) {
   const message = typeof value === 'string' ? value.trim() : '';
   return /supabase|syncfy|plaid|api|schema|migration|token|secret|key|provider|endpoint|webhook|oauth|env\b/i.test(message) ? fallback : message || fallback;
-}
-
-function statusTone(done: boolean) {
-  return done
-    ? 'border-emerald-200 bg-white text-emerald-700'
-    : 'border-slate-200 bg-white text-slate-500';
 }
 
 export default function OnboardingClient() {
@@ -221,18 +216,18 @@ export default function OnboardingClient() {
   const bankConnectionStatus = canConnectSelectedCountry
     ? 'Conexión automática disponible'
     : 'Conexión segura en preparación';
+  const accountLabel = status?.profile?.email || status?.profile?.full_name || 'Cuenta activa';
   const checklist = useMemo(
     () => [
-      { label: 'Cuenta creada', done: hasProfile },
-      { label: 'Metas definidas', done: hasCompletedGoals },
-      { label: 'Telegram conectado', done: hasTelegram },
-      { label: 'Banco conectado', done: hasBankConnection },
+      { label: 'Tu cuenta', description: hasProfile ? accountLabel : 'Inicia sesión para guardar tu configuración.', done: hasProfile, href: hasProfile ? '/' : '/login?next=/onboarding', icon: UserCircle, action: hasProfile ? 'Ver dashboard' : 'Iniciar sesión' },
+      { label: 'Tu plan financiero', description: 'Cuéntale a Virafi tus metas y prioridades para recibir recomendaciones personales.', done: hasCompletedGoals, href: '#personalizacion', icon: Target, action: hasCompletedGoals ? 'Actualizar' : 'Definir metas' },
+      { label: 'Asistente en Telegram', description: 'Registra movimientos y consulta tus finanzas desde tu chat.', done: hasTelegram, href: '#telegram', icon: TelegramLogo, action: hasTelegram ? 'Administrar' : 'Conectar' },
+      { label: 'Cuentas bancarias', description: 'Consulta saldos y movimientos con conexiones de solo lectura.', done: hasBankConnection, href: '#bancos', icon: Bank, action: hasBankConnection ? 'Administrar' : 'Conectar' },
     ],
-    [hasBankConnection, hasCompletedGoals, hasProfile, hasTelegram]
+    [accountLabel, hasBankConnection, hasCompletedGoals, hasProfile, hasTelegram]
   );
   const completed = checklist.filter((item) => item.done).length;
   const progressPct = Math.round((completed / checklist.length) * 100);
-  const accountLabel = status?.profile?.email || status?.profile?.full_name || 'Cuenta activa';
   const bankConnectTitle = !hasProfile
     ? 'Inicia sesión para agregar bancos.'
     : bankLimitReached
@@ -478,38 +473,56 @@ export default function OnboardingClient() {
           </section>
         )}
 
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {checklist.map((item) => (
-            <div key={item.label} className={`rounded-lg border p-4 shadow-sm ${statusTone(item.done)}`}>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-black">{item.done ? 'Listo' : 'Pendiente'}</p>
-                <span className={`size-2 rounded-full ${item.done ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-5 md:p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Tu espacio financiero</p>
+                <h2 className="mt-1 font-brand text-2xl text-slate-950">Pon Virafi a trabajar para ti</h2>
+                <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                  {loading ? 'Estamos preparando tu configuración.' : completed === checklist.length ? 'Todo está conectado. Puedes actualizar cualquier parte cuando cambien tus planes.' : 'Completa lo que te resulte útil ahora; puedes volver y ajustar todo después.'}
+                </p>
               </div>
-              <p className="mt-2 text-sm font-semibold text-slate-700">{item.label}</p>
+              <div className="rounded-lg bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">{progressPct}% preparado</div>
             </div>
-          ))}
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-slate-950">Estado de configuración</h2>
-              <p className="text-sm text-slate-500">{loading ? 'Leyendo tu cuenta...' : `${completed} de ${checklist.length} pasos listos · ${progressPct}%`}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600">
-              {hasProfile ? accountLabel : 'Sin sesión'}
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`${progressPct}% de configuración completada`}>
+              <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} />
             </div>
           </div>
-          <div className="mt-4 h-2 rounded-full bg-slate-100">
-            <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} />
+          <div className="divide-y divide-slate-100">
+            {checklist.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="grid gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center md:px-6">
+                  <span className={`grid size-11 place-items-center rounded-lg ${item.done ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                    <Icon aria-hidden="true" className="size-6" weight="duotone" />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-slate-950">{item.label}</p>
+                      <span className={`inline-flex items-center gap-1 text-xs font-bold ${item.done ? 'text-emerald-700' : 'text-slate-500'}`}>
+                        {item.done ? <CheckCircle aria-hidden="true" className="size-4" weight="fill" /> : <Circle aria-hidden="true" className="size-4" weight="bold" />}
+                        {item.done ? 'Listo' : 'Por completar'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">{item.description}</p>
+                  </div>
+                  <Link href={item.href} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-bold text-blue-700 hover:bg-blue-50">
+                    {item.action} <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         </section>
 
-        <PersonalizationInterview enabled={hasProfile} request={fetchWithSessionRefresh} onCompleted={() => refreshStatus()} />
+        <div id="personalizacion" className="scroll-mt-6">
+          <PersonalizationInterview enabled={hasProfile} request={fetchWithSessionRefresh} onCompleted={() => refreshStatus()} />
+        </div>
 
         <div className="grid gap-6">
           <div className="grid gap-6">
-            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <section id="telegram" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-xl font-bold text-slate-950">Telegram</h2>
               <p className="mt-1 text-sm text-slate-500">Genera un código y mándaselo al bot para conectar tu chat fácilmente.</p>
               {telegramCode && (
@@ -541,8 +554,7 @@ export default function OnboardingClient() {
               </button>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">Conexión bancaria</h2>
+            <section id="bancos" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <p className="mt-1 text-sm text-slate-500">Agrega tus bancos y mantén tus movimientos actualizados automáticamente.</p>
               <label className="mt-5 block text-sm font-medium text-slate-600">
                 1. País de tu banco
