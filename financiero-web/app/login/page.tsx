@@ -2,6 +2,8 @@
 
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
+import { FaApple } from 'react-icons/fa6';
+import { FcGoogle } from 'react-icons/fc';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 
 function LoginForm() {
@@ -208,17 +210,21 @@ function LoginForm() {
                 type="button"
                 onClick={() => startOAuth('google')}
                 disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Continuar con Google"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Google
+                <FcGoogle aria-hidden="true" className="size-5 shrink-0" />
+                <span>Google</span>
               </button>
               <button
                 type="button"
                 onClick={() => startOAuth('apple')}
                 disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Continuar con Apple"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-slate-950 bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Apple
+                <FaApple aria-hidden="true" className="size-5 shrink-0" />
+                <span>Apple</span>
               </button>
             </div>
           </>
