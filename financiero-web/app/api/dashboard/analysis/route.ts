@@ -215,7 +215,6 @@ function getSummary(body: AnalysisBody) {
     flujoNetoMes: toNumber(summary.flujoNetoMes),
     tasaFuturo: toNumber(summary.tasaFuturo),
     burnRate: toNumber(summary.burnRate),
-    deudaTdcEstimadaMes: toNumber(summary.deudaTdcEstimadaMes),
   };
 }
 
@@ -330,9 +329,6 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
   if (pressuredBucket) {
     diagnosisParts.push(`${pressuredBucket.label} es la bolsa con mayor presión: lleva ${formatPercent(pressuredBucket.percent)} usado y le quedan ${formatMoney(pressuredBucket.remaining)}.`);
   }
-  if (summary.deudaTdcEstimadaMes > 0) {
-    diagnosisParts.push(`La deuda estimada de tarjeta es ${formatMoney(summary.deudaTdcEstimadaMes)}, así que conviene separarla de gasto ordinario para no distorsionar Futuro.`);
-  }
   if (summary.tasaFuturo > 0) {
     diagnosisParts.push(`La asignación a Futuro va en ${formatPercent(summary.tasaFuturo)}, contra una meta operativa de 33%.`);
   }
@@ -361,9 +357,6 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
     actions.push(`Separar hasta ${formatMoney(goal.targetPerBucket || summary.ingresosMes / 3)} para Futuro conforme entre ingreso; hoy faltan ${formatPercent(Math.max(0, 33 - summary.tasaFuturo))} puntos para el ritmo objetivo.`);
   } else {
     actions.push('Mantener Futuro separado de pagos ordinarios para conservar limpia la regla 33/33/33.');
-  }
-  if (summary.deudaTdcEstimadaMes > 0) {
-    actions.push(`Apartar ${formatMoney(summary.deudaTdcEstimadaMes)} para tarjeta antes de distribuir excedentes.`);
   }
   actions.push('Cerrar el periodo con una revisión de ingresos, egresos, flujo neto y bolsas fuera de rango.');
 
@@ -471,7 +464,7 @@ Reglas:
 - Explica cuánto debe provenir de mejorar ingresos, cuánto de controlar gasto y cuánto puede dirigirse a Futuro/inversión; recortar gasto no cuenta como crear ingresos.
 - Prioriza máximo 3 acciones, ordenadas por impacto, cada una con monto, frecuencia y criterio verificable de cumplimiento.
 - Distingue inversión patrimonial de herramientas o gasto productivo; no presentes software como rendimiento de inversión.
-- Si el alcance es mensual, analiza exclusivamente el mes seleccionado: movimientos, presupuesto consumido, flujo, tarjeta y acciones ejecutables antes del cierre de ese mes. No hagas proyecciones anuales salvo que sean indispensables.
+- Si el alcance es mensual, analiza exclusivamente el mes seleccionado: movimientos, presupuesto consumido, flujo y acciones ejecutables antes del cierre de ese mes. No hagas proyecciones anuales salvo que sean indispensables.
 - Si el alcance es anual, analiza desde enero hasta el último mes transcurrido. Compara meses, identifica tendencia, consistencia, mejor y peor mes, promedios mensuales, acumulado y proyección de cierre. No redactes el anual como si fuera un solo mes grande.
 - En el anual, aclara que la proyección es una estimación basada en los meses transcurridos y no un resultado garantizado.
 - Mantén máximo 5 acciones y 4 riesgos.

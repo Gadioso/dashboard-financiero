@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { esAbonoTarjetaCredito, extraerMontoAbonoTarjeta } from '@/lib/card-payment-intent';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto } from '@/lib/financial-core';
+import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto, resolverFechaMovimiento } from '@/lib/financial-core';
 import { extraerJson, generateGeminiText, getConfiguredLlmKey } from '@/lib/gemini';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 import { notifyDetectedMovement } from '@/lib/movement-notifications';
 import { analyzeFinancialAttachments, validateFinancialAttachments } from '@/lib/financial-attachment-analysis';
+import { appendVirafiaExchange } from '@/lib/virafia-conversation';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,14 +24,30 @@ type ChatMessage = {
   };
 };
 
+async function virafiaResponse({
+  supabase,
+  profileId,
+  userText,
+  payload,
+}: {
+  supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>;
+  profileId: string;
+  userText: string;
+  payload: Record<string, unknown> & { message: string };
+}) {
+  await appendVirafiaExchange({
+    supabase,
+    profileId,
+    userText,
+    assistantText: payload.message,
+    channel: 'in_app',
+    assistantMetadata: payload.lastExpenseId ? { lastExpenseId: String(payload.lastExpenseId) } : {},
+  }).catch((error) => console.error('[virafia-conversation] no pude persistir el intercambio web', error));
+  return NextResponse.json(payload);
+}
+
 function fechaMovimientoDesdeClasificacion(fechaMovimiento: string | undefined, texto: string) {
-  const fechaClasificada = fechaMovimiento ? new Date(fechaMovimiento) : null;
-
-  if (fechaClasificada && !Number.isNaN(fechaClasificada.getTime())) {
-    return fechaClasificada;
-  }
-
-  return extraerFechaMovimiento(texto) || new Date();
+  return resolverFechaMovimiento(texto, fechaMovimiento);
 }
 
 function cleanMessages(value: unknown): ChatMessage[] {
@@ -107,9 +124,17 @@ function shouldTryMultipleExpenses(text: string) {
 async function classifyMultipleExpenses(text: string, apiKey: string): Promise<MultiExpenseDraft[]> {
   if (!apiKey || !shouldTryMultipleExpenses(text)) return [];
 
+  const fechaActualMexico = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
   const prompt = `
 {
   "role": "multi_expense_extractor",
+  "current_date_mexico": ${JSON.stringify(fechaActualMexico)},
   "language_policy": {
     "instructions_language": "English",
     "output_format": "raw_json_only",
@@ -120,6 +145,7 @@ async function classifyMultipleExpenses(text: string, apiKey: string): Promise<M
     "Only extract expenses explicitly requested by the user.",
     "Amounts near dates are not amounts. Example: in 'google el 2 de julio de 500', amount is 500 and '2 de julio' is the date.",
     "If a date applies to all items, copy the same fechaMovimiento to every item.",
+    "When a date omits the year, use the year from current_date_mexico. Never guess another year.",
     "Classify Uber, restaurants, food, travel and unknown discretionary expenses as Placeres.",
     "Classify productive software/tools such as Google, OpenAI, Vercel, Supabase, cloud, AI or SaaS as Futuro/Herramientas Software.",
     "Do not invent amounts or expenses.",
@@ -207,23 +233,23 @@ export async function POST(request: Request) {
         readOnlyAttachmentContext: attachmentAnalysis,
       });
 
-      return NextResponse.json({
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: textoBase, payload: {
         success: true,
         action: 'attachment-analysis',
         message: respuesta.message,
         attachments: attachments.map((file) => ({ name: file.name, type: file.type, size: file.size })),
-      });
+      } });
     }
 
     if (esAbonoTarjetaCredito(text)) {
       const monto = extraerMontoAbonoTarjeta(text);
 
       if (!Number.isFinite(monto) || monto <= 0) {
-        return NextResponse.json({
+        return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
           success: true,
           action: 'reply',
           message: 'Entendí que es abono a tarjeta, pero no detecté el monto. Ejemplo: "hice un abono de 10k a la de crédito".',
-        });
+        } });
       }
 
       const fechaMovimiento = extraerFechaMovimiento(text) || new Date();
@@ -256,21 +282,19 @@ export async function POST(request: Request) {
       });
       await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'abono', concept: data.concepto, amount: Number(data.monto), category: 'Abono a tarjeta · no es gasto', source: 'Web', resourceId: data.id }).catch(console.error);
 
-      return NextResponse.json({
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
         success: true,
         action: 'card-payment',
         data,
         message: `Abono registrado. $${formatearMonto(monto)} a tarjeta de crédito. Esto reduce deuda y no cuenta como gasto nuevo.`,
-      });
+      } });
     }
 
     const multipleExpenses = await classifyMultipleExpenses(text, aiApiKey).catch(() => []);
 
     if (multipleExpenses.length > 1) {
       const rows = multipleExpenses.map((expense) => {
-        const date = expense.fechaMovimiento && !Number.isNaN(new Date(expense.fechaMovimiento).getTime())
-          ? new Date(expense.fechaMovimiento)
-          : extraerFechaMovimiento(text) || new Date();
+        const date = resolverFechaMovimiento(text, expense.fechaMovimiento, new Date(), false);
 
         return withProfile({
           concepto: expense.concepto,
@@ -304,12 +328,12 @@ export async function POST(request: Request) {
       const total = data.reduce((sum, row) => sum + Number(row.monto || 0), 0);
       const summary = data.map((row) => `${row.concepto}: $${formatearMonto(row.monto)}`).join(' · ');
 
-      return NextResponse.json({
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
         success: true,
         action: 'movement',
         data,
         message: `Registré ${data.length} gastos por $${formatearMonto(total)}. ${summary}`,
-      });
+      } });
     }
 
     const respuesta = await responderConversacionFinanciera({
@@ -321,7 +345,7 @@ export async function POST(request: Request) {
     });
 
     if (respuesta.action === 'reply') {
-      return NextResponse.json({ success: true, action: 'reply', message: respuesta.message });
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: { success: true, action: 'reply', message: respuesta.message } });
     }
 
     const clasificacion = respuesta.movement;
@@ -357,7 +381,7 @@ export async function POST(request: Request) {
       });
       await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'ingreso', concept: data.concepto, amount: Number(data.monto), source: 'Web', resourceId: data.id }).catch(console.error);
 
-      return NextResponse.json({ success: true, action: 'movement', data, message: `Registrado. ${respuesta.message} Ya recalculé tus bolsas.` });
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: { success: true, action: 'movement', data, message: `Registrado. ${respuesta.message} Ya recalculé tus bolsas.` } });
     }
 
     const categoriaFinal = categoriaParaGastos(clasificacion.categoria);
@@ -391,13 +415,13 @@ export async function POST(request: Request) {
     });
     await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'gasto', concept: data.concepto, amount: Number(data.monto), category: `${clasificacion.categoria}/${clasificacion.subcategoria}`, source: 'Web', resourceId: data.id }).catch(console.error);
 
-    return NextResponse.json({
+    return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
       success: true,
       action: 'movement',
       data,
       lastExpenseId: data.id,
       message: `Registrado. ${respuesta.message}`,
-    });
+    } });
   } catch (error: unknown) {
     const supabase = getSupabaseServiceClient();
     await logErrorEvent({

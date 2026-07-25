@@ -3,6 +3,7 @@ import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 import { buildWealthRoute, type WealthRouteInput } from '@/lib/wealth-route';
+import { isConcreteFinancialGoal } from '@/lib/personalized-goals';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,12 @@ type GoalRow = {
   target_amount?: number | string | null;
   target_date?: string | null;
   horizon_months?: number | string | null;
+  source?: string | null;
 };
+
+function eligibleGoals(goals: GoalRow[]) {
+  return goals.filter((goal) => goal.source !== 'personalization' || isConcreteFinancialGoal(goal.name));
+}
 
 function deriveExperience(value: unknown): WealthRouteInput['experienceLevel'] {
   const text = String(value || '').toLocaleLowerCase('es-MX');
@@ -101,7 +107,7 @@ function buildInput(personalization: PersonalizationRow, goals: GoalRow[], month
 
 function eligibility(personalization: PersonalizationRow | null, goals: GoalRow[]) {
   const profileCompleted = Boolean(personalization?.interview_completed_at);
-  const hasGoals = goals.length > 0;
+  const hasGoals = eligibleGoals(goals).some((goal) => Number(goal.target_amount || 0) > 0);
   return {
     ready: profileCompleted && hasGoals,
     profileCompleted,
@@ -109,7 +115,7 @@ function eligibility(personalization: PersonalizationRow | null, goals: GoalRow[
     reason: !profileCompleted
       ? 'Completa primero tu entrevista de metas.'
       : !hasGoals
-        ? 'Guarda al menos una meta para construir tu ruta.'
+        ? 'Define el monto de al menos una meta financiera para construir tu ruta.'
         : null,
   };
 }
@@ -156,7 +162,7 @@ export async function GET(request: Request) {
         .maybeSingle(),
       supabase
         .from('financial_goals')
-        .select('id, name, current_amount, target_amount, target_date, horizon_months')
+        .select('id, name, current_amount, target_amount, target_date, horizon_months, source')
         .eq('profile_id', tenant.profileId)
         .eq('status', 'active')
         .order('sort_order', { ascending: true })
@@ -172,7 +178,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: false,
         error: 'Falta aplicar la migración agentic foundation.',
-        migration: '20260630_agentic_business_wealth_foundation.sql',
+        migration: '20260630000100_agentic_business_wealth_foundation.sql',
       }, { status: 409 });
     }
 
@@ -188,7 +194,7 @@ export async function GET(request: Request) {
     if (goalsError) throw new Error(`No pude leer tus objetivos: ${goalsError.message}`);
     if (profileError) throw new Error(`No pude leer tu perfil: ${profileError.message}`);
 
-    const goalRows = (goals || []) as GoalRow[];
+    const goalRows = eligibleGoals((goals || []) as GoalRow[]);
     const personalizationRow = (personalization || null) as PersonalizationRow | null;
     const wealthEligibility = eligibility(personalizationRow, goalRows);
     const riskProfile = personalizationRow
@@ -240,7 +246,7 @@ export async function POST(request: Request) {
         .maybeSingle(),
       supabase
         .from('financial_goals')
-        .select('id, name, current_amount, target_amount, target_date, horizon_months')
+        .select('id, name, current_amount, target_amount, target_date, horizon_months, source')
         .eq('profile_id', profileId)
         .eq('status', 'active')
         .order('sort_order', { ascending: true })
@@ -256,7 +262,7 @@ export async function POST(request: Request) {
     if (profileResult.error) throw new Error(`No pude leer tu perfil: ${profileResult.error.message}`);
 
     const personalization = (personalizationResult.data || null) as PersonalizationRow | null;
-    const goals = (goalsResult.data || []) as GoalRow[];
+    const goals = eligibleGoals((goalsResult.data || []) as GoalRow[]);
     const wealthEligibility = eligibility(personalization, goals);
     if (!personalization || !wealthEligibility.ready) {
       return NextResponse.json({ success: false, error: wealthEligibility.reason, eligibility: wealthEligibility }, { status: 409 });
@@ -327,7 +333,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: false,
         error: 'Falta aplicar la migración agentic foundation.',
-        migration: '20260630_agentic_business_wealth_foundation.sql',
+        migration: '20260630000100_agentic_business_wealth_foundation.sql',
       }, { status: 409 });
     }
 

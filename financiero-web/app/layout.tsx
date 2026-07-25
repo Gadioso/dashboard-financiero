@@ -15,12 +15,25 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://virafi.com"),
   title: {
     default: "Virafi",
     template: "%s | Virafi",
   },
-  description: "Tu CFO personal para ver tu dinero con claridad y rumbo.",
+  description: "Virafi te ayuda a ver tu dinero con claridad y rumbo.",
   applicationName: "Virafi",
+  openGraph: {
+    type: "website",
+    locale: "es_MX",
+    siteName: "Virafi",
+    title: "Virafi — Tu dinero, con claridad y rumbo",
+    description: "Cuentas, metas, patrimonio y mercados convertidos en un plan financiero y próximos pasos claros.",
+  },
+  twitter: {
+    card: "summary",
+    title: "Virafi — Tu dinero, con claridad y rumbo",
+    description: "Una visión financiera conectada para personas y negocios en Latinoamérica.",
+  },
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",

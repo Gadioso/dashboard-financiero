@@ -1,9 +1,9 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { syncfyFiscalOrganizationType, syncfySatAllInOneSiteId, syncSyncfyFiscalProfile } from '@/lib/fiscal-syncfy';
 import { syncSyncfyProfile } from '@/lib/open-banking/syncfy-ingest';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { hasValidSyncfySignature } from '@/lib/syncfy-webhook-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -30,15 +30,6 @@ type SyncfyV3WebhookPayload = {
     payload?: SyncfyWebhookPayload;
   }>;
 };
-
-const syncfyFiscalSiteIds = new Set([
-  syncfySatAllInOneSiteId,
-  '56cf5728784806f72b8b456f',
-  '58543125784806c3298b4572',
-  '59aefe28056f29793a58c091',
-  '59aefe28056f29793a58c092',
-  '5f6bbaa541273336c87d96c1',
-]);
 
 const dataReadyEvents = new Set([
   'refresh',
@@ -67,8 +58,12 @@ function secureEqual(left: string, right: string) {
 function isAuthorized(request: Request) {
   const expected = process.env.SYNCFY_WEBHOOK_SECRET || '';
   const received = request.headers.get('x-syncfy-webhook-secret') || bearerToken(request);
+  const signatureKey = process.env.SYNCFY_WEBHOOK_SIGNATURE_KEY || '';
 
-  return Boolean(expected && received && secureEqual(expected, received));
+  return Boolean(
+    (expected && received && secureEqual(expected, received))
+    || hasValidSyncfySignature(request, signatureKey)
+  );
 }
 
 function normalizeWebhookPayloads(raw: unknown): SyncfyWebhookPayload[] {
@@ -148,9 +143,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     const resolvedProfileId = userResult.data.profile_id as string;
     profileId = resolvedProfileId;
     const siteId = cleanText(payload.id_site);
-    const organizationType = cleanText(payload.id_site_organization_type);
-    const isFiscalWebhook = organizationType === syncfyFiscalOrganizationType
-      || Boolean(siteId && syncfyFiscalSiteIds.has(siteId));
 
     // Syncfy emits several lifecycle events. Only a refresh event means that
     // provider data is ready to read; acknowledging the others prevents an
@@ -161,7 +153,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         request,
         profileId: resolvedProfileId,
         action: 'syncfy.webhook.acknowledged',
-        resourceType: isFiscalWebhook ? 'fiscal_integrations' : 'bank_connections',
+        resourceType: 'bank_connections',
         metadata: {
           event,
           credentialId,
@@ -172,60 +164,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
 
       return NextResponse.json({ success: true, acknowledged: true, processed: false, event });
-    }
-
-    if (isFiscalWebhook) {
-      const fiscalProfile = await supabase
-        .from('fiscal_profiles')
-        .select('id')
-        .eq('profile_id', resolvedProfileId)
-        .eq('status', 'active')
-        .limit(1)
-        .maybeSingle();
-      if (fiscalProfile.error) throw new Error(fiscalProfile.error.message);
-      if (!fiscalProfile.data) return NextResponse.json({ success: false, error: 'Expediente fiscal no configurado.' }, { status: 409 });
-
-      if (credentialId) {
-        const now = new Date().toISOString();
-        const integration = await supabase
-          .from('fiscal_integrations')
-          .upsert({
-            profile_id: resolvedProfileId,
-            fiscal_profile_id: fiscalProfile.data.id,
-            integration_type: 'open_fiscal',
-            provider: 'syncfy',
-            status: 'active',
-            provider_connection_id: credentialId,
-            last_error: null,
-            metadata: { product: 'sat_all_in_one', siteId: siteId || syncfySatAllInOneSiteId, credentialsStoredBy: 'syncfy' },
-            updated_at: now,
-          }, { onConflict: 'profile_id,integration_type,provider' });
-        if (integration.error) throw new Error(integration.error.message);
-      }
-
-      const fiscalResult = await syncSyncfyFiscalProfile({
-        supabase,
-        profileId: resolvedProfileId,
-        credentialId,
-        pullBeforeRead: false,
-      });
-      await logAuditEvent({
-        supabase,
-        request,
-        profileId: resolvedProfileId,
-        action: 'fiscal.syncfy.webhook',
-        resourceType: 'cfdi_documents',
-        metadata: {
-          event,
-          credentialId,
-          siteId,
-          jobId: cleanText(payload.id_job_uuid) || cleanText(payload.id_job),
-          transactions: fiscalResult.transactions,
-          saved: fiscalResult.saved,
-        },
-      });
-
-      return NextResponse.json({ success: true, event, fiscal: true, ...fiscalResult });
     }
 
     if (credentialId) {

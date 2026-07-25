@@ -61,7 +61,7 @@ function hashIp(request?: Request) {
 
   if (!ip) return null;
 
-  const salt = process.env.AUDIT_IP_HASH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EMAIL_INGEST_SECRET || 'dashboard-financiero';
+  const salt = process.env.AUDIT_IP_HASH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'dashboard-financiero';
 
   return createHash('sha256').update(`${salt}:${ip}`).digest('hex').slice(0, 32);
 }

@@ -96,8 +96,8 @@ export async function POST(request: Request) {
         },
       ],
       allow_promotion_codes: true,
-      success_url: `${baseUrl}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/?billing=cancelled`,
+      success_url: `${baseUrl}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/dashboard?billing=cancelled`,
       client_reference_id: tenant.profileId,
       metadata: {
         profile_id: tenant.profileId,

@@ -8,7 +8,7 @@ import VirafiBrand from '@/app/Components/VirafiBrand';
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/';
+  const next = searchParams.get('next') || '/dashboard';
   const routeError = searchParams.get('error') || '';
   const [mode, setMode] = useState<'account' | 'private'>('account');
   const [accountAction, setAccountAction] = useState<'login' | 'signup'>('login');
@@ -57,7 +57,7 @@ function LoginForm() {
         return;
       }
 
-      window.location.href = result.next || '/';
+      window.location.href = result.next || '/dashboard';
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
@@ -69,6 +69,32 @@ function LoginForm() {
     setLoading(true);
     setError('');
     window.location.href = `/api/auth/oauth?provider=${provider}&next=${encodeURIComponent(next)}`;
+  }
+
+  async function requestRecovery() {
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch('/api/auth/recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const result = await response.json().catch(() => null) as { message?: string; error?: string } | null;
+
+      if (!response.ok) {
+        setError(result?.error || 'No pudimos iniciar la recuperación.');
+        return;
+      }
+
+      setMessage(result?.message || 'Si la cuenta existe, recibirás instrucciones para recuperar el acceso.');
+    } catch {
+      setError('No pude conectar con el servidor.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function chooseMode(nextMode: 'account' | 'private') {
@@ -83,9 +109,9 @@ function LoginForm() {
         <div>
           <VirafiBrand inverse showTagline />
           <div className="mt-20 max-w-xl">
-            <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">Tu CFO personal para ver con claridad hacia dónde va tu patrimonio.</h1>
+            <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">Virafi te ayuda a ver con claridad hacia dónde va tu patrimonio.</h1>
             <p className="mt-5 max-w-lg text-base leading-7 text-white/60">
-              Conecta cuentas, movimientos, presupuesto, ahorro, inversión y tu lado fiscal en un solo rumbo.
+              Conecta cuentas, movimientos, metas, ahorro e inversión en un solo rumbo.
             </p>
           </div>
         </div>
@@ -167,6 +193,16 @@ function LoginForm() {
                 placeholder="Mínimo 8 caracteres"
               />
             </label>
+            {accountAction === 'login' ? (
+              <button
+                type="button"
+                onClick={requestRecovery}
+                disabled={loading || !email.trim()}
+                className="text-left text-sm font-semibold text-blue-700 hover:text-blue-800 disabled:opacity-50"
+              >
+                Olvidé mi contraseña
+              </button>
+            ) : null}
             {accountAction === 'signup' && (
               <label className="block text-sm font-medium text-slate-600">
                 Nombre completo

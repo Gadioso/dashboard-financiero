@@ -6,10 +6,13 @@ import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
 import { financieroAgent } from './agents/financiero-agent';
+import { virafiContentAgent } from './agents/virafi-content-agent';
+import { virafiWeeklyContentWorkflow } from './workflows/virafi-weekly-content-workflow';
+import { virafiDailyCfoWorkflow } from './workflows/virafi-daily-cfo-workflow';
 
 export const mastra = new Mastra({
-  workflows: {},
-  agents: { financieroAgent },
+  workflows: { virafiWeeklyContentWorkflow, virafiDailyCfoWorkflow },
+  agents: { financieroAgent, virafiContentAgent },
   scorers: {},
   storage: new MastraCompositeStore({
     id: 'composite-storage',

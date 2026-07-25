@@ -11,7 +11,6 @@ const scopedTables = [
   'presupuestos_mensuales',
   'fondos_acumulados',
   'telegram_memoria',
-  'santander_ingest_logs',
   'classification_preferences',
   'abonos_tarjeta_credito',
 ] as const;
@@ -34,9 +33,6 @@ const optionalScopedTables = [
   'trade_intents',
   'risk_limits',
   'advisor_disclosures',
-  'cfdi_integrations',
-  'cfdi_documents',
-  'cfdi_reconciliation_events',
 ] as const;
 
 async function countProfileRows(
@@ -89,37 +85,6 @@ type InvestmentAccountRow = {
   created_at?: string | null;
 };
 
-type CfdiDocumentRow = {
-  id: string;
-  business_entity_id?: string | null;
-  cfdi_uuid?: string | null;
-  document_direction: string;
-  issue_date?: string | null;
-  document_type?: string | null;
-  status: string;
-  issuer_rfc?: string | null;
-  issuer_name?: string | null;
-  receiver_rfc?: string | null;
-  receiver_name?: string | null;
-  currency?: string | null;
-  total?: number | null;
-  created_at?: string | null;
-};
-
-type CfdiReconciliationEventRow = {
-  id: string;
-  cfdi_document_id?: string | null;
-  gasto_id?: number | null;
-  ingreso_id?: number | null;
-  bank_transaction_raw_id?: string | null;
-  match_status: string;
-  confidence?: number | null;
-  amount_delta?: number | null;
-  date_delta_days?: number | null;
-  evidence?: Record<string, unknown> | null;
-  created_at?: string | null;
-};
-
 function dedupeBankConnections(connections: BankConnectionRow[]) {
   const seen = new Set<string>();
 
@@ -159,12 +124,15 @@ export async function GET(request: Request) {
         profileId: null,
         profile: null,
         telegramAccounts: [],
+        telegramBot: {
+          name: process.env.TELEGRAM_BOT_DISPLAY_NAME || 'Finance Dashboard',
+          username: process.env.TELEGRAM_BOT_USERNAME || null,
+        },
         businessEntities: [],
         investmentAccounts: [],
         agentTasks: [],
         agentFindings: [],
-        cfdiDocuments: [],
-        cfdiReconciliationEvents: [],
+        virafiaMessages: [],
         financialCounts: Object.fromEntries(scopedTables.map((table) => [table, 0])),
         message: 'DASHBOARD_PRIVATE_PROFILE_ID no está configurado.',
       });
@@ -179,8 +147,7 @@ export async function GET(request: Request) {
       investmentAccountsResult,
       agentTasksResult,
       agentFindingsResult,
-      cfdiDocumentsResult,
-      cfdiReconciliationResult,
+      virafiaMessagesResult,
       personalizationResult,
       billingResult,
       countResults,
@@ -193,8 +160,7 @@ export async function GET(request: Request) {
       supabase.from('investment_accounts').select('id, business_entity_id, provider, account_name, account_type, mode, status, base_currency, last_sync_at, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(12),
       supabase.from('agent_tasks').select('id, agent_key, title, status, priority, due_at, created_at').eq('profile_id', profileId).in('status', ['open', 'in_progress', 'waiting_user']).order('created_at', { ascending: false }).limit(8),
       supabase.from('agent_findings').select('id, agent_key, finding_type, severity, title, summary, recommendation, status, created_at').eq('profile_id', profileId).eq('status', 'active').order('created_at', { ascending: false }).limit(8),
-      supabase.from('cfdi_documents').select('id, business_entity_id, cfdi_uuid, document_direction, issue_date, document_type, status, issuer_rfc, issuer_name, receiver_rfc, receiver_name, currency, total, created_at').eq('profile_id', profileId).order('issue_date', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(8),
-      supabase.from('cfdi_reconciliation_events').select('id, cfdi_document_id, gasto_id, ingreso_id, bank_transaction_raw_id, match_status, confidence, amount_delta, date_delta_days, evidence, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(8),
+      supabase.from('virafia_conversation_messages').select('id, role, content, channel, metadata, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(20),
       supabase.from('financial_personalization_profiles').select('interview_completed_at').eq('profile_id', profileId).maybeSingle(),
       getSafeBillingStatus({ supabase, profileId }),
       Promise.all([...scopedTables, ...optionalScopedTables].map((table) => countProfileRows(supabase, table, profileId))),
@@ -206,7 +172,6 @@ export async function GET(request: Request) {
     const financialCounts = Object.fromEntries(countResults.map((result) => [result.table, result.count]));
     const missingOpenBankingTables = missingTable(bankConnectionResult.error) || missingTable(bankAccountResult.error);
     const missingAgenticTables = [businessEntitiesResult.error, investmentAccountsResult.error, agentTasksResult.error, agentFindingsResult.error].some(missingTable);
-    const missingCfdiTables = missingTable(cfdiDocumentsResult.error) || missingTable(cfdiReconciliationResult.error);
     const errors = [
       profileResult.error,
       telegramResult.error,
@@ -216,8 +181,7 @@ export async function GET(request: Request) {
       missingAgenticTables ? null : investmentAccountsResult.error,
       missingAgenticTables ? null : agentTasksResult.error,
       missingAgenticTables ? null : agentFindingsResult.error,
-      missingCfdiTables ? null : cfdiDocumentsResult.error,
-      missingCfdiTables ? null : cfdiReconciliationResult.error,
+      missingTable(virafiaMessagesResult.error) ? null : virafiaMessagesResult.error,
       personalizationResult.error,
     ]
       .filter(Boolean)
@@ -234,20 +198,31 @@ export async function GET(request: Request) {
         avatarUrl: profileResult.data.avatar_path ? `/api/account/profile/avatar?v=${encodeURIComponent(profileResult.data.updated_at || '')}` : null,
       } : null,
       telegramAccounts: telegramResult.data || [],
+      telegramBot: {
+        name: process.env.TELEGRAM_BOT_DISPLAY_NAME || 'Finance Dashboard',
+        username: process.env.TELEGRAM_BOT_USERNAME || null,
+      },
       bankConnections: missingOpenBankingTables ? [] : dedupeBankConnections(bankConnectionResult.data || []),
       bankAccounts: missingOpenBankingTables ? [] : bankAccountResult.data || [],
       businessEntities: missingAgenticTables ? [] : (businessEntitiesResult.data || []) as BusinessEntityRow[],
       investmentAccounts: missingAgenticTables ? [] : (investmentAccountsResult.data || []) as InvestmentAccountRow[],
       agentTasks: missingAgenticTables ? [] : agentTasksResult.data || [],
       agentFindings: missingAgenticTables ? [] : agentFindingsResult.data || [],
-      cfdiDocuments: missingCfdiTables ? [] : (cfdiDocumentsResult.data || []) as CfdiDocumentRow[],
-      cfdiReconciliationEvents: missingCfdiTables ? [] : (cfdiReconciliationResult.data || []) as CfdiReconciliationEventRow[],
+      virafiaMessages: missingTable(virafiaMessagesResult.error)
+        ? []
+        : (virafiaMessagesResult.data || []).reverse().map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          channel: message.channel,
+          metadata: message.metadata,
+          createdAt: message.created_at,
+        })),
       personalization: {
         completed: Boolean(personalizationResult.data?.interview_completed_at),
         completedAt: personalizationResult.data?.interview_completed_at || null,
       },
       agenticFoundationReady: !missingAgenticTables,
-      cfdiFoundationReady: !missingCfdiTables,
       billing: billingResult,
       financialCounts,
       tenantSource: tenant.source,

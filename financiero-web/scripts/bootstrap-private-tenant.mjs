@@ -11,7 +11,6 @@ const tenantTables = [
   'presupuestos_mensuales',
   'fondos_acumulados',
   'telegram_memoria',
-  'santander_ingest_logs',
   'classification_preferences',
   'abonos_tarjeta_credito',
 ];
@@ -51,7 +50,6 @@ function parseArgs() {
     if (arg === '--full-name') parsed.fullName = next;
     if (arg === '--telegram-chat-id') parsed.telegramChatId = next;
     if (arg === '--telegram-username') parsed.telegramUsername = next;
-    if (arg === '--gmail-email') parsed.gmailEmail = next;
   }
 
   return parsed;
@@ -169,30 +167,6 @@ async function linkTelegram({ supabase, profileId, chatId, username, apply }) {
   return { planned: false, data };
 }
 
-async function linkGmail({ supabase, profileId, email, apply }) {
-  if (!email) return null;
-
-  const payload = {
-    profile_id: profileId,
-    email,
-    provider: 'gmail',
-    status: 'active',
-    updated_at: new Date().toISOString(),
-  };
-
-  if (!apply) return { planned: true, payload };
-
-  const { data, error } = await supabase
-    .from('gmail_integrations')
-    .upsert(payload, { onConflict: 'profile_id,email' })
-    .select('id, profile_id, email, provider, status, updated_at')
-    .single();
-
-  if (error) throw new Error(`No pude vincular Gmail: ${error.message}`);
-
-  return { planned: false, data };
-}
-
 async function main() {
   const env = readEnv();
   const args = parseArgs();
@@ -201,11 +175,10 @@ async function main() {
     throw new Error('Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
   }
 
-  const email = normalizeEmail(args.email || env.DASHBOARD_OWNER_EMAIL || env.EMAIL_INGEST_GMAIL_ADDRESS);
+  const email = normalizeEmail(args.email || env.DASHBOARD_OWNER_EMAIL);
   const fullName = args.fullName || env.DASHBOARD_OWNER_FULL_NAME || 'Diego Gayoso';
   const telegramChatId = args.telegramChatId || env.TELEGRAM_NOTIFY_CHAT_ID;
   const telegramUsername = args.telegramUsername || env.TELEGRAM_NOTIFY_USERNAME;
-  const gmailEmail = normalizeEmail(args.gmailEmail || env.EMAIL_INGEST_GMAIL_ADDRESS || env.DASHBOARD_OWNER_EMAIL);
   let profileId = args.profileId || env.DASHBOARD_PRIVATE_PROFILE_ID;
 
   if (!email && args.createAuthUser) {
@@ -232,7 +205,6 @@ async function main() {
   const counts = await Promise.all(tenantTables.map((table) => countRowsWithoutProfile(supabase, table)));
   const profile = await ensureProfile({ supabase, profileId, email, fullName, apply: args.apply });
   const telegram = await linkTelegram({ supabase, profileId, chatId: telegramChatId, username: telegramUsername, apply: args.apply });
-  const gmail = await linkGmail({ supabase, profileId, email: gmailEmail, apply: args.apply });
   const backfill = args.apply
     ? await Promise.all(counts.filter((row) => row.available && row.count > 0).map((row) => backfillRows(supabase, row.table, profileId)))
     : counts.filter((row) => row.available && row.count > 0).map((row) => ({
@@ -246,12 +218,11 @@ async function main() {
     authUser,
     profile,
     telegram,
-    gmail,
     rowsWithoutProfile: counts,
     backfill,
     nextSteps: args.apply
       ? [
-          'Sube DASHBOARD_PRIVATE_PROFILE_ID y EMAIL_INGEST_PROFILE_ID a Vercel Production.',
+          'Sube DASHBOARD_PRIVATE_PROFILE_ID a Vercel Production.',
           'Ejecuta npm run launch:check contra production.',
           'Prueba Telegram: "mi último gasto" y confirma que responde solo con datos del perfil.',
         ]

@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('business_entities')
-      .select('id, name, entity_type, country, currency, tax_id, tax_regime, status, metadata, created_at, updated_at')
+      .select('id, name, entity_type, country, currency, status, metadata, created_at, updated_at')
       .eq('profile_id', tenant.profileId)
       .order('created_at', { ascending: false });
 
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         success: false,
         error: 'Falta aplicar la migración agentic foundation.',
-        migration: '20260630_agentic_business_wealth_foundation.sql',
+        migration: '20260630000100_agentic_business_wealth_foundation.sql',
       }, { status: 409 });
     }
 
@@ -111,8 +111,6 @@ export async function POST(request: Request) {
       entity_type: entityType,
       country: cleanCode(body.country, 'MX', 2),
       currency: cleanCode(body.currency, 'MXN', 3),
-      tax_id: cleanText(body.taxId ?? body.tax_id, 30),
-      tax_regime: cleanText(body.taxRegime ?? body.tax_regime, 120),
       status,
       metadata: typeof body.metadata === 'object' && body.metadata !== null ? body.metadata : {},
       updated_at: new Date().toISOString(),
@@ -121,14 +119,14 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('business_entities')
       .insert([payload])
-      .select('id, name, entity_type, country, currency, tax_id, tax_regime, status, metadata, created_at, updated_at')
+      .select('id, name, entity_type, country, currency, status, metadata, created_at, updated_at')
       .single();
 
     if (tableMissing(error)) {
       return NextResponse.json({
         success: false,
         error: 'Falta aplicar la migración agentic foundation.',
-        migration: '20260630_agentic_business_wealth_foundation.sql',
+        migration: '20260630000100_agentic_business_wealth_foundation.sql',
       }, { status: 409 });
     }
 

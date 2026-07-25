@@ -292,7 +292,7 @@ export async function getSyncfyAttachmentExtra(token: string, idAttachment: stri
     return await syncfySessionGet<Record<string, unknown>>(token, `/attachment/${encodedId}/extra`);
   } catch (error) {
     // Some Syncfy deployments expose the same resource with the plural path.
-    // Retrying this documented variant keeps the fiscal importer compatible
+    // Retrying this documented variant keeps provider integrations compatible
     // without ever handling the XML/CIEC outside Syncfy's session.
     try {
       return await syncfySessionGet<Record<string, unknown>>(token, `/attachments/${encodedId}/extra`);

@@ -1,124 +1,96 @@
 # SaaS roadmap status
 
-## Vision unicornio: plataforma financiera agentica
+## Visión
 
-Estado: definido.
+Estado: definida.
 
-- Nueva tesis documentada en [agentic-finance-platform.md](./agentic-finance-platform.md).
-- El producto evoluciona de dashboard financiero personal a plataforma B2B2C/B2B-first.
-- La arquitectura objetivo usa orquestacion de subagentes: intake/clasificacion, AI CFO, presupuesto/metas, flujo de caja, fiscal-contable Mexico, integraciones, crecimiento, riesgo/anomalias, contador/despacho y compliance.
-- El modo personal y el modo negocio se vuelven ejes de producto.
-- SAT/CFDI, contador mexicano, open banking y portal de despacho quedan como rutas estrategicas para construir defensibilidad en Mexico/LatAm.
-- Wealth cockpit agregado: portafolio, inversiones, Binance read-only, Polymarket research/paper, research fundamental, analisis tecnico, riesgo de inversiones y ejecucion supervisada por fases.
-- Paper simulation/PnL agregado: `GET/POST /api/investments/paper-trades` abre simulaciones desde tesis y `PATCH /api/investments/paper-trades/[id]` cierra/cancela con PnL simulado.
-- Siguiente corte recomendado: separacion formal de agentes intake/AI CFO, scoring historico de oportunidades y post-mortem de tesis cerradas.
-- Base SQL iniciada: `20260630_agentic_business_wealth_foundation.sql` crea modo negocio, tareas/hallazgos de agentes, modelo de inversiones, paper trading, trade intents, limites de riesgo y disclosures.
-- Bundle operativo agregado: `npm run sql:agentic-foundation`.
-- Base CFDI manual agregada: `20260630190922_cfdi_manual_ingest_foundation.sql`, `GET/POST /api/cfdi/documents`, panel fiscal en Wealth cockpit y bundle `npm run sql:cfdi-foundation`.
-- Conciliacion banco-CFDI agregada: `POST /api/cfdi/reconcile`, eventos recientes en Wealth cockpit e indices anti-duplicado en `20260630194015_cfdi_reconciliation_dedupe_indexes.sql`.
-- Market sync read-only agregado: `GET/POST /api/investments/market-sync` sincroniza Binance Spot 24h y mercados publicos de Polymarket a `market_assets` y `market_data_snapshots`.
-- Investment research agent agregado: `GET/POST /api/investments/research-agent` crea tesis auditables en `investment_theses` desde snapshots, perfil de riesgo y activos permitidos.
-- Score historico/post-mortem agregado: `GET/POST /api/investments/paper-trades` devuelve scorecard de simulaciones y `PATCH /api/investments/paper-trades/[id]` cierra la tesis ligada con `evidence.postMortem`.
+Virafi es una plataforma B2C de finanzas personales orientada a metas. Une banca de solo lectura, planeación, VirafIA y contexto de inversión para ayudar a cada persona a convertir una meta de vida en decisiones financieras sostenibles.
 
-## Paso 1: Auditoria Supabase/Auth/OAuth
+La tesis completa está en [agentic-finance-platform.md](./agentic-finance-platform.md).
 
-Estado: listo.
+## Base multiusuario
 
-- Tablas multiusuario confirmadas.
-- Tablas financieras con `profile_id`.
-- RLS activo.
-- Login real con Supabase Auth.
-- `/api/account/status` responde con `profileScoped`.
-- Produccion no cae al perfil privado cuando no hay sesion.
-- Gmail y Telegram pertenecen a un usuario.
+Estado: implementada, sujeta a verificación continua.
 
-## Paso 2: Beta privada multiusuario
+- Supabase Auth y datos financieros asociados a `profile_id`.
+- RLS para aislamiento entre usuarios.
+- Estado de cuenta, exportación y eliminación de datos.
+- Auditoría y observabilidad de errores.
 
-Estado: listo.
+## Onboarding por metas
 
-- Login/signup funcional.
-- Dashboard por usuario.
-- Datos aislados.
-- Usuario nuevo empieza vacio.
-- Usuario Diego conserva data.
-- Telegram, Gmail/Banco y movimientos usan `profile_id`.
-- Build/lint/security check pasan.
-- Pendiente de SQL en producción: aplicar `20260630_profile_scoped_monthly_budgets.sql` para que `presupuestos_mensuales` permita una fila por `profile_id + mes_anio`; sin esto, un usuario beta con ingreso en el mismo mes que Diego no puede crear su propio presupuesto mensual.
+Estado: funcional, próximo foco de producto.
 
-## Paso 3: Onboarding
+- Crear cuenta y perfil.
+- Definir metas financieras.
+- Registrar presupuestos y movimientos.
+- Conectar una fuente bancaria de solo lectura.
+- Mostrar estado de configuración.
 
-Estado: funcional, en mejora.
+Siguiente corte: convertir la meta en el eje del onboarding y generar un primer plan con aportación, horizonte y probabilidad de cumplimiento.
 
-- Crear cuenta.
-- Perfil automatico.
-- Presupuestos iniciales.
-- Telegram self-serve.
-- Banco read-only como origen automático; Telegram y web como captura directa.
-- Banco por pais con proveedor interno.
-- Estado de configuracion.
-- Script operativo agregado: `npm run budget:sync` recalcula presupuestos por ingresos reales y crea presupuestos faltantes cuando el constraint por perfil ya está aplicado.
-
-## Paso 4: Gmail OAuth retirado
-
-Estado: retirado del producto multiusuario.
-
-- Los endpoints de OAuth, sincronización e ingesta responden `410 Gone`.
-- El origen canónico de movimientos queda limitado a `Banco`, `Telegram` o `Web`.
-- Los registros históricos `Santander_Email` migran a `Banco`.
-
-## Paso 5: Telegram multiusuario
-
-Estado: listo.
-
-- `telegram_chat_id` vinculado a `profile_id`.
-- Registro en perfil correcto.
-- Memoria separada.
-- Link code self-serve.
-- Comandos de desconexion/revocacion.
-
-## Paso 6: Billing y planes
+## VirafIA proactiva
 
 Estado: base implementada.
 
-- Stripe Checkout para suscripcion premium.
-- Stripe Customer Portal.
-- Webhook de suscripciones.
-- Tablas `billing_customers` y `billing_subscriptions` con RLS.
-- Estado de plan en `/api/account/status`.
-- Badge y acciones de plan en dashboard.
-- Limites por plan para nuevas conexiones de banco, Gmail y Telegram.
-- Bloqueo de cupo con respuesta 402 en endpoints de conexion.
-- Pendiente: crear producto/precio real en Stripe, configurar webhook, correr `sql:billing` y activar variables de produccion.
+- Chat con herramientas financieras.
+- Tareas y hallazgos de agentes.
+- Análisis semanal y recomendaciones.
+- Contexto de movimientos, ingresos, saldos, metas, patrimonio e inversiones.
 
-## Paso 7: Seguridad y operacion
+Siguiente corte: priorización de una sola acción, explicación auditable y seguimiento de aceptación o rechazo.
 
-Estado: base operativa completada.
-
-- Rate limit base.
-- Secret scan.
-- RLS.
-- Auditoria de acciones por usuario en `audit_events`.
-- Logs de errores por usuario en `error_events`.
-- Exportacion JSON por usuario en `GET /api/account/export`.
-- Borrado de datos por usuario en `DELETE /api/account/data`.
-- Monitor de errores y alertas Telegram en `GET /api/ops/error-alerts`.
-- Integracion Sentry opcional para cliente, server, edge y errores manejados.
-- Sentry activo y verificado extremo a extremo en produccion.
-- Verificador de restore seguro para staging con `npm run restore:verify`.
-- Checklist operativo de backups/restore y rotacion de secrets.
-- Primer restore logico real ejecutado y verificado en staging el 2026-06-18.
-
-## Paso 8: Escala
+## Banca automatizada
 
 Estado: en progreso.
 
-- Indices por `profile_id` en tablas principales.
-- Open Banking foundation.
-- Plaid Link sandbox.
-- Plaid sync crudo a `bank_accounts` y `bank_transactions_raw`.
-- Cola base de clasificacion para movimientos bancarios crudos.
-- Worker manual `POST /api/bank/transactions/classify` con lotes limitados.
-- Backpressure inicial con `BANK_CLASSIFICATION_BATCH_SIZE`.
-- Auditoria de procesadas, clasificadas, fallidas y pendientes restantes.
-- Clasificacion ajustada el 2026-06-30: todo gasto no identificado como herramienta, inversión, emergencia o seguro cae por defecto en `Placeres`.
-- Pendiente: cron/worker externo, monitoreo de costos por proveedor y clasificacion asincrona continua.
+- Base de Open Banking.
+- Plaid Link en sandbox.
+- Sincronización a cuentas y transacciones crudas.
+- Clasificación por lotes con backpressure inicial.
+- Orígenes Banco, Telegram y Web asociados al usuario.
+
+Siguiente corte: worker continuo, indicador de frescura, cobertura por institución y fallback de importación.
+
+## Inversión orientada a metas
+
+Estado: base avanzada.
+
+- Portafolios, posiciones, perfil de riesgo y límites.
+- Sincronización de mercados en modo lectura.
+- Tesis de inversión auditables.
+- Simulación, PnL y post-mortem.
+- Confirmación humana para acciones sensibles.
+
+Siguiente corte: conectar cada recomendación con una meta, horizonte, necesidad de liquidez y capacidad de pérdida; añadir fuentes y fecha de actualización visibles.
+
+## Billing
+
+Estado: base implementada.
+
+- Stripe Checkout, Customer Portal y webhook.
+- Suscripciones asociadas al perfil.
+- Límites de plan y estado en el dashboard.
+
+Pendiente: validar producto, precio, webhook y variables del entorno de producción.
+
+## Seguridad y operación
+
+Estado: base operativa.
+
+- Rate limiting, RLS, escaneo de secretos y eventos de auditoría.
+- Exportación y borrado por usuario.
+- Sentry opcional y alertas operativas.
+- Procedimiento de restore en staging.
+
+Siguiente corte: pruebas sobre consentimiento bancario, recomendaciones de inversión, acciones confirmadas y aislamiento entre usuarios.
+
+## Métricas del siguiente lanzamiento
+
+- Tiempo hasta el primer plan útil.
+- Activación: meta creada más fuente financiera conectada.
+- Retención semanal y mensual.
+- Metas con aportación activa.
+- Recomendaciones aceptadas y beneficio observado.
+- Frescura y tasa de error de conexiones.
+- Costo de IA y proveedores por usuario activo.

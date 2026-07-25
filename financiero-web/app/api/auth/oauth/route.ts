@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { Provider } from '@supabase/supabase-js';
-import { getSafeNext } from '@/lib/auth-session';
-import { getSupabaseAnonClient } from '@/lib/supabase-server';
+import { getAppOrigin, getSafeNext } from '@/lib/auth-session';
+import { getSupabaseOAuthClient } from '@/lib/supabase-server';
 
 const supportedProviders = new Set(['google', 'apple']);
 
@@ -13,21 +13,29 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const provider = getProvider(requestUrl.searchParams.get('provider'));
   const safeNext = getSafeNext(requestUrl.searchParams.get('next'));
+  const appOrigin = getAppOrigin(request);
+
+  if (requestUrl.origin !== appOrigin) {
+    return NextResponse.redirect(
+      new URL(`${requestUrl.pathname}${requestUrl.search}`, appOrigin),
+      307
+    );
+  }
 
   if (!provider) {
     return NextResponse.redirect(new URL(`/login?error=Proveedor no soportado&next=${encodeURIComponent(safeNext)}`, request.url));
   }
 
-  const supabase = getSupabaseAnonClient();
+  const oauth = getSupabaseOAuthClient(request);
 
-  if (!supabase) {
+  if (!oauth) {
     return NextResponse.redirect(new URL(`/login?error=Falta configurar Supabase Auth&next=${encodeURIComponent(safeNext)}`, request.url));
   }
 
-  const callbackUrl = new URL('/auth/callback', requestUrl.origin);
+  const callbackUrl = new URL('/api/auth/callback', appOrigin);
   callbackUrl.searchParams.set('next', safeNext);
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  const { data, error } = await oauth.supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: callbackUrl.toString(),
@@ -40,5 +48,8 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.redirect(data.url);
+  const response = NextResponse.redirect(data.url);
+  oauth.applyVerifierCookie(response);
+
+  return response;
 }

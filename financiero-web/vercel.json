@@ -7,6 +7,10 @@
     {
       "path": "/api/investments/market-sync",
       "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/bank/syncfy/auto-sync",
+      "schedule": "45 13 * * *"
     }
   ]
 }

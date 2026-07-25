@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 const files = {
   policy: new URL('../lib/ai-policy.ts', import.meta.url),
   dashboard: new URL('../app/Components/DashboardFinanciero.tsx', import.meta.url),
-  syncfyMigration: new URL('../supabase/migrations/20260713232932_disable_syncfy_polling_webhook_first.sql', import.meta.url),
+  syncfyMigration: new URL('../supabase/migrations/20260713233020_disable_syncfy_polling_webhook_first.sql', import.meta.url),
   syncfyAutoSync: new URL('../app/api/bank/syncfy/auto-sync/route.ts', import.meta.url),
   syncfyWebhook: new URL('../app/api/bank/syncfy/webhook/route.ts', import.meta.url),
 };

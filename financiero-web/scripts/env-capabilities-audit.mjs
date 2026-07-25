@@ -9,10 +9,7 @@ const envGroups = {
   aiAnalysis: ['AI_GATEWAY_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   billing: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_PREMIUM_MONTHLY'],
   observability: ['SENTRY_DSN', 'SENTRY_AUTH_TOKEN', 'CRON_SECRET'],
-  email: ['EMAIL_INGEST_SECRET', 'GOOGLE_GMAIL_CLIENT_ID', 'GOOGLE_GMAIL_CLIENT_SECRET', 'GOOGLE_GMAIL_REDIRECT_URI'],
   banking: ['PLAID_CLIENT_ID', 'PLAID_SECRET', 'PROMETEO_API_KEY', 'BANK_TOKEN_ENCRYPTION_KEY'],
-  satOpenFiscal: ['SYNCFY_API_KEY', 'SYNCFY_WEBHOOK_SECRET'],
-  satStamping: ['SYNCFY_STAMPING_PRODUCT_ENABLED', 'SYNCFY_STAMPING_CSD_CONFIGURED', 'SYNCFY_STAMPING_API_KEY', 'SYNCFY_STAMPING_BASE_URL', 'SYNCFY_STAMPING_ISSUE_PATH', 'SYNCFY_STAMPING_CANCEL_PATH'],
 };
 
 function readEnvFile(file) {
@@ -73,16 +70,12 @@ function capabilityStatus(keys) {
   const hasGemini = keys.has('GEMINI_API_KEY') || keys.has('GOOGLE_API_KEY');
   const hasOpenRouter = keys.has('OPENROUTER_API_KEY');
   const hasOpenAI = keys.has('OPENAI_API_KEY');
-  const hasOpenFiscal = envGroups.satOpenFiscal.every((key) => keys.has(key));
-  const hasStamping = envGroups.satStamping.every((key) => keys.has(key));
 
   return {
     telegramText: hasTelegram,
     telegramVoice: hasTelegram && (hasOpenRouter || hasOpenAI || hasGemini),
     voicePreferredProvider: hasOpenRouter ? 'openrouter' : hasOpenAI ? 'openai' : hasGemini ? 'gemini' : null,
     aiAnalysis: keys.has('AI_GATEWAY_API_KEY') || hasOpenRouter || hasGemini,
-    satOpenFiscal: hasOpenFiscal,
-    satStamping: hasStamping,
     gaps: [
       ...(!hasOpenRouter ? ['OPENROUTER_API_KEY falta para que voz use OpenRouter como proveedor preferente.'] : []),
       ...(!hasOpenAI ? ['OPENAI_API_KEY falta como respaldo opcional de voz.'] : []),

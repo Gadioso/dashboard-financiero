@@ -12,7 +12,7 @@
 - Layout: matched the reference's persistent left navigation, compact account header, three-module first row, and three-column decision-support second row.
 - Typography: retained Virafi's Newsreader/Figtree pairing, using the serif for greetings and financial hierarchy and the sans serif for controls and dense data.
 - Color and surfaces: matched the warm cream canvas, thin warm borders, restrained elevation, violet navigation accent, and semantic emerald/orange/amber areas.
-- Content: replaced the reference's fictional balances and bank brands with the dashboard's real financial data, current plan, actual movements, bank connections, and conservative fiscal readiness states.
+- Content: replaced the reference's fictional balances and bank brands with the dashboard's real financial data, current plan, actual movements, connected accounts, goals and investment context.
 - Icons: replaced letter badges and legacy inline drawings with a consistent Phosphor outline/duotone family.
 - Responsive behavior: at 390 px, the sidebar becomes the existing bottom navigation, cards stack without horizontal overflow, controls remain tappable, and the floating assistant remains reachable.
 
@@ -28,6 +28,48 @@
 - Browser console errors and warnings: none.
 - ESLint: passed.
 - Production build and TypeScript: passed.
+
+final result: passed
+
+---
+
+# Virafi institutional website design QA
+
+## Evidence
+
+- Upper-page concept: `docs/design/virafi-site-concept-top.png`.
+- Lower-page concept: `docs/design/virafi-site-concept-bottom.png`.
+- Desktop implementation: `/tmp/virafi-site-hero.png` at 1440 × 1000.
+- Mission/security implementation: `/tmp/virafi-site-purpose.png` at 1440 × 1000.
+- Mobile implementation: `/tmp/virafi-site-mobile-final.png` at 390 × 844.
+- Browser method: Codex in-app Browser with explicit 1440 × 1000 and 390 × 844 viewport overrides.
+
+## Fidelity ledger
+
+- Copy and hierarchy: header labels, hero headline, CTA labels, mission, vision, security statement, AI boundaries and footer content match the approved concepts. No unapproved hero eyebrow, badge or pill was added.
+- Layout: preserved the editorial split hero, dashboard preview, four-column capability rail, three-step rising path, asymmetrical purpose section, dark security band, limits section and closing CTA/footer rhythm.
+- Typography: retained the existing Newsreader/Figtree pairing. Serif headings, compact sans-serif controls and responsive line breaks were checked at both viewports.
+- Palette and surfaces: retained Virafi cream, warm ink, thin warm borders and restrained violet. Semantic amber and emerald appear only inside the product preview.
+- Asset treatment: all product UI remains code-native. The dashboard reference was rebuilt with semantic HTML and Phosphor icons; generated concepts are documentation only and are not shipped as page UI.
+- Responsive behavior: initial mobile QA found hidden `<br>` elements collapsing headline spacing and forcing CTA overflow. The final pass restores editorial breaks, stacks CTAs and scales the product preview; document and viewport widths both measure 390 px.
+- Navigation: Producto, Nosotros, Seguridad, legal pages, mobile menu and the create-account path were exercised. Authentication receives `next=/dashboard`.
+
+## Functional and accessibility checks
+
+- Public routes: `/`, `/producto`, `/nosotros`, `/seguridad`, `/privacy`, `/terms`.
+- Product remains authenticated at `/dashboard`; public routes were added to the proxy allowlist.
+- Desktop and mobile document widths match their viewports with no horizontal overflow.
+- The mobile menu exposes Producto, Nosotros, Seguridad and Iniciar sesión.
+- The privacy notice contains 14 navigable sections; terms contain 16.
+- Semantic headings, main navigation labels, legal table of contents and footer links are present.
+- Browser console errors and warnings: none.
+- ESLint: passed.
+- Production build and TypeScript: passed.
+
+## Legal-content note
+
+- The legal pages reflect the current documented product and the Mexican legal framework reviewed on 20 July 2026.
+- The pages visibly flag that the contractual entity, RFC, full physical address and telephone must be confirmed before a general commercial launch; those facts were not present in the repository and were not invented.
 
 final result: passed
 

@@ -70,7 +70,7 @@ function localPlan({
     tasks.push({
       agent_key: 'business_cfo_agent',
       title: 'Crear entidad de negocio principal',
-      description: 'Separar actividad personal y negocio para poder calcular margen, impuestos, flujo de caja y pagos al owner.',
+      description: 'Separar actividad personal y negocio para entender margen, flujo de caja, capacidad de ahorro y aportaciones a metas.',
       priority: 'high',
       evidence: { businessCount },
     });
@@ -115,7 +115,7 @@ function localPlan({
       finding_type: 'investment_capacity',
       severity: 'info',
       title: 'Capacidad de asignación positiva',
-      summary: `El flujo neto del mes es positivo por ${netFlow.toFixed(2)} antes de ajustes fiscales o de negocio.`,
+      summary: `El flujo neto del mes es positivo por ${netFlow.toFixed(2)} antes de nuevas aportaciones o decisiones de inversión.`,
       recommendation: 'Usar el perfil de riesgo para decidir si el excedente va a fondo de emergencia, inversión patrimonial o capital de negocio.',
       confidence: 0.78,
       evidence: { income, expenses, netFlow, riskProfile },
@@ -125,7 +125,7 @@ function localPlan({
   if (tasks.length === 0) {
     tasks.push({
       agent_key: 'weekly_cfo_orchestrator',
-      title: 'Revisar cierre semanal AI CFO',
+      title: 'Revisar cierre semanal con VirafIA',
       description: 'Validar tareas, hallazgos y prioridades antes de convertirlas en acciones de la semana.',
       priority: 'medium',
       evidence: { income, expenses, netFlow },
@@ -139,7 +139,7 @@ function localPlan({
       severity: 'info',
       title: 'Base semanal lista',
       summary: 'La base de negocio, inversiones y riesgo ya puede generar seguimiento semanal.',
-      recommendation: 'Mantener el ciclo semanal y enriquecerlo con cuentas read-only, SAT/CFDI y movimientos clasificados.',
+      recommendation: 'Mantener el ciclo semanal y enriquecerlo con cuentas read-only, metas explícitas, mercados y movimientos clasificados.',
       confidence: 0.74,
       evidence: { income, expenses, netFlow, businessCount, investmentCount },
     });
@@ -154,7 +154,7 @@ async function maybeImproveWithGemini(plan: { tasks: GeneratedTask[]; findings: 
   if (!apiKey) return plan;
 
   const prompt = `
-Eres el AI CFO de una plataforma financiera agentica. Mejora sin inventar las tareas y hallazgos generados por reglas locales.
+Eres VirafIA, la asistente financiera proactiva de Virafi. Mejora sin inventar las tareas y hallazgos generados por reglas locales.
 
 Contexto:
 ${JSON.stringify(context, null, 2)}
@@ -228,7 +228,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: false,
         error: 'Falta aplicar la migración agentic foundation.',
-        migration: '20260630_agentic_business_wealth_foundation.sql',
+        migration: '20260630000100_agentic_business_wealth_foundation.sql',
       }, { status: 409 });
     }
     if (businessResult.error) throw new Error(`No pude leer entidades de negocio: ${businessResult.error.message}`);
@@ -313,8 +313,8 @@ export async function POST(request: Request) {
         : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (tasksInsert.error) throw new Error(`No pude guardar tareas CFO: ${tasksInsert.error.message}`);
-    if (findingsInsert.error) throw new Error(`No pude guardar hallazgos CFO: ${findingsInsert.error.message}`);
+    if (tasksInsert.error) throw new Error(`No pude guardar tareas de VirafIA: ${tasksInsert.error.message}`);
+    if (findingsInsert.error) throw new Error(`No pude guardar hallazgos de VirafIA: ${findingsInsert.error.message}`);
 
     await logAuditEvent({
       supabase,

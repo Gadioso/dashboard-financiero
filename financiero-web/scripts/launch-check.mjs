@@ -12,7 +12,6 @@ const requiredEnvKeys = [
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_WEBHOOK_SECRET',
   'TELEGRAM_NOTIFY_CHAT_ID',
-  'EMAIL_INGEST_SECRET',
 ];
 const optionalCapabilityEnvKeys = [
   'OPENROUTER_API_KEY',
@@ -192,15 +191,6 @@ async function main() {
     )
   );
 
-  const blockedSantanderStatus = await request('/api/email/santander');
-  checks.push(
-    assertCheck(
-      blockedSantanderStatus.response.status === 401,
-      'API Santander retirada conserva protección sin cookie',
-      `status=${blockedSantanderStatus.response.status}`
-    )
-  );
-
   if (dashboardToken) {
     const login = await request('/api/auth/login', {
       method: 'POST',
@@ -228,16 +218,6 @@ async function main() {
         )
       );
 
-      const santanderStatus = await request('/api/email/santander', {
-        headers: { Cookie: cookie },
-      });
-      checks.push(
-        assertCheck(
-          santanderStatus.response.status === 410 && santanderStatus.text.includes('"disabled":true'),
-          'Cookie válida no reactiva Santander Email',
-          `status=${santanderStatus.response.status}`
-        )
-      );
     }
   } else {
     checks.push({

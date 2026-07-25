@@ -25,7 +25,7 @@ Se registran eventos como:
 
 - `auth.login`, `auth.signup`, `auth.logout`
 - `movement.create_ai`, `expense.delete`, `income.delete`
-- `gmail.link`, `gmail.oauth.connected`, `telegram.link`
+- `telegram.link`
 - `bank.connection.created`, `bank.connection.updated`, `bank.sync`
 - `billing.checkout.created`, `billing.portal.opened`, `billing.webhook.processed`
 - `account.export`, `account.delete_data.requested`
@@ -132,12 +132,9 @@ Secrets principales:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: actualizar si Supabase lo rota.
 - `DASHBOARD_PRIVATE_TOKEN`: token de emergencia; mantenerlo solo como fallback.
 - `TELEGRAM_BOT_TOKEN` y webhook secret: probar `/api/telegram/webhook`.
-- `GOOGLE_GMAIL_CLIENT_SECRET`: no rompe tokens ya emitidos normalmente, pero prueba reconexion.
-- `GMAIL_TOKEN_ENCRYPTION_KEY`: si cambia sin migracion de re-cifrado, los usuarios deben reconectar Gmail.
 - `BANK_TOKEN_ENCRYPTION_KEY`: si cambia sin migracion de re-cifrado, los usuarios deben reconectar bancos.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BETA_MONTHLY`, `STRIPE_PRICE_PREMIUM_MONTHLY`: probar checkout, portal y webhook.
 - `CRON_SECRET`: actualizar cualquier job externo que lo use.
-- `EMAIL_INGEST_SECRET`: mantener solo para compatibilidad mientras se retira el flujo viejo.
 
 ## Criterio de listo
 

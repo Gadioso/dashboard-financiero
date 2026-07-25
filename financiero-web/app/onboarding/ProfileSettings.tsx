@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle, LinkSimple, MapPin, Sparkle, Trash, UserCircle } from '@phosphor-icons/react';
+import { Camera, CheckCircle, LinkSimple, MapPin, SignOut, Sparkle, Trash, UserCircle } from '@phosphor-icons/react';
 
 type Profile = {
   full_name?: string | null;
@@ -48,6 +48,8 @@ export default function ProfileSettings({
   const [loading, setLoading] = useState(enabled);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -122,12 +124,28 @@ export default function ProfileSettings({
     }
   }
 
+  async function logout() {
+    setLoggingOut(true);
+    setFeedback('');
+
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('No pude cerrar tu sesión. Intenta nuevamente.');
+      window.location.assign('/login');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No pude cerrar tu sesión. Intenta nuevamente.');
+      setLogoutConfirmOpen(false);
+      setLoggingOut(false);
+    }
+  }
+
   const visibleAvatar = previewUrl || (!removeAvatar ? avatarUrl : null);
   const initials = String(profile.full_name || profile.email || 'V')
     .split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'V';
 
   return (
-    <form onSubmit={(event) => void save(event)} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <>
+      <form onSubmit={(event) => void save(event)} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-5 md:p-6">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Tu identidad en Virafi</p>
         <h2 className="mt-1 font-brand text-2xl text-slate-950">Un perfil que le da contexto a tu dinero</h2>
@@ -164,7 +182,7 @@ export default function ProfileSettings({
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
               <p className="flex items-center gap-2 text-sm font-bold text-blue-950"><CheckCircle aria-hidden="true" className="size-5 text-blue-700" weight="fill" /> Cómo se conecta</p>
-              <p className="mt-2 text-sm leading-6 text-blue-900">Virafi tomará este perfil como contexto de identidad. La entrevista seguirá guardando tus cifras, prioridades y horizontes; el asistente combinará ambas capas para explicar y recomendar con más sentido.</p>
+              <p className="mt-2 text-sm leading-6 text-blue-900">El agente VirafIA tomará este perfil como contexto de identidad. La entrevista seguirá guardando tus cifras, prioridades y horizontes para explicar y recomendar con más sentido.</p>
             </div>
           </>}
 
@@ -174,7 +192,64 @@ export default function ProfileSettings({
           </div>
         </div>
       </div>
-    </form>
+      </form>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-6" aria-labelledby="session-settings-title">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Cuenta</p>
+            <h2 id="session-settings-title" className="mt-1 text-lg font-bold text-slate-950">Sesión</h2>
+            <p className="mt-1 text-sm text-slate-500">Cierra tu sesión únicamente cuando hayas terminado de usar este dispositivo.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLogoutConfirmOpen(true)}
+            disabled={loggingOut}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
+          >
+            <SignOut aria-hidden="true" className="size-5" /> Cerrar sesión
+          </button>
+        </div>
+      </section>
+
+      {logoutConfirmOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 backdrop-blur-sm" role="presentation">
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-confirm-title"
+            aria-describedby="logout-confirm-description"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+          >
+            <span className="grid size-11 place-items-center rounded-full bg-rose-50 text-rose-700">
+              <SignOut aria-hidden="true" className="size-6" weight="bold" />
+            </span>
+            <h2 id="logout-confirm-title" className="mt-5 text-xl font-bold text-slate-950">¿Quieres cerrar tu sesión?</h2>
+            <p id="logout-confirm-description" className="mt-2 text-sm leading-6 text-slate-600">
+              Saldrás de Virafi en este dispositivo y tendrás que iniciar sesión nuevamente para entrar a tu dashboard.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setLogoutConfirmOpen(false)}
+                disabled={loggingOut}
+                className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                disabled={loggingOut}
+                className="min-h-11 rounded-lg bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {loggingOut ? 'Cerrando sesión...' : 'Sí, cerrar sesión'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
 

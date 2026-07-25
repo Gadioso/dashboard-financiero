@@ -120,7 +120,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       execute: async () => {
         const [profileResult, personalizationResult, fundsResult, goalsResult] = await Promise.all([
           supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', profileId).maybeSingle(),
-          supabase.from('financial_personalization_profiles').select('birth_year, occupation, industry, work_model, income_sources, income_growth_goal, short_term_goals, medium_term_goals, long_term_goals, financial_concerns, valued_pleasures, pleasures_to_reduce, recurring_life_costs, recurring_investments, emergency_fund_status, investment_experience, risk_tolerance, recommendation_style, interview_completed_at').eq('profile_id', profileId).maybeSingle(),
+          supabase.from('financial_personalization_profiles').select('birth_year, occupation, industry, work_model, income_sources, income_growth_goal, short_term_goals, medium_term_goals, long_term_goals, goal_priorities, monthly_goal_capacity, financial_concerns, valued_pleasures, pleasures_to_reduce, recurring_life_costs, recurring_investments, emergency_fund_status, investment_experience, risk_tolerance, recommendation_style, interview_completed_at').eq('profile_id', profileId).maybeSingle(),
           supabase.from('fondos_acumulados').select('*').eq('profile_id', profileId),
           supabase.from('financial_goals').select('name, current_amount, target_amount, target_date, horizon_months, source, status, sort_order').eq('profile_id', profileId).order('sort_order'),
         ]);
@@ -144,27 +144,6 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
           supabase.from('abonos_tarjeta_credito').select('concepto, monto, tarjeta, origen, fecha').eq('profile_id', profileId).gte('fecha', start).lt('fecha', end).order('fecha', { ascending: false }).limit(50),
         ]);
         return { label, budgets: compactQueryResult(budgets), creditCardPayments: compactQueryResult(cardPayments) };
-      },
-    }),
-    getFiscalWorkspace: tool({
-      description: 'Get the user fiscal workspace: tax profile, provider connection, latest compliance opinion, active alerts and recent CFDI metadata. Use for Centro fiscal questions. This is read-only and does not imply that SAT filing or stamping is enabled.',
-      inputSchema: z.object({}),
-      execute: async () => {
-        const [profiles, integrations, opinions, alerts, documents] = await Promise.all([
-          supabase.from('fiscal_profiles').select('rfc, legal_name, tax_regime, fiscal_postal_code, status, updated_at').eq('profile_id', profileId),
-          supabase.from('fiscal_integrations').select('integration_type, provider, status, last_sync_at, last_error, updated_at').eq('profile_id', profileId),
-          supabase.from('fiscal_compliance_opinions').select('opinion_status, checked_at, valid_until, omitted_obligations, source').eq('profile_id', profileId).order('checked_at', { ascending: false }).limit(3),
-          supabase.from('fiscal_alerts').select('alert_type, severity, title, description, status, detected_at').eq('profile_id', profileId).eq('status', 'active').order('detected_at', { ascending: false }).limit(20),
-          supabase.from('cfdi_documents').select('document_direction, issue_date, document_type, status, issuer_name, receiver_name, currency, subtotal, total, tax_transferred, tax_withheld, source').eq('profile_id', profileId).order('issue_date', { ascending: false }).limit(20),
-        ]);
-        return {
-          fiscalProfiles: compactQueryResult(profiles),
-          integrations: compactQueryResult(integrations),
-          complianceOpinions: compactQueryResult(opinions),
-          activeAlerts: compactQueryResult(alerts),
-          recentCfdi: compactQueryResult(documents),
-          readinessBoundary: 'Connection or UI status is not proof that SAT filing, cancellation or PAC stamping is operational.',
-        };
       },
     }),
     getAgentWorkspace: tool({
@@ -193,11 +172,12 @@ Current date: ${now.toISOString()}. Current year: ${currentYear}. Current month 
 Respond in natural Mexican Spanish, directly and intelligently.
 For every factual financial answer, call at least one tool. Never reuse a number from chat memory as evidence.
 You may call multiple tools, inspect results, and call another tool if the first result is incomplete or inconsistent.
-You can inspect the full read-only Virafi workspace for this authenticated profile: movements, income, connected bank balances, planning, personalization, goals, fiscal status, tasks and findings. Never imply access to data outside these profile-scoped tools.
+You can inspect the full read-only Virafi workspace for this authenticated profile: movements, income, connected bank balances, planning, personalization, goals, investment context, tasks and findings. Never imply access to data outside these profile-scoped tools.
 For "anual", "anualmente" or "este año", use January 1 through the first day of next month (year-to-date), unless the user names another year.
 Futuro includes persisted categories Futuro and Seguros.
 The profile field monthly_income_target is the user's monthly income goal. The risk-profile field monthlyContribution is only the planned monthly investment contribution. Never confuse those two numbers.
 The identity profile fields bio, professional_headline, location and financial_why are context for prioritization and explanation. Never turn them into invented amounts or goals; explicit saved financial data remains the source of truth.
+The personalization field goal_priorities contains life values, not fundable goals. Use those values to explain why an explicit financial goal matters and to propose concrete supporting actions, but never assign money or a deadline directly to a value such as faith, family, health or work.
 Money allocated to Futuro is capital allocation or spending, not earned income and not automatic progress toward the monthly income goal. Explain that distinction whenever the user connects Futuro with the income goal.
 Explain the conclusion first, then the evidence, then one useful next action when relevant.
 Do not invent returns, balances, movements, connections or goals.

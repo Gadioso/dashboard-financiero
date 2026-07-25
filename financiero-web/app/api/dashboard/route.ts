@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-context';
+import { isConcreteFinancialGoal } from '@/lib/personalized-goals';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,7 +139,9 @@ export async function GET(request: Request) {
       objetivo: goalSettings[String(goal.id)]?.target || 0,
       fecha_objetivo: goalSettings[String(goal.id)]?.targetDate || null,
       }));
-    const personalizedGoals = (personalizedGoalsResult.data || []).map((goal) => ({
+    const personalizedGoals = (personalizedGoalsResult.data || [])
+      .filter((goal) => isConcreteFinancialGoal(goal.name))
+      .map((goal) => ({
       id: goal.id,
       cuenta: goal.name,
       nombre: goal.name,
@@ -146,20 +149,14 @@ export async function GET(request: Request) {
       objetivo: goal.target_amount,
       fecha_objetivo: goal.target_date,
       updated_at: goal.updated_at,
-    }));
-
-    const santanderEmailCutoff = new Date('2026-07-10T06:00:00.000Z').getTime();
-    const gastosVisibles = (gastosAnuales || []).filter((gasto) => (
-      gasto.origen !== 'Santander_Email'
-      || new Date(gasto.fecha).getTime() < santanderEmailCutoff
-    ));
+      }));
 
     return NextResponse.json({
       success: true,
       mesActivo,
       presupuesto: pres || null,
       ingresosAnuales: ingresosAnuales || [],
-      gastosAnuales: gastosVisibles,
+      gastosAnuales: gastosAnuales || [],
       abonosTarjetaAnuales: abonosTarjetaResult.error ? [] : abonosTarjetaResult.data || [],
       fondosAcumulados: personalizedGoals.length > 0
         ? personalizedGoals

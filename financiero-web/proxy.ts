@@ -9,13 +9,16 @@ function dashboardAuthEnabled() {
 
 function isPublicPath(pathname: string) {
   return (
+    pathname === '/' ||
     pathname === '/login' ||
     pathname === '/privacy' ||
     pathname === '/terms' ||
+    pathname === '/producto' ||
+    pathname === '/nosotros' ||
+    pathname === '/seguridad' ||
     pathname === '/auth/callback' ||
     pathname === '/api/health' ||
     pathname.startsWith('/api/auth/') ||
-    pathname.startsWith('/api/account/gmail/oauth/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/favicon.ico'
   );
@@ -25,7 +28,6 @@ function isTrustedWebhook(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === '/api/telegram/webhook') return true;
-  if (pathname === '/api/email/santander' && request.method === 'POST') return true;
   if (pathname === '/api/billing/webhook' && request.method === 'POST') return true;
   if (pathname === '/api/bank/syncfy/webhook' && request.method === 'POST') return true;
 
@@ -46,10 +48,9 @@ function isTrustedServerToServer(request: NextRequest) {
 
   if (!cronSecret) return false;
   if (
-    pathname !== '/api/email/gmail/sync' &&
     pathname !== '/api/bank/syncfy/auto-sync' &&
-    pathname !== '/api/fiscal/syncfy/auto-sync' &&
     pathname !== '/api/agents/proactive-goal' &&
+    pathname !== '/api/agents/daily-cfo' &&
     pathname !== '/api/investments/market-sync' &&
     pathname !== '/api/ops/error-alerts' &&
     pathname !== '/api/ops/sentry-test'

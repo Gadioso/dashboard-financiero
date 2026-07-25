@@ -8,11 +8,7 @@ const mode = process.argv.includes('--multi-user')
     ? 'open-banking'
     : process.argv.includes('--agentic-foundation')
       ? 'agentic-foundation'
-      : process.argv.includes('--cfdi-foundation')
-      ? 'cfdi-foundation'
-      : process.argv.includes('--sat-core')
-        ? 'sat-core'
-        : process.argv.includes('--classification-rules')
+      : process.argv.includes('--classification-rules')
           ? 'classification-rules'
           : process.argv.includes('--billing')
             ? 'billing'
@@ -22,47 +18,35 @@ const mode = process.argv.includes('--multi-user')
 
 const migrationSets = {
   'private-v1': [
-    '20260602_allow_dashboard_phase_and_santander_origin.sql',
-    '20260603_create_telegram_memoria.sql',
-    '20260605_create_classification_preferences.sql',
-    '20260607_create_santander_ingest_logs.sql',
-    '20260607_create_credit_card_payments.sql',
-    '20260609_add_santander_ingest_latency.sql',
-    '20260607_enable_rls_financial_tables.sql',
+    '20260603000100_create_telegram_memoria.sql',
+    '20260605000100_create_classification_preferences.sql',
+    '20260607000300_enable_rls_financial_tables.sql',
   ],
   'multi-user': [
-    '20260608_multi_user_foundation.sql',
-    '20260612_self_serve_onboarding_integrations.sql',
-    '20260630_profile_scoped_monthly_budgets.sql',
+    '20260608000100_multi_user_foundation.sql',
+    '20260612000100_self_serve_onboarding_integrations.sql',
+    '20260630000300_profile_scoped_monthly_budgets.sql',
   ],
   'open-banking': [
-    '20260613_open_banking_foundation.sql',
-    '20260614_add_bank_connection_sync_cursor.sql',
-    '20260622_bank_transaction_classification_queue.sql',
-    '20260709_add_syncfy_open_banking_provider.sql',
-    '20260709_syncfy_users.sql',
-    '20260714210000_retire_santander_email_origin.sql',
+    '20260613000100_open_banking_foundation.sql',
+    '20260614000100_add_bank_connection_sync_cursor.sql',
+    '20260710035554_bank_transaction_classification_queue.sql',
+    '20260709000100_add_syncfy_open_banking_provider.sql',
+    '20260709000200_syncfy_users.sql',
   ],
   'agentic-foundation': [
-    '20260630_agentic_business_wealth_foundation.sql',
-  ],
-  'cfdi-foundation': [
-    '20260630190922_cfdi_manual_ingest_foundation.sql',
-    '20260630194015_cfdi_reconciliation_dedupe_indexes.sql',
-  ],
-  'sat-core': [
-    '20260713_sat_core_foundation.sql',
+    '20260630000100_agentic_business_wealth_foundation.sql',
   ],
   'classification-rules': [
-    '20260614_reclassify_tools_as_investments.sql',
-    '20260630_default_expenses_to_pleasure.sql',
+    '20260614000200_reclassify_tools_as_investments.sql',
+    '20260630000200_default_expenses_to_pleasure.sql',
   ],
   'billing': [
-    '20260615_billing_foundation.sql',
+    '20260615000100_billing_foundation.sql',
   ],
   'operations': [
-    '20260615_operational_security_foundation.sql',
-    '20260616_error_event_alerts.sql',
+    '20260615000200_operational_security_foundation.sql',
+    '20260616000100_error_event_alerts.sql',
   ],
 };
 

@@ -8,15 +8,34 @@ type Personalization = {
   monthly_goal_capacity?: number | string | null;
 };
 
+const LIFE_PRIORITY_ONLY = new Set([
+  'dios', 'fe', 'familia', 'trabajo', 'salud', 'amor', 'felicidad', 'placeres',
+]);
+
+function normalizedName(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('es-MX');
+}
+
+/** A life value is useful context, but is not itself a fundable financial goal. */
+export function isConcreteFinancialGoal(value: unknown) {
+  const normalized = normalizedName(value).replace(/[.!?]+$/g, '').trim();
+  return Boolean(normalized) && !LIFE_PRIORITY_ONLY.has(normalized);
+}
+
 function uniqueGoals(profile: Personalization) {
-  const prioritized = profile.goal_priorities || [];
-  const all = [...prioritized, ...(profile.short_term_goals || []), ...(profile.medium_term_goals || []), ...(profile.long_term_goals || [])];
+  // Priorities describe the person's values. Only explicit outcomes become goals.
+  const all = [...(profile.short_term_goals || []), ...(profile.medium_term_goals || []), ...(profile.long_term_goals || [])];
   const unique = new Map<string, string>();
   for (const goal of all) {
     const name = String(goal).trim();
-    if (name && !unique.has(name.toLocaleLowerCase('es-MX'))) unique.set(name.toLocaleLowerCase('es-MX'), name);
+    const normalized = normalizedName(name);
+    if (isConcreteFinancialGoal(name) && !unique.has(normalized)) unique.set(normalized, name);
   }
-  return [...unique.values()].slice(0, 6);
+  return [...unique.values()].slice(0, 4);
 }
 
 function horizonMonths(goal: string, profile: Personalization) {
@@ -44,25 +63,25 @@ export async function syncPersonalizedGoals({ supabase, profileId, personalizati
     if (goalsError || settingsError) throw new Error(`No pude actualizar tus metas: ${goalsError?.message || settingsError?.message}`);
     return { generated: 0 };
   }
-  const monthlyCapacity = Math.max(Number(personalization.monthly_goal_capacity || 0), 0);
   const { data: existing, error: existingError } = await supabase
     .from('financial_goals')
-    .select('id, name, current_amount')
+    .select('id, name, current_amount, target_amount, target_date')
     .eq('profile_id', profileId)
     .eq('source', 'personalization');
   if (existingError) throw new Error(`No pude leer tus metas: ${existingError.message}`);
-  const byName = new Map((existing || []).map((row) => [String(row.name).trim().toLocaleLowerCase('es-MX'), row]));
+  const byName = new Map((existing || []).map((row) => [normalizedName(row.name), row]));
   const now = new Date().toISOString();
   const rows = names.map((name, index) => {
     const months = horizonMonths(name, personalization);
-    const target = monthlyCapacity > 0 ? Math.round((monthlyCapacity * months) / Math.max(names.length, 1)) : 0;
+    const previous = byName.get(normalizedName(name));
     const targetDate = new Date(); targetDate.setMonth(targetDate.getMonth() + months);
     return {
       profile_id: profileId,
       name,
-      current_amount: Number(byName.get(name.toLocaleLowerCase('es-MX'))?.current_amount || 0),
-      target_amount: target,
-      target_date: targetDate.toISOString().slice(0, 10),
+      current_amount: Number(previous?.current_amount || 0),
+      // Monthly capacity constrains the plan; it is not the invented price of a goal.
+      target_amount: Number(previous?.target_amount || 0),
+      target_date: previous?.target_date || targetDate.toISOString().slice(0, 10),
       horizon_months: months,
       source: 'personalization',
       status: 'active',

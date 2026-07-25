@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { syncSyncfyProfile } from '@/lib/open-banking/syncfy-ingest';
+import { deliverPendingMovementNotifications } from '@/lib/movement-notifications';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
@@ -10,6 +11,13 @@ export const maxDuration = 60;
 type SyncfyUserProfileRow = {
   profile_id: string;
   syncfy_user_id: string;
+};
+
+type NotificationRetryResult = {
+  profileId: string;
+  success: boolean;
+  notifications?: Awaited<ReturnType<typeof deliverPendingMovementNotifications>>;
+  error?: string;
 };
 
 function getBearerToken(request: Request) {
@@ -66,16 +74,64 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
 
+    const profiles = await listSyncfyProfiles(supabase);
+
     if (process.env.SYNCFY_AUTOMATIC_PULLS_ENABLED !== 'true') {
+      const deliveryResults: NotificationRetryResult[] = [];
+
+      for (const profile of profiles) {
+        try {
+          const notifications = await deliverPendingMovementNotifications(supabase, {
+            profileId: profile.profile_id,
+            limit: 100,
+          });
+          deliveryResults.push({ profileId: profile.profile_id, success: notifications.failed === 0, notifications });
+        } catch (profileError: unknown) {
+          await logErrorEvent({
+            supabase,
+            request,
+            profileId: profile.profile_id,
+            action: 'bank.syncfy.notification_retry.profile',
+            error: profileError,
+            severity: 'error',
+          });
+          deliveryResults.push({
+            profileId: profile.profile_id,
+            success: false,
+            error: profileError instanceof Error ? profileError.message : 'No pude reintentar las notificaciones de Telegram.',
+          });
+        }
+      }
+
+      const notificationTotals = deliveryResults.reduce(
+        (acc, result) => ({
+          profiles: acc.profiles + 1,
+          failedProfiles: acc.failedProfiles + (result.success ? 0 : 1),
+          processed: acc.processed + (result.notifications?.processed || 0),
+          telegramSent: acc.telegramSent + (result.notifications?.sent || 0),
+          telegramFailed: acc.telegramFailed + (result.notifications?.failed || 0),
+        }),
+        { profiles: 0, failedProfiles: 0, processed: 0, telegramSent: 0, telegramFailed: 0 }
+      );
+
+      await logAuditEvent({
+        supabase,
+        request,
+        action: 'bank.syncfy.notification_retry',
+        resourceType: 'movement_notification_deliveries',
+        metadata: notificationTotals,
+      });
+
       return NextResponse.json({
-        success: true,
+        success: notificationTotals.failedProfiles === 0,
         disabled: true,
         mode: 'webhook-first',
-        message: 'Los pulls automáticos están desactivados; Syncfy actualizará mediante webhook.',
-      });
+        message: 'Los pulls automáticos están desactivados; Syncfy actualizará mediante webhook. La cola de Telegram sí fue procesada.',
+        totals: notificationTotals,
+        results: deliveryResults,
+      }, { status: notificationTotals.failedProfiles ? 207 : 200 });
     }
 
-    const profiles = await listSyncfyProfiles(supabase);
     const results = [];
 
     for (const profile of profiles) {

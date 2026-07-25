@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Bank, CheckCircle, Circle, Gear, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
+import { ArrowRight, ArrowSquareOut, Bank, CheckCircle, Circle, Copy, Gear, LockKey, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
 import PersonalizationInterview from './PersonalizationInterview';
 import ProfileSettings from './ProfileSettings';
 import VirafiBrand from '@/app/Components/VirafiBrand';
+import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
 
 const fallbackBankConnectionLimit = 1;
 
@@ -27,6 +28,7 @@ type AccountStatus = {
     monthly_income_target?: number | string | null;
   } | null;
   telegramAccounts?: Array<{ id: string; chat_id: string; username?: string | null }>;
+  telegramBot?: { name: string; username?: string | null };
   bankConnections?: Array<{ id: string; provider: string; institution_name?: string | null; status: string; last_sync_at?: string | null }>;
   billing?: {
     plan: 'free' | 'beta' | 'premium';
@@ -99,11 +101,13 @@ function userSafeMessage(value: unknown, fallback: string) {
 
 export default function OnboardingClient() {
   const [activeTab, setActiveTab] = useState<'profile' | 'finance'>('finance');
+  const [guidedGoals, setGuidedGoals] = useState<boolean | null>(null);
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [bankProviders, setBankProviders] = useState<BankProvider[]>([]);
   const [bankCountry, setBankCountry] = useState<BankCountryCode>('MX');
   const [loading, setLoading] = useState(true);
   const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [checkingTelegram, setCheckingTelegram] = useState(false);
   const [connectingPlaid, setConnectingPlaid] = useState(false);
   const [syncfyOpening, setSyncfyOpening] = useState(false);
   const [syncfyOverlayOpen, setSyncfyOverlayOpen] = useState(false);
@@ -111,20 +115,15 @@ export default function OnboardingClient() {
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
   const [telegramExpiresAt, setTelegramExpiresAt] = useState('');
+  const [telegramBotName, setTelegramBotName] = useState('Virafi');
+  const [telegramBotUsername, setTelegramBotUsername] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const fetchWithSessionRefresh = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await fetch(input, init);
-
-    if (response.status !== 401) return response;
-
-    const refreshResponse = await fetch('/api/auth/refresh', { method: 'POST' });
-
-    if (!refreshResponse.ok) return response;
-
-    return fetch(input, init);
-  }, []);
+  const fetchWithSessionRefresh = useCallback(
+    (input: RequestInfo | URL, init?: RequestInit) => fetchWithSharedSessionRefresh(input, init),
+    []
+  );
 
   const refreshStatus = useCallback(async ({ keepFeedback = false }: { keepFeedback?: boolean } = {}) => {
     setLoading(true);
@@ -158,6 +157,7 @@ export default function OnboardingClient() {
       const params = new URLSearchParams(window.location.search);
       const routeError = params.get('error');
       if (params.get('tab') === 'profile') setActiveTab('profile');
+      setGuidedGoals(params.get('focus') === 'goals');
 
       if (routeError) setError(decodeURIComponent(routeError));
       void refreshStatus({ keepFeedback: Boolean(routeError) });
@@ -207,6 +207,9 @@ export default function OnboardingClient() {
   const hasIdentityProfile = Boolean(status?.profile?.full_name && (status.profile.bio || status.profile.professional_headline || status.profile.financial_why));
   const hasCompletedGoals = Boolean(status?.personalization?.completed);
   const hasTelegram = Boolean((status?.telegramAccounts || []).length > 0);
+  const activeTelegramAccount = status?.telegramAccounts?.[0] || null;
+  const effectiveTelegramBotName = telegramBotName || status?.telegramBot?.name || 'Virafi';
+  const effectiveTelegramBotUsername = telegramBotUsername || status?.telegramBot?.username || '';
   const activeBankConnections = (status?.bankConnections || []).filter((connection) => connection.status === 'active');
   const hasBankConnection = activeBankConnections.length > 0;
   const bankConnectionLimit = status?.billing?.limits?.bankConnections ?? fallbackBankConnectionLimit;
@@ -267,11 +270,67 @@ export default function OnboardingClient() {
       setTelegramCode(data.code);
       setTelegramDeepLink(data.deepLink || null);
       setTelegramExpiresAt(data.expiresAt || '');
-      setMessage('Código listo. Envíalo al bot de Telegram para vincular tu cuenta.');
+      setTelegramBotName(data.botName || 'Virafi');
+      setTelegramBotUsername(data.botUsername || '');
+      setMessage('Llave personal lista. Abre Virafi en Telegram y pulsa Iniciar para vincular esta cuenta.');
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
       setLinkingTelegram(false);
+    }
+  }
+
+  const checkTelegramConnection = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!telegramCode) return;
+    if (!silent) setCheckingTelegram(true);
+
+    try {
+      const response = await fetchWithSessionRefresh(`/api/account/telegram-link-code?code=${encodeURIComponent(telegramCode)}`, { cache: 'no-store' });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        if (!silent) setError(userSafeMessage(data.error, 'No pude verificar la conexión. Intenta nuevamente.'));
+        return;
+      }
+
+      if (data.status === 'expired') {
+        setTelegramCode('');
+        setTelegramDeepLink(null);
+        setError('La llave expiró. Genera una nueva para conectar Telegram.');
+        return;
+      }
+
+      if (data.connected) {
+        setMessage('Telegram conectado correctamente. Virafi ya reconoce esta cuenta.');
+        setTelegramCode('');
+        setTelegramDeepLink(null);
+        await refreshStatus({ keepFeedback: true });
+      }
+    } catch {
+      if (!silent) setError('No pude verificar la conexión. Intenta nuevamente.');
+    } finally {
+      if (!silent) setCheckingTelegram(false);
+    }
+  }, [fetchWithSessionRefresh, refreshStatus, telegramCode]);
+
+  useEffect(() => {
+    if (!telegramCode || hasTelegram) return;
+
+    const intervalId = window.setInterval(() => {
+      void checkTelegramConnection({ silent: true });
+    }, 3_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [checkTelegramConnection, hasTelegram, telegramCode]);
+
+  async function copyTelegramCode() {
+    if (!telegramCode) return;
+
+    try {
+      await navigator.clipboard.writeText(telegramCode);
+      setMessage('Llave copiada. Pégala en el chat de Finance Dashboard si Telegram no la envía automáticamente.');
+    } catch {
+      setError('No pude copiar la llave. Selecciónala y cópiala manualmente.');
     }
   }
 
@@ -429,6 +488,38 @@ export default function OnboardingClient() {
     }
   }
 
+  if (guidedGoals === null) {
+    return <main className="grid min-h-screen place-items-center bg-[var(--brand-cream)] px-4"><VirafiBrand showTagline /></main>;
+  }
+
+  if (guidedGoals) {
+    return (
+      <main className="min-h-screen bg-[var(--brand-cream)] px-4 py-8 text-slate-950 md:py-12">
+        <div className="mx-auto max-w-3xl">
+          <header className="mb-8 flex items-center justify-between gap-4">
+            <VirafiBrand compact />
+            <Link href="/dashboard" className="text-sm font-bold text-slate-500 transition-colors hover:text-blue-700">Ir al dashboard</Link>
+          </header>
+          <div className="mb-6">
+            <p className="text-sm font-bold text-blue-700">Primero, tu rumbo</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Definamos tus metas</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">El agente VirafIA usará estas respuestas para organizar tus decisiones alrededor de lo que realmente quieres lograr. Avanza una pregunta a la vez o guarda para continuar después.</p>
+          </div>
+          {error && <p className="mb-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
+          <PersonalizationInterview
+            enabled={hasProfile}
+            request={fetchWithSessionRefresh}
+            initialOpen
+            guided
+            onCompleted={() => { window.location.href = '/dashboard'; }}
+            onDeferred={() => { window.location.href = '/dashboard'; }}
+          />
+          <p className="mt-5 text-center text-xs leading-5 text-slate-400">Tus respuestas son privadas y puedes editarlas cuando quieras desde Configuración.</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <>
       {syncfyOverlayOpen && (
@@ -460,7 +551,7 @@ export default function OnboardingClient() {
             </p>
           </div>
           <Link
-            href="/"
+            href="/dashboard"
             className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
           >
             Ver dashboard
@@ -544,36 +635,101 @@ export default function OnboardingClient() {
 
         <div className="grid gap-6">
           <div className="grid gap-6">
-            <section id="telegram" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">Telegram</h2>
-              <p className="mt-1 text-sm text-slate-500">Genera un código y mándaselo al bot para conectar tu chat fácilmente.</p>
-              {telegramCode && (
-                <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-xs font-semibold text-emerald-700">Código para Telegram</p>
-                  <p className="mt-2 font-mono text-3xl font-bold text-emerald-900">{telegramCode}</p>
-                  <p className="mt-2 text-sm text-emerald-700">
-                    Envíalo al bot tal cual. Expira {telegramExpiresAt ? new Date(telegramExpiresAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'en 15 minutos'}.
-                  </p>
-                  {telegramDeepLink && (
-                    <a
-                      href={telegramDeepLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
-                    >
-                      Abrir Telegram
-                    </a>
-                  )}
+            <section id="telegram" className="scroll-mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 p-5 md:p-6">
+                <div className="flex items-start gap-3">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                    <TelegramLogo aria-hidden="true" className="size-6" weight="fill" />
+                  </span>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-950">Conecta Virafi</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Vincula tu Telegram personal con esta cuenta de Virafi. La llave es de un solo uso, dura 15 minutos y no debes compartirla.</p>
+                  </div>
                 </div>
+              </div>
+
+              {hasTelegram ? (
+                <div className="p-5 md:p-6">
+                  <div className="flex flex-col gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">
+                        <CheckCircle aria-hidden="true" className="size-6" weight="fill" />
+                      </span>
+                      <div>
+                        <p className="font-bold text-emerald-950">Telegram conectado</p>
+                        <p className="mt-1 text-sm text-emerald-800">Virafi ya reconoce esta cuenta{activeTelegramAccount?.username ? ` en el Telegram de ${activeTelegramAccount.username.replace(/^@/, '')}` : ''}.</p>
+                      </div>
+                    </div>
+                    {effectiveTelegramBotUsername ? (
+                      <a href={`https://t.me/${effectiveTelegramBotUsername.replace(/^@/, '')}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-bold text-white hover:bg-emerald-800">
+                        Abrir bot <ArrowSquareOut aria-hidden="true" className="size-4" weight="bold" />
+                      </a>
+                    ) : null}
+                  </div>
+                  <p className="mt-4 text-sm leading-6 text-slate-500">Ya puedes escribir o mandar una nota de voz, por ejemplo: “pagué 250 de gasolina” o “¿cómo voy este mes?”. Para desvincularlo, escribe <strong>/desconectar telegram</strong> en el bot.</p>
+                </div>
+              ) : (
+                <ol className="divide-y divide-slate-100">
+                  <li className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)_auto] md:items-center md:px-6">
+                    <span className="grid size-11 place-items-center rounded-full bg-slate-950 text-sm font-black text-white">1</span>
+                    <div>
+                      <h3 className="font-bold text-slate-950">Genera tu llave personal</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">La llave conecta este usuario de Virafi con un solo chat de Telegram.</p>
+                    </div>
+                    <button type="button" onClick={generateTelegramCode} disabled={!hasProfile || linkingTelegram} className="min-h-11 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                      {linkingTelegram ? 'Generando...' : telegramCode ? 'Generar otra llave' : 'Generar llave'}
+                    </button>
+                  </li>
+
+                  <li className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)] md:px-6">
+                    <span className={`grid size-11 place-items-center rounded-full text-sm font-black ${telegramCode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>2</span>
+                    <div>
+                      <h3 className="font-bold text-slate-950">Abre el bot oficial</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">Abre <strong>{effectiveTelegramBotName}</strong> y pulsa <strong>Iniciar</strong>. Telegram enviará automáticamente tu llave como primer mensaje.</p>
+                      {telegramCode ? (
+                        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-blue-600 text-white"><LockKey aria-hidden="true" className="size-5" weight="fill" /></span>
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-blue-700">Tu llave segura</p>
+                                <p className="mt-1 font-mono text-2xl font-black tracking-wide text-blue-950">{telegramCode}</p>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => void copyTelegramCode()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-bold text-blue-700 hover:bg-blue-100">
+                              <Copy aria-hidden="true" className="size-4" /> Copiar
+                            </button>
+                          </div>
+                          <p className="mt-3 text-xs leading-5 text-blue-700">Expira {telegramExpiresAt ? new Date(telegramExpiresAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'en 15 minutos'}.</p>
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-400">Primero genera tu llave en el paso 1.</p>
+                      )}
+                      {telegramCode && telegramDeepLink ? (
+                        <a href={telegramDeepLink} target="_blank" rel="noreferrer" onClick={() => void copyTelegramCode()} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#229ED9] px-4 text-sm font-bold text-white hover:bg-[#1889bd]">
+                          Abrir Telegram <ArrowSquareOut aria-hidden="true" className="size-4" weight="bold" />
+                        </a>
+                      ) : telegramCode ? (
+                        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">Abre Telegram, busca <strong>{effectiveTelegramBotName}</strong> y pega tu llave como primer mensaje.</p>
+                      ) : null}
+                      {telegramCode ? (
+                        <p className="mt-3 text-xs leading-5 text-slate-500">Si la página de Telegram no abre la aplicación al pulsar <strong>Start Bot</strong>, vuelve al chat de <strong>@{effectiveTelegramBotUsername.replace(/^@/, '') || 'VirafiBot'}</strong> y pega la llave que acabamos de copiar.</p>
+                      ) : null}
+                    </div>
+                  </li>
+
+                  <li className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)_auto] md:items-center md:px-6">
+                    <span className={`grid size-11 place-items-center rounded-full text-sm font-black ${telegramCode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>3</span>
+                    <div>
+                      <h3 className="font-bold text-slate-950">Espera el candado de confirmación</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">El bot responderá <strong>“🔐 Conexión segura completada”</strong>. Virafi comprobará la conexión automáticamente.</p>
+                    </div>
+                    <button type="button" onClick={() => void checkTelegramConnection()} disabled={!telegramCode || checkingTelegram} className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                      {checkingTelegram ? 'Verificando...' : 'Ya lo envié'}
+                    </button>
+                  </li>
+                </ol>
               )}
-              <button
-                type="button"
-                onClick={generateTelegramCode}
-                disabled={!hasProfile || linkingTelegram}
-                className="mt-5 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {linkingTelegram ? 'Generando...' : hasTelegram ? 'Generar otro código' : 'Generar código de Telegram'}
-              </button>
             </section>
 
             <section id="bancos" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

@@ -331,9 +331,17 @@ export async function clasificarMovimientoFinanciero(
     throw new Error('Falta configurar GOOGLE_API_KEY o GEMINI_API_KEY para clasificar con IA.');
   }
 
+  const fechaActualMexico = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
   const prompt = `
 {
   "role": "financial_transaction_classifier",
+  "current_date_mexico": ${JSON.stringify(fechaActualMexico)},
   "language_policy": {
     "instructions_language": "English",
     "output_language": "Spanish",
@@ -370,6 +378,7 @@ export async function clasificarMovimientoFinanciero(
     "Default an expense to Placeres/Otros Placeres only when owner_context does not identify it as essential living, productive work, savings, protection, or investment.",
     "If there is no clear amount, use 0. Do not invent an amount.",
     "If the user says hoy, ayer, anoche, antier, anteayer, or gives an explicit date such as 21 de junio, include fechaMovimiento as an ISO date for that date in America/Mexico_City.",
+    "When the user gives a day and month but omits the year, always use the year from current_date_mexico. Never guess a different year.",
     "Do not include relative date words such as ayer or hoy in concepto.",
     "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
     "Return only valid raw JSON matching the output_schema."

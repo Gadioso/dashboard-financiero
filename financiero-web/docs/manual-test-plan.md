@@ -52,12 +52,20 @@ Enviar al bot:
 ## Seguridad
 
 - Sin cookie, `GET /api/dashboard?mes=2026-06` debe responder `401`.
-- Sin sesión, `GET /api/email/santander` debe responder `401`.
-- Con sesión, `GET` y `POST /api/email/santander` deben responder `410` y no crear movimientos.
 - `GET /api/health` debe responder `200` sin datos financieros.
 - `GET /api/health` con `x-healthcheck-secret` o `Authorization: Bearer <CRON_SECRET>` debe reportar `capabilities.telegramVoice=true` cuando exista al menos un proveedor de transcripción.
 - Supabase debe mostrar RLS habilitado en tablas financieras.
 - Con token válido, `launch:check` debe confirmar que `anon` no puede escribir en `gastos`.
+
+### Control de acceso de Telegram
+
+- Un chat privado no vinculado que envía `hola` no recibe respuesta.
+- Un chat privado no vinculado que envía una llave inexistente no recibe respuesta.
+- Un grupo, supergrupo, canal u otro bot no recibe respuesta.
+- Una llave válida generada desde una sesión autenticada vincula el chat una sola vez.
+- Un chat vinculado recibe confirmación con `/estado`.
+- `/desconectar` elimina `telegram_accounts` y `telegram_memoria`; mensajes posteriores no reciben respuesta.
+- Borrar o bloquear el usuario de Supabase Auth revoca el vínculo en la siguiente interacción y evita notificaciones proactivas y bancarias.
 
 ## Automatizado
 
@@ -65,7 +73,6 @@ Enviar al bot:
 npm run lint
 npm run build
 npm run test:card-payment-intent
-npm run test:santander-parser
 npm run ops:env-audit
 npm run security:secrets
 LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app npm run launch:check

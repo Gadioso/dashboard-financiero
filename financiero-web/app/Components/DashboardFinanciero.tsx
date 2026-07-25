@@ -11,8 +11,6 @@ import {
   CalendarBlank,
   ChartDonut,
   ChartLineUp,
-  ChatCircleDots,
-  CheckCircle,
   CreditCard,
   Eye,
   EyeSlash,
@@ -31,7 +29,8 @@ import {
   X,
 } from '@phosphor-icons/react';
 import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview';
-import VirafiBrand from '@/app/Components/VirafiBrand';
+import VirafiBrand, { VirafiMark } from '@/app/Components/VirafiBrand';
+import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -130,7 +129,6 @@ type BillingStatus = {
   stripeCustomerId: string | null;
   limits?: {
     bankConnections: number;
-    gmailIntegrations: number;
     telegramAccounts: number;
     bankSyncLookbackDays: number;
   };
@@ -206,6 +204,7 @@ type MarketSnapshot = {
   ask?: number | null;
   spread_bps?: number | null;
   volume_24h?: number | null;
+  raw?: Record<string, unknown> | null;
   asset?: {
     id: string;
     asset_type: string;
@@ -215,6 +214,20 @@ type MarketSnapshot = {
     currency?: string | null;
     provider?: string | null;
   } | null;
+};
+
+type MarketBriefingItem = {
+  id: string;
+  topic: 'geopolitics' | 'rates' | 'crypto' | 'technology';
+  topicLabel: string;
+  headline: string;
+  url: string;
+  source: string;
+  domain: string;
+  publishedAt?: string | null;
+  whyItMatters: string;
+  watchNext: string;
+  beginnerContext: string;
 };
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
@@ -249,6 +262,21 @@ type WealthGoalSummary = {
   horizonMonths: number;
 };
 
+type GoalContribution = {
+  id: string;
+  amount: number | string;
+  contributed_at: string;
+  source: 'manual' | 'bank_transaction' | 'investment_transaction' | 'adjustment';
+  status: 'suggested' | 'confirmed' | 'rejected';
+  confidence?: number | string | null;
+  note?: string | null;
+};
+
+type GoalContributionPanel = {
+  goal: { id: string; name: string; current_amount: number | string; target_amount: number | string };
+  contributions: GoalContribution[];
+};
+
 type AccountStatus = {
   success: boolean;
   profile?: {
@@ -265,6 +293,14 @@ type AccountStatus = {
   bankConnections?: BankConnection[];
   bankAccounts?: BankAccount[];
   agentTasks?: AgentTask[];
+  virafiaMessages?: Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    channel?: string;
+    createdAt: string;
+    metadata?: { lastExpenseId?: string };
+  }>;
   error?: string;
 };
 
@@ -297,7 +333,6 @@ type DashboardAnalysisFallbackInput = {
   totalGastadoMes: number;
   flujoNetoMes: number;
   tasaFuturo: number;
-  deudaTdcEstimadaMes: number;
   buckets: Array<{ label: string; used: number; limit: number; remaining: number; percent: number }>;
   monthlySeries?: Array<{ mes: string; ingresos: number; egresos: number; resultado: number }>;
 };
@@ -375,8 +410,8 @@ function GearIcon() {
   return <Gear aria-hidden="true" className="size-5" weight="regular" />;
 }
 
-function ChatIcon() {
-  return <ChatCircleDots aria-hidden="true" className="size-5" weight="regular" />;
+function VirafIAMark({ className = 'size-5' }: { className?: string }) {
+  return <VirafiMark className={className} />;
 }
 
 function EditIcon() {
@@ -467,9 +502,7 @@ function crearAnalisisCliente(input: DashboardAnalysisFallbackInput): DashboardA
     input.tasaFuturo < 33
       ? `Acercar Futuro al 33%; hoy falta ${Math.round(Math.max(0, 33 - input.tasaFuturo))}%.`
       : 'Mantener Futuro separado de pagos ordinarios.',
-    input.deudaTdcEstimadaMes > 0
-      ? `Apartar ${formatoDineroCorto(input.deudaTdcEstimadaMes)} para tarjeta antes de distribuir excedentes.`
-      : 'Cerrar el periodo con revisión de bolsas fuera de rango.',
+    'Cerrar el periodo con revisión de bolsas fuera de rango.',
   ];
 
   const risks = [
@@ -539,6 +572,10 @@ export default function DashboardFinanciero() {
   const [editForm, setEditForm] = useState<MovementEditForm | null>(null);
   const [goalEditForm, setGoalEditForm] = useState<GoalEditForm | null>(null);
   const [goalSaving, setGoalSaving] = useState(false);
+  const [goalContributionId, setGoalContributionId] = useState('');
+  const [goalContributionPanel, setGoalContributionPanel] = useState<GoalContributionPanel | null>(null);
+  const [goalContributionAmount, setGoalContributionAmount] = useState('');
+  const [goalContributionLoading, setGoalContributionLoading] = useState(false);
   const [manualExpenseOpen, setManualExpenseOpen] = useState(false);
   const [manualExpenseSaving, setManualExpenseSaving] = useState(false);
   const [manualExpenseForm, setManualExpenseForm] = useState<ManualExpenseForm>({
@@ -560,9 +597,7 @@ export default function DashboardFinanciero() {
   const [movimientosPage, setMovimientosPage] = useState(0);
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
-  const [abonosTarjetaAnuales, setAbonosTarjetaAnuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
-  const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [accountProfile, setAccountProfile] = useState<NonNullable<AccountStatus['profile']> | null>(null);
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(0);
@@ -575,6 +610,8 @@ export default function DashboardFinanciero() {
   const [notificationTrayOpen, setNotificationTrayOpen] = useState(false);
   const [notificationsSeenAt, setNotificationsSeenAt] = useState(0);
   const [marketSnapshots, setMarketSnapshots] = useState<MarketSnapshot[]>([]);
+  const [marketBriefing, setMarketBriefing] = useState<MarketBriefingItem[]>([]);
+  const [marketExperience, setMarketExperience] = useState<'simple' | 'advanced'>('simple');
   const [marketSyncLoading, setMarketSyncLoading] = useState(false);
   const [riskProfile, setRiskProfile] = useState<InvestmentRiskProfile>({
     experienceLevel: 'beginner',
@@ -596,7 +633,6 @@ export default function DashboardFinanciero() {
   const [riskProfileLoading, setRiskProfileLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingAction, setBillingAction] = useState<'checkout' | 'portal' | null>(null);
-  const [cleanupLoading, setCleanupLoading] = useState(false);
   const [analysisScope, setAnalysisScope] = useState<'month' | 'year'>('month');
   const [analysis, setAnalysis] = useState<DashboardAnalysis | null>(null);
   const [analysisResultKey, setAnalysisResultKey] = useState('');
@@ -615,11 +651,6 @@ export default function DashboardFinanciero() {
     const stored = window.localStorage.getItem('dashboard_notifications_seen_at_v2');
     queueMicrotask(() => setNotificationsSeenAt(stored ? Number(stored) || 0 : 0));
   }, []);
-
-  const cerrarSesion = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
-  };
 
   const descargarReportePdf = async () => {
     setReportDownloading(true);
@@ -740,17 +771,20 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const fetchWithSessionRefresh = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await fetch(input, init);
+  const fetchWithSessionRefresh = useCallback(
+    (input: RequestInfo | URL, init?: RequestInit) => fetchWithSharedSessionRefresh(input, init),
+    []
+  );
 
-    if (response.status !== 401) return response;
-
-    const refreshResponse = await fetch('/api/auth/refresh', { method: 'POST' });
-
-    if (!refreshResponse.ok) return response;
-
-    return fetch(input, init);
-  }, []);
+  useEffect(() => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!timezone) return;
+    void fetchWithSessionRefresh('/api/account/daily-cfo', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timezone }),
+    }).catch((error) => console.error('No pude guardar la zona horaria del mentor diario:', error));
+  }, [fetchWithSessionRefresh]);
 
   const mostrarMensajeTemporal = useCallback((mensaje: string, ms = 7000) => {
     if (statusTimeoutRef.current) window.clearTimeout(statusTimeoutRef.current);
@@ -819,7 +853,6 @@ export default function DashboardFinanciero() {
       const gastosTodoElAño = dashboardData.gastosAnuales || [];
       const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
       setGastosAnuales(gastosTodoElAño);
-      setAbonosTarjetaAnuales(abonosTarjetaTodoElAño.filter((abono) => !esAbonoTarjetaSospechoso(abono)));
       setFondosAcumulados(dashboardData.fondosAcumulados || []);
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
@@ -831,16 +864,14 @@ export default function DashboardFinanciero() {
         const fecha = new Date(gasto.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
       });
-      const abonosTarjetaDelMesRaw = abonosTarjetaTodoElAño.filter((abono) => {
+      const abonosTarjetaDelMes = abonosTarjetaTodoElAño.filter((abono) => {
         const fecha = new Date(abono.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
-      });
-      const abonosTarjetaDelMes = abonosTarjetaDelMesRaw.filter((abono) => !esAbonoTarjetaSospechoso(abono));
+      }).filter((abono) => !esAbonoTarjetaSospechoso(abono));
       const movimientosBancariosDelMes = (dashboardData.movimientosBancarios || []).filter((movimiento) => {
         const fecha = new Date(movimiento.authorized_at || movimiento.posted_at || '').getTime();
         return Number.isFinite(fecha) && fecha >= inicioMes && fecha < finMes;
       });
-      setAbonosSospechososOcultos(abonosTarjetaDelMesRaw.length - abonosTarjetaDelMes.length);
 
       const presupuesto = dashboardData.presupuesto;
       const ingresosMes = calcularIngresosMes(ingresosDelMes);
@@ -895,7 +926,17 @@ export default function DashboardFinanciero() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('billing') !== 'success') return;
+    const billingResult = params.get('billing');
+
+    if (billingResult === 'cancelled') {
+      window.history.replaceState({}, '', '/dashboard');
+      void Promise.resolve().then(() => {
+        mostrarMensajeTemporal('Pago cancelado. No se realizó ningún cargo y tu plan no cambió.');
+      });
+      return;
+    }
+
+    if (billingResult !== 'success') return;
     const sessionId = params.get('session_id');
     if (!sessionId) return;
 
@@ -906,7 +947,7 @@ export default function DashboardFinanciero() {
     }).then(async (response) => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success) throw new Error('No pude confirmar tu plan.');
-      window.history.replaceState({}, '', '/');
+      window.history.replaceState({}, '', '/dashboard');
       window.location.reload();
     }).catch(() => mostrarMensajeTemporal('Tu pago fue recibido. Estamos terminando de activar el plan; actualiza en unos segundos.', 12_000));
   }, [fetchWithSessionRefresh, mostrarMensajeTemporal]);
@@ -941,10 +982,11 @@ export default function DashboardFinanciero() {
 
     async function fetchAccountAndBankStatus() {
       try {
-        const [accountResult, riskProfileResult, marketResult] = await Promise.allSettled([
+        const [accountResult, riskProfileResult, marketResult, briefingResult] = await Promise.allSettled([
           fetchWithSessionRefresh('/api/account/status'),
           fetchWithSessionRefresh('/api/investments/risk-profile'),
           fetchWithSessionRefresh('/api/investments/market-sync'),
+          fetchWithSessionRefresh('/api/investments/market-briefing'),
         ]);
 
         if (mounted) {
@@ -958,6 +1000,15 @@ export default function DashboardFinanciero() {
             if (accountData.bankConnections) setBankConnections(accountData.bankConnections);
             if (accountData.bankAccounts) setBankAccounts(accountData.bankAccounts);
             if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
+            if (accountData.virafiaMessages?.length) {
+              setChatMessages((current) => current.length ? current : accountData.virafiaMessages!.map((message) => ({
+                id: message.id,
+                role: message.role,
+                content: message.content,
+                createdAt: message.createdAt,
+                metadata: message.metadata,
+              })));
+            }
           }
 
           const riskProfileData = riskProfileResult.status === 'fulfilled' ? await readJsonResponse<{ riskProfile?: InvestmentRiskProfile; acceptedAt?: string | null; routePlan?: WealthRoutePlan | null; eligibility?: WealthEligibility; goals?: WealthGoalSummary[] }>(riskProfileResult.value) : null;
@@ -975,6 +1026,8 @@ export default function DashboardFinanciero() {
           if (marketResult.status === 'fulfilled' && marketResult.value.ok && marketData?.snapshots) {
             setMarketSnapshots(marketData.snapshots);
           }
+          const briefingData = briefingResult.status === 'fulfilled' ? await readJsonResponse<{ items?: MarketBriefingItem[] }>(briefingResult.value) : null;
+          if (briefingResult.status === 'fulfilled' && briefingResult.value.ok && briefingData?.items) setMarketBriefing(briefingData.items);
         }
       } catch (error) {
         console.error('No pude cargar el estado de la cuenta:', error);
@@ -985,6 +1038,50 @@ export default function DashboardFinanciero() {
 
     return () => {
       mounted = false;
+    };
+  }, [fetchWithSessionRefresh]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function refreshDailyMentor() {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const response = await fetchWithSessionRefresh('/api/account/status', { cache: 'no-store' });
+        const accountData = await readJsonResponse<AccountStatus>(response);
+        if (!mounted || !response.ok || !accountData) return;
+        if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
+        const proactive = (accountData.virafiaMessages || []).filter((message) => message.channel === 'proactive');
+        if (proactive.length) {
+          setChatMessages((current) => {
+            const additions = proactive.filter((message) => !current.some((existing) => (
+              existing.id === message.id ||
+              (existing.role === message.role && existing.content === message.content)
+            )));
+            return [...current, ...additions.map((message) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+              createdAt: message.createdAt,
+              metadata: message.metadata,
+            }))].slice(-30);
+          });
+        }
+      } catch (error) {
+        console.error('No pude actualizar el mensaje diario de VirafIA:', error);
+      }
+    }
+
+    const intervalId = window.setInterval(() => void refreshDailyMentor(), 5 * 60_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshDailyMentor();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [fetchWithSessionRefresh]);
 
@@ -1024,10 +1121,11 @@ export default function DashboardFinanciero() {
     setMensajeStatus('Actualizando información de mercado...');
 
     try {
-      const response = await fetchWithSessionRefresh('/api/investments/market-sync', {
-        method: 'POST',
-      });
-      const data = await response.json();
+      const [response, briefingResponse] = await Promise.all([
+        fetchWithSessionRefresh('/api/investments/market-sync', { method: 'POST' }),
+        fetchWithSessionRefresh('/api/investments/market-briefing', { cache: 'no-store' }),
+      ]);
+      const [data, briefingData] = await Promise.all([response.json(), readJsonResponse<{ items?: MarketBriefingItem[] }>(briefingResponse)]);
 
       if (!response.ok || !data.success) {
         setMensajeStatus(`No pude actualizar la información de mercado: ${formatActionError(data, 'Intenta nuevamente más tarde.')}`);
@@ -1035,6 +1133,7 @@ export default function DashboardFinanciero() {
       }
 
       setMarketSnapshots(data.snapshots || []);
+      if (briefingResponse.ok && briefingData?.items) setMarketBriefing(briefingData.items);
       const cryptoProvider = data.cryptoProvider === 'coinbase' ? 'Coinbase' : 'Binance';
       const warnings = Array.isArray(data.warnings) && data.warnings.length > 0 ? ` Advertencia: ${data.warnings.join(' · ')}` : '';
       setMensajeStatus(`${data.partial ? 'Mercado actualizado parcialmente' : 'Mercado actualizado'}: ${data.binance || 0} ${cryptoProvider} y ${data.polymarket || 0} Polymarket. Siguiente paso: generar tesis para decidir si vale simular algo.${warnings}`);
@@ -1313,7 +1412,7 @@ export default function DashboardFinanciero() {
     setMensajeStatus(`Abriendo checkout ${plan === 'beta' ? 'Beta' : 'Premium'}...`);
 
     try {
-      const response = await fetch('/api/billing/checkout', {
+      const response = await fetchWithSessionRefresh('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan }),
@@ -1340,7 +1439,7 @@ export default function DashboardFinanciero() {
     setMensajeStatus('Abriendo portal de facturación...');
 
     try {
-      const response = await fetch('/api/billing/portal', { method: 'POST' });
+      const response = await fetchWithSessionRefresh('/api/billing/portal', { method: 'POST' });
       const data = await response.json();
 
       if (!response.ok || !data.success || !data.url) {
@@ -1657,30 +1756,41 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const limpiarAbonosSospechosos = async () => {
-    setCleanupLoading(true);
-    setMensajeStatus('Limpiando abonos sospechosos...');
-
+  const cargarAportacionesMeta = async (goalId: string) => {
+    setGoalContributionId(goalId);
+    setGoalContributionLoading(true);
     try {
-      const response = await fetch('/api/account/cleanup-card-payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: `${mesActivo}-14`, minAmount: 100000, apply: true }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus('El movimiento ya no aparece, pero no pude completar la eliminación. Intenta nuevamente más tarde.');
-        return;
-      }
-
-      setMensajeStatus(`Abonos sospechosos eliminados: ${data.deleted || 0}.`);
-      await fetchData();
-    } catch {
-      setMensajeStatus('No pude conectar con el limpiador. El abono sospechoso sigue oculto de la interfaz.');
+      const response = await fetchWithSessionRefresh(`/api/goals/${encodeURIComponent(goalId)}/contributions`, { cache: 'no-store' });
+      const data = await readJsonResponse<GoalContributionPanel & { success?: boolean; error?: string }>(response);
+      if (!response.ok || !data?.goal) throw new Error(formatActionError(data, 'No pude cargar las aportaciones.'));
+      setGoalContributionPanel(data);
+    } catch (error) {
+      mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude cargar las aportaciones.');
+      setGoalContributionId('');
     } finally {
-      setCleanupLoading(false);
-      setTimeout(() => setMensajeStatus(''), 6000);
+      setGoalContributionLoading(false);
+    }
+  };
+
+  const actualizarAportacionesMeta = async (payload: Record<string, unknown>) => {
+    if (!goalContributionId) return;
+    setGoalContributionLoading(true);
+    try {
+      const response = await fetchWithSessionRefresh(`/api/goals/${encodeURIComponent(goalContributionId)}/contributions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const data = await readJsonResponse<{ success?: boolean; error?: string; suggested?: number }>(response);
+      if (!response.ok || !data?.success) throw new Error(formatActionError(data, 'No pude actualizar las aportaciones.'));
+      if (payload.action === 'record_manual') setGoalContributionAmount('');
+      const refreshed = await fetchWithSessionRefresh(`/api/goals/${encodeURIComponent(goalContributionId)}/contributions`, { cache: 'no-store' });
+      const refreshedData = await readJsonResponse<GoalContributionPanel>(refreshed);
+      if (refreshed.ok && refreshedData?.goal) setGoalContributionPanel(refreshedData);
+      await fetchData({ silent: true });
+      mostrarMensajeTemporal(payload.action === 'scan' ? `${data.suggested || 0} movimiento(s) sugerido(s) para revisar.` : 'Aportación actualizada.');
+    } catch (error) {
+      mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude actualizar las aportaciones.');
+    } finally {
+      setGoalContributionLoading(false);
     }
   };
 
@@ -1694,11 +1804,7 @@ export default function DashboardFinanciero() {
     gastado: resumen.gastado,
   });
   const presupuestoPromedio = calcularPresupuestoTresTercios(resumen.promedioIngresosUltimos3Meses);
-  const cargosSantanderTdcMes = gastosMensuales
-    .filter((gasto) => gasto.origen === 'Santander_Email')
-    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
   const totalAbonosTarjetaMes = abonosTarjetaMensuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
-  const deudaTdcEstimadaMes = cargosSantanderTdcMes - totalAbonosTarjetaMes;
   const totalGastadoMes = resumen.gastado.Vida + resumen.gastado.Placeres + resumen.gastado.Futuro;
   const flujoNetoMes = resumen.ingresosMes - totalGastadoMes;
   const metaMensualActiva = monthlyIncomeTarget;
@@ -1765,10 +1871,6 @@ export default function DashboardFinanciero() {
     const fecha = new Date(gasto.fecha).getTime();
     return fecha >= new Date(inicioMesISO('2026-01')).getTime() && fecha < yearToDateEnd;
   });
-  const abonosTarjetaYearToDate = abonosTarjetaAnuales.filter((abono) => {
-    const fecha = new Date(abono.fecha).getTime();
-    return fecha >= new Date(inicioMesISO('2026-01')).getTime() && fecha < yearToDateEnd;
-  });
   const gastadoYearToDate = calcularGastadoPorBolsa(gastosYearToDate);
   const presupuestoYearToDate = ingresosYearToDate > 0
     ? calcularPresupuestoTresTercios(ingresosYearToDate)
@@ -1780,11 +1882,6 @@ export default function DashboardFinanciero() {
   const presupuestoYearToDateVida = presupuestoYearToDate.Vida;
   const presupuestoYearToDatePlaceres = presupuestoYearToDate.Placeres;
   const presupuestoYearToDateFuturo = presupuestoYearToDate.Futuro;
-  const cargosSantanderTdcYearToDate = gastosYearToDate
-    .filter((gasto) => gasto.origen === 'Santander_Email')
-    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
-  const totalAbonosTarjetaYearToDate = abonosTarjetaYearToDate.reduce((total, abono) => total + Number(abono.monto || 0), 0);
-  const deudaTdcEstimadaYearToDate = cargosSantanderTdcYearToDate - totalAbonosTarjetaYearToDate;
   const tasaFuturoYearToDate = ingresosYearToDate > 0 ? (gastadoYearToDate.Futuro / ingresosYearToDate) * 100 : 0;
   const burnRateYearToDate = presupuestoYearToDateVida + presupuestoYearToDatePlaceres > 0
     ? ((gastadoYearToDate.Vida + gastadoYearToDate.Placeres) / (presupuestoYearToDateVida + presupuestoYearToDatePlaceres)) * 100
@@ -1852,13 +1949,6 @@ export default function DashboardFinanciero() {
       detail: `Mes ${avanceMes.toFixed(1)}%`,
       tone: 'amber',
       trend: tendencias.burnRate,
-    },
-    {
-      label: 'Tarjeta',
-      value: `$${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}`,
-      detail: `Uso ${cargosSantanderTdcMes > 0 ? Math.min((deudaTdcEstimadaMes / cargosSantanderTdcMes) * 100, 100).toFixed(0) : 0}%`,
-      tone: 'cyan',
-      trend: `Abonos $${formatearMonto(totalAbonosTarjetaMes)}`,
     },
   ];
   // The stable array is required by the analysis callback/effect to avoid duplicate AI requests.
@@ -1964,7 +2054,7 @@ export default function DashboardFinanciero() {
     setInputIA('');
     setChatAttachments([]);
     setProcesando(true);
-    setMensajeStatus('Procesando con IA financiera...');
+    setMensajeStatus('VirafIA está pensando...');
 
     try {
       const payload = new FormData();
@@ -2020,7 +2110,7 @@ export default function DashboardFinanciero() {
   const generarAnalisis = useCallback(async (scope: 'month' | 'year') => {
     setAnalysisScope(scope);
     setAnalysisLoading(true);
-    setMensajeStatus(scope === 'year' ? 'Generando análisis anual con IA...' : 'Generando análisis mensual con IA...');
+    setMensajeStatus(scope === 'year' ? 'VirafIA está generando tu análisis anual...' : 'VirafIA está generando tu análisis mensual...');
     const isYearScope = scope === 'year';
     const resultKey = `${scope}:${isYearScope ? yearToDateMonthKey : mesActivo}`;
     const analysisMonthLabel = isYearScope ? `enero a ${yearToDateMonthName.toLowerCase()}` : selectedMonthName;
@@ -2031,7 +2121,6 @@ export default function DashboardFinanciero() {
           flujoNetoMes: flujoNetoYearToDate,
           tasaFuturo: tasaFuturoYearToDate,
           burnRate: burnRateYearToDate,
-          deudaTdcEstimadaMes: deudaTdcEstimadaYearToDate,
         }
       : {
           ingresosMes: resumen.ingresosMes,
@@ -2039,7 +2128,6 @@ export default function DashboardFinanciero() {
           flujoNetoMes,
           tasaFuturo,
           burnRate,
-          deudaTdcEstimadaMes,
         };
     const analysisBuckets = isYearScope
       ? [
@@ -2079,7 +2167,6 @@ export default function DashboardFinanciero() {
       totalGastadoMes: summary.totalGastadoMes,
       flujoNetoMes: summary.flujoNetoMes,
       tasaFuturo: summary.tasaFuturo,
-      deudaTdcEstimadaMes: summary.deudaTdcEstimadaMes,
       buckets: analysisBuckets,
       monthlySeries: isYearScope ? yearToDateMonths : undefined,
     });
@@ -2136,7 +2223,7 @@ export default function DashboardFinanciero() {
       setAnalysisLoading(false);
       setTimeout(() => setMensajeStatus(''), 4000);
     }
-  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, deudaTdcEstimadaMes, deudaTdcEstimadaYearToDate, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, tercioMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
+  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, tercioMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const currentAnalysisKey = `${analysisScope}:${analysisScope === 'year' ? yearToDateMonthKey : mesActivo}`;
@@ -2194,7 +2281,7 @@ export default function DashboardFinanciero() {
     ? `${bolsaMasPresionada.label} va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes; revisa sus movimientos antes de aumentar aportaciones.`
     : 'Tu ritmo de gasto está alineado con el avance del mes. Mantén los límites y revisa de nuevo en una semana.';
   const openAgentTasks = agentTasks.filter((task) => ['open', 'in_progress', 'waiting_user'].includes(task.status));
-  const taskNotifications = openAgentTasks.filter((task) => task.agent_key === 'movement_monitor');
+  const taskNotifications = openAgentTasks.filter((task) => ['movement_monitor', 'daily_cfo_mentor'].includes(task.agent_key));
   const movementNotifications = ultimosMovimientos.slice(0, 20).map((movement) => ({
     id: `movement-${movement.tipo}-${movement.id}`,
     title: movement.tipo === 'ingreso'
@@ -2233,22 +2320,22 @@ export default function DashboardFinanciero() {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para probar el asistente financiero 33/33/33.',
-      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'IA muy limitada'],
+      description: 'Para probar a VirafIA con el metodo 33/33/33.',
+      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'VirafIA muy limitada'],
     },
     {
       name: 'Beta',
       price: '$15',
       plan: 'beta',
-      description: 'Para usar el asistente financiero personal con automatizacion progresiva.',
-      features: ['Telegram incluido', 'Hasta 2 bancos', '12 meses de historial', 'Analisis mensual con IA'],
+      description: 'Para usar a VirafIA con automatizacion progresiva.',
+      features: ['Telegram incluido', 'Hasta 2 bancos', '12 meses de historial', 'Analisis mensual con VirafIA'],
     },
     {
       name: 'Premium',
       price: '$29',
       plan: 'premium',
       description: 'Para seguimiento avanzado con mas analisis y soporte.',
-      features: ['Hasta 5 bancos', '12 meses de historial', 'Analisis mensual/anual con IA', 'Soporte prioritario'],
+      features: ['Hasta 5 bancos', '12 meses de historial', 'Analisis mensual/anual con VirafIA', 'Soporte prioritario'],
     },
   ];
   const manualExpenseModal = manualExpenseOpen ? (
@@ -2460,7 +2547,7 @@ export default function DashboardFinanciero() {
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1 text-sm font-bold text-slate-700">Ahorrado actualmente
-            <input type="number" min="0" step="0.01" value={goalEditForm.current} onChange={(event) => setGoalEditForm((current) => current ? { ...current, current: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-violet-500" />
+            <input type="number" min="0" step="0.01" value={goalEditForm.current} disabled={/^[0-9a-f-]{36}$/i.test(goalEditForm.id)} onChange={(event) => setGoalEditForm((current) => current ? { ...current, current: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 outline-none focus:border-violet-500 disabled:text-slate-500" />
           </label>
           <label className="grid gap-1 text-sm font-bold text-slate-700">Monto objetivo
             <input type="number" min="0" step="0.01" value={goalEditForm.target} onChange={(event) => setGoalEditForm((current) => current ? { ...current, target: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-violet-500" />
@@ -2469,7 +2556,7 @@ export default function DashboardFinanciero() {
             <input type="date" value={goalEditForm.targetDate} onChange={(event) => setGoalEditForm((current) => current ? { ...current, targetDate: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-violet-500" />
           </label>
         </div>
-        <p className="mt-4 text-sm text-slate-500">Con estos datos calcularemos avance, monto restante y ritmo mensual necesario.</p>
+        <p className="mt-4 text-sm text-slate-500">El monto objetivo y la fecha definen el plan. El ahorro actual se calcula desde el historial de aportaciones confirmadas.</p>
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" onClick={() => setGoalEditForm(null)} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700">Cancelar</button>
           <button type="submit" disabled={goalSaving} className="h-10 rounded-lg bg-violet-600 px-4 text-sm font-bold text-white disabled:opacity-60">{goalSaving ? 'Guardando...' : 'Guardar meta'}</button>
@@ -2484,11 +2571,11 @@ export default function DashboardFinanciero() {
         <section className="w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-950 px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-600">
-                <ChatIcon />
+              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                <VirafIAMark className="size-6" />
               </div>
               <div className="min-w-0">
-                <h2 className="truncate text-sm font-black">Asistente financiero</h2>
+                <h2 className="truncate text-sm font-black">VirafIA</h2>
                 <p className="truncate text-xs text-slate-300">{selectedMonthName.toLowerCase()} 2026 · {activeNav.label}</p>
               </div>
             </div>
@@ -2503,12 +2590,20 @@ export default function DashboardFinanciero() {
           </div>
           <div className="max-h-[46vh] space-y-3 overflow-y-auto bg-slate-50 p-4">
             {chatMessages.length === 0 && !procesando ? (
-              <div className="rounded-lg bg-white p-3 text-sm text-slate-600 shadow-sm">
-                Pregúntame por tus movimientos, cuentas, metas o situación fiscal. También puedo analizar imágenes y documentos.
+              <div className="flex items-start gap-2.5 rounded-lg bg-white p-3 text-sm text-slate-600 shadow-sm">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-blue-600 text-white" aria-hidden="true">
+                  <VirafIAMark className="size-4" />
+                </span>
+                <span>Hola, soy VirafIA. Pregúntame por tus movimientos, cuentas, metas, patrimonio o inversiones. También puedo analizar imágenes y documentos.</span>
               </div>
             ) : (
               chatMessages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={message.id} className={`flex items-start gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {message.role === 'assistant' ? (
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-blue-600 text-white" aria-label="VirafIA">
+                      <VirafIAMark className="size-4" />
+                    </span>
+                  ) : null}
                   <div className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm shadow-sm ${
                     message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700'
                   }`}>
@@ -2518,10 +2613,10 @@ export default function DashboardFinanciero() {
               ))
             )}
             {procesando ? (
-              <div className="flex justify-start" role="status" aria-live="polite" aria-label="El asistente está escribiendo">
+              <div className="flex justify-start" role="status" aria-live="polite" aria-label="VirafIA está escribiendo">
                 <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 shadow-sm">
-                  <span className="grid size-6 place-items-center rounded-full bg-blue-600 text-[9px] font-black text-white" aria-hidden="true">
-                    IA
+                  <span className="grid size-6 place-items-center rounded-full bg-blue-600 text-white" aria-hidden="true">
+                    <VirafIAMark className="size-3.5" />
                   </span>
                   <span className="flex h-4 items-center gap-1" aria-hidden="true">
                     {[0, 1, 2].map((dot) => (
@@ -2532,7 +2627,7 @@ export default function DashboardFinanciero() {
                       />
                     ))}
                   </span>
-                  <span className="sr-only">El asistente está escribiendo</span>
+                  <span className="sr-only">VirafIA está escribiendo</span>
                 </div>
               </div>
             ) : null}
@@ -2587,8 +2682,8 @@ export default function DashboardFinanciero() {
                 type="button"
                 onClick={alternarDictadoMovimiento}
                 disabled={procesando}
-                aria-label={escuchandoVoz ? 'Detener grabación' : 'Hablar con Virafi'}
-                title={escuchandoVoz ? 'Detener grabación' : 'Hablar con Virafi'}
+                aria-label={escuchandoVoz ? 'Detener grabación' : 'Hablar con VirafIA'}
+                title={escuchandoVoz ? 'Detener grabación' : 'Hablar con VirafIA'}
                 className={`grid size-11 place-items-center rounded-lg border transition disabled:opacity-50 ${escuchandoVoz ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'}`}
               >
                 <Microphone aria-hidden="true" className="size-5" weight={escuchandoVoz ? 'fill' : 'bold'} />
@@ -2609,8 +2704,8 @@ export default function DashboardFinanciero() {
           onClick={() => setChatOpen(true)}
           className="flex h-14 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-xl transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
         >
-          <ChatIcon />
-          IA
+          <VirafIAMark className="size-7" />
+          VirafIA
         </button>
       )}
     </div>
@@ -2658,13 +2753,9 @@ export default function DashboardFinanciero() {
                 </React.Fragment>
               );
             })}
-            <Link href="/fiscal" className="mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-              <Receipt aria-hidden="true" className="size-5" weight="regular" />
-              <span>Centro fiscal</span>
-            </Link>
             <button type="button" onClick={() => setChatOpen(true)} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-              <ChatCircleDots aria-hidden="true" className="size-5" weight="regular" />
-              <span className="flex-1">Asistente financiero</span>
+              <VirafIAMark className="size-5 shrink-0 text-blue-700" />
+              <span className="flex-1">VirafIA</span>
               <span className="text-xs font-bold text-blue-700">Nuevo</span>
             </button>
             <button type="button" onClick={toggleNotificationTray} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
@@ -2678,9 +2769,6 @@ export default function DashboardFinanciero() {
               <GearIcon />
               <span>Configuración</span>
             </Link>
-            <button type="button" onClick={cerrarSesion} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50">
-              Salir
-            </button>
             <Link href="/onboarding?tab=profile" className="mt-3 block rounded-lg border border-slate-200 bg-[var(--brand-cream)] p-3 transition-colors hover:border-blue-200 hover:bg-blue-50" aria-label="Abrir mi perfil">
               <div className="flex items-center gap-3">
                 <div className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-blue-600 text-sm font-bold text-white">{accountProfile?.avatarUrl ? <Image src={accountProfile.avatarUrl} alt={`Foto de ${accountName}`} fill sizes="36px" unoptimized className="object-cover" /> : accountInitials}</div>
@@ -2914,7 +3002,7 @@ export default function DashboardFinanciero() {
                 <div className="mt-6 grid items-center gap-6 sm:grid-cols-[150px_1fr] xl:grid-cols-1 2xl:grid-cols-[160px_1fr]">
                   <div
                     className="relative mx-auto grid size-40 place-items-center rounded-full"
-                    style={{ background: 'conic-gradient(var(--brand-fiscal) 0 33.333%, var(--brand-business) 33.333% 66.666%, var(--brand-wealth) 66.666% 100%)' }}
+                    style={{ background: 'conic-gradient(var(--brand-future) 0 33.333%, var(--brand-business) 33.333% 66.666%, var(--brand-wealth) 66.666% 100%)' }}
                     role="img"
                     aria-label="Distribución equilibrada del presupuesto en Vida, Placeres y Futuro"
                   >
@@ -3135,13 +3223,18 @@ export default function DashboardFinanciero() {
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Tus objetivos financieros</h2>
-                    <p className="mt-1 text-sm text-slate-500">Aquí aparecen automáticamente las metas que definiste al personalizar tu experiencia financiera.</p>
+                    <p className="mt-1 max-w-3xl text-sm text-slate-500">Tus valores orientan el plan; aquí sólo aparecen resultados concretos que requieren dinero, monto y fecha.</p>
                   </div>
                   {metasFinancieras.length > 0 ? (
                     <button type="button" onClick={() => setGoalsInterviewOpen(true)} className="shrink-0 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">
                       Actualizar mi experiencia
                     </button>
                   ) : null}
+                </div>
+                <div className="mb-5 grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 md:grid-cols-3">
+                  <div><p className="text-sm font-black text-blue-950">1. Virafi detecta</p><p className="mt-1 text-xs leading-5 text-blue-900">Busca transferencias o compras que coincidan con la meta. No toma todos tus ingresos ni todo “Futuro”.</p></div>
+                  <div><p className="text-sm font-black text-blue-950">2. Tú confirmas</p><p className="mt-1 text-xs leading-5 text-blue-900">Si el vínculo no es inequívoco, aparece como sugerencia y no modifica el avance.</p></div>
+                  <div><p className="text-sm font-black text-blue-950">3. Se crea historial</p><p className="mt-1 text-xs leading-5 text-blue-900">Sólo aportaciones confirmadas actualizan el saldo; cada cifra conserva fecha y origen.</p></div>
                 </div>
                 <div className="space-y-3">
                   {metasFinancieras.length === 0 ? (
@@ -3158,8 +3251,9 @@ export default function DashboardFinanciero() {
                           <p className="text-sm text-slate-500">{meta.fechaObjetivo ? `Fecha objetivo: ${formatearFecha(meta.fechaObjetivo)}` : 'Fecha objetivo pendiente de configurar'}</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <p className="text-sm font-bold text-slate-900">${formatearMonto(meta.actual)} / ${formatearMonto(meta.objetivo)}</p>
-                          <button type="button" onClick={() => setGoalEditForm({ id: String(meta.id), name: meta.nombre, current: String(meta.actual), target: String(meta.objetivo), targetDate: meta.fechaObjetivo ? meta.fechaObjetivo.slice(0, 10) : '' })} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">Ajustar</button>
+                          <p className="text-sm font-bold text-slate-900">{meta.objetivo > 0 ? `$${formatearMonto(meta.actual)} / $${formatearMonto(meta.objetivo)}` : 'Monto por definir'}</p>
+                          {/^[0-9a-f-]{36}$/i.test(String(meta.id)) && <button type="button" onClick={() => void cargarAportacionesMeta(String(meta.id))} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Aportaciones</button>}
+                          <button type="button" onClick={() => setGoalEditForm({ id: String(meta.id), name: meta.nombre, current: String(meta.actual), target: String(meta.objetivo), targetDate: meta.fechaObjetivo ? meta.fechaObjetivo.slice(0, 10) : '' })} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">{meta.objetivo > 0 ? 'Ajustar' : 'Definir'}</button>
                         </div>
                       </div>
                       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
@@ -3170,6 +3264,17 @@ export default function DashboardFinanciero() {
                 </div>
               </div>
             </section>
+
+            {goalContributionId && (
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Aportaciones de la meta">
+                <div className="mx-auto max-w-3xl rounded-xl bg-white p-5 shadow-2xl sm:p-7">
+                  <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-blue-700">Seguimiento auditable</p><h2 className="mt-1 text-2xl font-black">{goalContributionPanel?.goal.name || 'Aportaciones de la meta'}</h2><p className="mt-2 text-sm leading-6 text-slate-500">El avance no se calcula desde todos tus movimientos. Sólo suma aportaciones confirmadas y vinculadas a esta meta.</p></div><button type="button" onClick={() => { setGoalContributionId(''); setGoalContributionPanel(null); }} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold">Cerrar</button></div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]"><label className="grid gap-2 text-sm font-bold text-slate-700">Registrar una aportación manual<input type="number" min="0" step="100" value={goalContributionAmount} onChange={(event) => setGoalContributionAmount(event.target.value)} placeholder="Ej. 2,000" className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500" /></label><button type="button" disabled={goalContributionLoading || Number(goalContributionAmount) <= 0} onClick={() => void actualizarAportacionesMeta({ action: 'record_manual', amount: Number(goalContributionAmount) })} className="self-end h-11 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white disabled:opacity-50">Registrar</button></div>
+                  <button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'scan' })} className="mt-4 rounded-lg border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-50">Buscar candidatos en movimientos</button>
+                  <div className="mt-6 space-y-3">{goalContributionLoading && !goalContributionPanel ? <p className="text-sm text-slate-500">Cargando...</p> : (goalContributionPanel?.contributions || []).length === 0 ? <div className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">Todavía no hay aportaciones. Registra una o busca movimientos candidatos.</div> : goalContributionPanel?.contributions.map((contribution) => <div key={contribution.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">${formatearMonto(Number(contribution.amount))} MXN</p><p className="mt-1 text-xs text-slate-500">{formatearFecha(contribution.contributed_at)} · {contribution.source === 'manual' ? 'Registro manual' : 'Movimiento detectado'}{contribution.note ? ` · ${contribution.note}` : ''}</p></div>{contribution.status === 'suggested' ? <div className="flex gap-2"><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'reject' })} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">No corresponde</button><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'confirm' })} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Confirmar</button></div> : <span className={`w-fit rounded-lg px-3 py-2 text-xs font-bold ${contribution.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{contribution.status === 'confirmed' ? 'Confirmada' : 'Descartada'}</span>}</div>)}</div>
+                </div>
+              </div>
+            )}
 
             {goalsInterviewOpen && (
               <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Entrevista de personalización financiera">
@@ -3257,7 +3362,7 @@ export default function DashboardFinanciero() {
               </article>
 
               <article className="flex min-h-[390px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-xl text-slate-950">Virafi sugiere</h2>
+                <h2 className="text-xl text-slate-950">VirafIA sugiere</h2>
                 <div className="mt-5 flex flex-1 flex-col rounded-xl bg-slate-50 p-5">
                   <span className="grid size-11 place-items-center rounded-full bg-blue-600 text-white">
                     <Sparkle aria-hidden="true" className="size-5" weight="fill" />
@@ -3308,19 +3413,19 @@ export default function DashboardFinanciero() {
                 </article>
 
                 <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <h2 className="text-xl text-slate-950">Centro fiscal</h2>
+                  <h2 className="text-xl text-slate-950">Ruta hacia tus metas</h2>
                   <div className="mt-4 flex items-start gap-3">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700">
-                      {cuentasActivas > 0 ? <CheckCircle aria-hidden="true" className="size-6" weight="regular" /> : <Receipt aria-hidden="true" className="size-6" weight="regular" />}
+                    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">
+                      <Target aria-hidden="true" className="size-6" weight="duotone" />
                     </span>
                     <div>
-                      <p className="font-bold text-emerald-700">{cuentasActivas > 0 ? 'Información financiera disponible' : 'Listo para configurar'}</p>
-                      <p className="mt-1 text-sm leading-5 text-slate-500">Consulta documentos y el estado de tus conexiones fiscales desde un solo lugar.</p>
+                      <p className="font-bold text-blue-700">{metasFinancieras.length > 0 ? `${metasFinancieras.length} meta${metasFinancieras.length === 1 ? '' : 's'} en seguimiento` : 'Define tu primera meta'}</p>
+                      <p className="mt-1 text-sm leading-5 text-slate-500">VirafIA relaciona tu flujo, capacidad de aportación y horizonte para proponerte el siguiente paso.</p>
                     </div>
                   </div>
-                  <Link href="/fiscal" className="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
-                    Ver centro fiscal <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
-                  </Link>
+                  <button type="button" onClick={() => setVistaActiva('metas')} className="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Ver metas <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </button>
                 </article>
               </div>
             </section>
@@ -3354,7 +3459,7 @@ export default function DashboardFinanciero() {
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Comparativo del año</h2>
-                    <p className="text-sm text-slate-500">Datos por mes; la interpretación aparece una sola vez en Análisis IA.</p>
+                    <p className="text-sm text-slate-500">Datos por mes; la interpretación aparece una sola vez en Análisis VirafIA.</p>
                   </div>
                   <span className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600">2026</span>
                 </div>
@@ -3414,7 +3519,7 @@ export default function DashboardFinanciero() {
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-950">Análisis IA</h2>
+                    <h2 className="text-lg font-bold text-slate-950">Análisis VirafIA</h2>
                     <p className="mt-1 text-sm text-slate-500">Lectura accionable del mes o del año completo.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm font-bold">
@@ -3684,16 +3789,23 @@ export default function DashboardFinanciero() {
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-sm font-bold text-blue-700">Dónde hacerlo</p>
-                  <h2 className="mt-1 text-xl font-black">Completa la inversión en una plataforma</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">Aquí preparas la decisión. El dinero permanece en tu banco o plataforma de inversión y tú completas la operación.</p>
+                  <h2 className="mt-1 text-xl font-black">Tutorial para hacer tu primera inversión</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">Virafi te explica la operación paso a paso. Por ahora tú confirmas y ejecutas en una plataforma regulada; nunca se mueve dinero sin tu autorización.</p>
                   <div className="mt-5 space-y-3">{[
-                    ['Base y liquidez', 'CETESDirecto', 'Para reserva y objetivos de corto plazo.', 'https://www.cetesdirecto.com/'],
-                    ['Fondos y acciones', 'Alpaca', 'Para investigar ETFs y acciones de Estados Unidos.', 'https://app.alpaca.markets/signup'],
-                    ['Criptomonedas', 'Binance', 'Solo para la parte pequeña asignada a cripto.', 'https://www.binance.com/en/markets/overview'],
-                  ].map(([title, platform, detail, url]) => <div key={title} className="rounded-xl border border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black">{title}</p><p className="mt-1 text-xs font-bold text-blue-700">{platform}</p></div><a href={url} target="_blank" rel="noreferrer" className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Ir a plataforma</a></div>
-                    <p className="mt-2 text-sm text-slate-500">{detail}</p>
-                  </div>)}</div>
+                    ['1', 'Protege tu base', 'Antes de invertir, conserva gastos próximos y fondo de emergencia en un instrumento líquido.'],
+                    ['2', 'Elige el objetivo', 'Selecciona la meta, revisa cuánto corresponde este mes y confirma que el plazo permita asumir ese riesgo.'],
+                    ['3', 'Revisa el instrumento', 'Entiende qué compras, comisiones, liquidez, moneda, diversificación y cuánto podrías perder temporalmente.'],
+                    ['4', 'Compra y vincula', 'Ejecuta en la plataforma y vincula la aportación con la meta; Virafi actualizará el avance desde el movimiento confirmado.'],
+                  ].map(([number, title, detail]) => <div key={number} className="flex gap-3 rounded-xl bg-slate-50 p-4"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-blue-600 text-xs font-black text-white">{number}</span><div><p className="text-sm font-black">{title}</p><p className="mt-1 text-sm leading-6 text-slate-600">{detail}</p></div></div>)}</div>
+                  <details className="mt-4 rounded-xl border border-slate-200 p-4">
+                    <summary className="cursor-pointer text-sm font-black text-slate-950">Comparar plataformas y abrir instrucciones</summary>
+                    <div className="mt-4 space-y-3">{[
+                      ['CETESDirecto', 'Liquidez y deuda gubernamental en México', 'https://www.cetesdirecto.com/'],
+                      ['Alpaca', 'Acciones y ETFs; requiere disponibilidad y cuenta elegible', 'https://app.alpaca.markets/signup'],
+                      ['Coinbase', 'Criptoactivos y datos de mercado', 'https://www.coinbase.com/'],
+                      ['Binance', 'Mercado cripto, sujeto a disponibilidad regional', 'https://www.binance.com/en/markets/overview'],
+                    ].map(([platform, detail, url]) => <div key={platform} className="flex items-start justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-black">{platform}</p><p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p></div><a href={url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Abrir</a></div>)}</div>
+                  </details>
                   <div className="mt-5 flex gap-3 rounded-xl bg-emerald-50 p-4">
                     <ShieldCheck className="size-6 shrink-0 text-emerald-700" weight="regular" aria-hidden="true" />
                     <p className="text-sm leading-6 text-emerald-900">Virafi no recibe ni guarda tu dinero. Antes de salir verás cuánto corresponde a esa inversión y qué debes revisar.</p>
@@ -3704,31 +3816,15 @@ export default function DashboardFinanciero() {
               {wealthRoutePlan && <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm font-bold text-blue-700">Contexto para decidir</p>
-                    <h2 className="mt-1 text-xl font-black text-slate-950">Qué está pasando en el mercado</h2>
-                    <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Los precios ayudan a entender el momento, pero tu aportación se programa según tu presupuesto; no depende de intentar adivinar el precio perfecto.</p>
+                    <p className="text-sm font-bold text-blue-700">Briefing fundamental</p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950">Qué está moviendo al mundo y por qué importa</h2>
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Hechos recientes de fuentes seleccionadas, explicados según tu experiencia. Precio, noticia y escenario son cosas distintas.</p>
                   </div>
-                  <button type="button" onClick={sincronizarMercado} disabled={marketSyncLoading} className="h-10 shrink-0 rounded-lg border border-blue-200 px-4 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60">{marketSyncLoading ? 'Actualizando...' : 'Actualizar contexto'}</button>
+                  <div className="flex gap-2"><div className="flex rounded-lg bg-slate-100 p-1"><button type="button" onClick={() => setMarketExperience('simple')} className={`rounded-md px-3 py-2 text-xs font-bold ${marketExperience === 'simple' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Explícame fácil</button><button type="button" onClick={() => setMarketExperience('advanced')} className={`rounded-md px-3 py-2 text-xs font-bold ${marketExperience === 'advanced' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Más detalle</button></div><button type="button" onClick={sincronizarMercado} disabled={marketSyncLoading} className="h-10 shrink-0 rounded-lg border border-blue-200 px-4 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60">{marketSyncLoading ? 'Actualizando...' : 'Actualizar'}</button></div>
                 </div>
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {marketSnapshots.length === 0 ? <div className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">Actualiza el contexto para consultar precios recientes antes de revisar una opción.</div> : marketSnapshots.slice(0, 6).map((snapshot) => {
-                    const isPrediction = snapshot.provider === 'polymarket';
-                    const currentPrice = valorNumerico(snapshot.price);
-                    return <div key={snapshot.id} className="rounded-xl border border-slate-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-black text-slate-950">{snapshot.asset?.symbol || snapshot.asset?.name || 'Mercado'}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{snapshot.asset?.name || (isPrediction ? 'Probabilidad estimada por el mercado' : 'Precio observado')}</p></div>
-                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{isPrediction ? 'Contexto' : 'Precio'}</span>
-                      </div>
-                      <p className="mt-4 text-xl font-black text-slate-950">{isPrediction ? `${(currentPrice * 100).toFixed(1)}%` : `$${formatearMonto(currentPrice)}`}</p>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">{isPrediction ? 'No es una recomendación de inversión; úsalo para entender expectativas del mercado.' : 'Compara este dato con tu aportación asignada, comisiones y horizonte antes de comprar.'}</p>
-                    </div>;
-                  })}
-                </div>
-                <div className="mt-5 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-xl bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Cuánto</p><p className="mt-1 text-sm leading-6 text-blue-900">Respeta los montos mensuales de tu distribución; no uses dinero de Vida ni de tu reserva.</p></div>
-                  <div className="rounded-xl bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Cuándo</p><p className="mt-1 text-sm leading-6 text-blue-900">Aporta aproximadamente {formatearMonto(wealthRoutePlan.weeklyContribution)} MXN por semana para reducir decisiones impulsivas.</p></div>
-                  <div className="rounded-xl bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Qué revisar</p><p className="mt-1 text-sm leading-6 text-blue-900">Costos, liquidez, diversificación, riesgo y noticias que cambien la razón original para invertir.</p></div>
-                </div>
+                <div className="mt-5 grid gap-3 lg:grid-cols-2">{marketBriefing.length === 0 ? <div className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">No hay titulares verificados disponibles en este momento. Los precios se muestran por separado.</div> : marketBriefing.slice(0, 8).map((item) => <article key={item.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{item.topicLabel}</span><span className="text-xs font-semibold text-slate-400">{item.source}</span></div><a href={item.url} target="_blank" rel="noreferrer" className="mt-3 block font-black leading-6 text-slate-950 hover:text-blue-700">{item.headline}</a><div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="text-xs font-black uppercase tracking-wide text-slate-500">{marketExperience === 'simple' ? 'En palabras simples' : 'Impacto fundamental'}</p><p className="mt-1 text-sm leading-6 text-slate-700">{marketExperience === 'simple' ? item.beginnerContext : item.whyItMatters}</p></div>{marketExperience === 'advanced' && <p className="mt-3 text-xs leading-5 text-slate-500"><strong>Vigilar después:</strong> {item.watchNext}</p>}</article>)}</div>
+                <div className="mt-6"><h3 className="text-sm font-black text-slate-950">Precios y lectura técnica básica</h3><p className="mt-1 text-xs text-slate-500">Dato observado, no pronóstico. Nadie puede saber con certeza cuánto subirá Bitcoin.</p><div className="mt-3 grid gap-3 md:grid-cols-3">{marketSnapshots.filter((snapshot) => snapshot.provider !== 'polymarket').slice(0, 3).map((snapshot) => { const change24h = Number(snapshot.raw?.priceChangePercent); return <div key={snapshot.id} className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-500">{snapshot.asset?.exchange || snapshot.provider}</p><p className="mt-1 font-black text-slate-950">{snapshot.asset?.symbol || snapshot.asset?.name}</p><p className="mt-2 text-xl font-black">${formatearMonto(valorNumerico(snapshot.price))}</p>{Number.isFinite(change24h) && <p className={`mt-2 text-xs font-bold ${change24h >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}% en 24 h</p>}<p className="mt-2 text-xs leading-5 text-slate-500">El movimiento de 24 h describe impulso reciente; no demuestra valor fundamental ni anticipa el siguiente movimiento.</p></div>; })}</div></div>
+                {marketSnapshots.some((snapshot) => snapshot.provider === 'polymarket') && <details className="mt-5 rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-black">Señales secundarias de mercados predictivos</summary><p className="mt-2 text-xs leading-5 text-slate-500">Son expectativas agregadas y pueden equivocarse. No sustituyen noticias, datos económicos ni análisis fundamental.</p></details>}
               </div>}
               {wealthEligibility.ready && <p className="px-1 text-xs text-slate-500">Esta ruta parte de tus metas y es educativa. Tú mantienes el control de cada decisión.</p>}
             </section>
@@ -4018,24 +4114,6 @@ export default function DashboardFinanciero() {
                       <p className={`text-xl font-black ${flujoNetoMes < 0 ? 'text-rose-600' : 'text-blue-700'}`}>${formatearMonto(flujoNetoMes)}</p>
                     </div>
                   </div>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <h2 className="text-lg font-bold text-slate-950">Tarjeta del mes</h2>
-                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
-                  <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
-                  <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-                    El cálculo cambia con el mes seleccionado y solo usa movimientos TDC de ese periodo.
-                  </div>
-                  {abonosSospechososOcultos > 0 && (
-                    <button
-                      type="button"
-                      onClick={limpiarAbonosSospechosos}
-                      disabled={cleanupLoading}
-                      className="mt-4 h-10 rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
-                    >
-                      {cleanupLoading ? 'Limpiando...' : 'Borrar abonos sospechosos'}
-                    </button>
-                  )}
                 </div>
               </div>
             </section>

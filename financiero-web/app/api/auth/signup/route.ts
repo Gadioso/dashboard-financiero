@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     email,
     password,
     options: {
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin}/auth/callback?next=${encodeURIComponent('/onboarding?focus=goals')}`,
       data: {
         full_name: fullName?.trim() || null,
       },
@@ -77,9 +78,10 @@ export async function POST(request: Request) {
   }
 
   const safeNext = getSafeNext(next);
+  const postSignupNext = '/onboarding?focus=goals';
   const response = NextResponse.json({
     success: true,
-    next: safeNext,
+    next: postSignupNext,
     needsEmailConfirmation: !data.session,
     message: data.session
       ? 'Cuenta creada. Ya puedes entrar.'
@@ -99,7 +101,7 @@ export async function POST(request: Request) {
     action: 'auth.signup',
     resourceType: 'profile',
     resourceId: userId || null,
-    metadata: { needsEmailConfirmation: !data.session },
+    metadata: { needsEmailConfirmation: !data.session, requestedNext: safeNext, next: postSignupNext },
   });
 
   return response;

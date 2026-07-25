@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { clasificarMovimientoFinanciero } from '@/lib/ai-classifier';
-import { categoriaParaGastos, extraerFechaMovimiento } from '@/lib/financial-core';
+import { categoriaParaGastos, resolverFechaMovimiento } from '@/lib/financial-core';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
@@ -27,9 +27,7 @@ export async function POST(request: Request) {
     }
 
     const dataAI = await clasificarMovimientoFinanciero(texto, aiApiKey, { supabase, profileId: tenant.profileId });
-    const fechaMovimiento = dataAI.fechaMovimiento && !Number.isNaN(new Date(dataAI.fechaMovimiento).getTime())
-      ? new Date(dataAI.fechaMovimiento)
-      : extraerFechaMovimiento(texto) || new Date();
+    const fechaMovimiento = resolverFechaMovimiento(texto, dataAI.fechaMovimiento);
 
     // 4. Inserción directa en la base de datos de Supabase según el tipo mapeado
     let queryResult;

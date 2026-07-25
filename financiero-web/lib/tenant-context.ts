@@ -3,7 +3,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
 export type TenantContext = {
   profileId: string | null;
-  source: 'private-env' | 'supabase-auth' | 'telegram' | 'email-ingest' | 'anonymous-private' | 'anonymous';
+  source: 'private-env' | 'supabase-auth' | 'telegram' | 'anonymous-private' | 'anonymous';
   email?: string | null;
 };
 
@@ -31,16 +31,6 @@ export function getRequiredPrivateProfileId() {
   }
 
   return profileId;
-}
-
-export function getEmailIngestProfileId() {
-  const profileId = normalizeProfileId(process.env.EMAIL_INGEST_PROFILE_ID || null);
-
-  if (profileId) return profileId;
-
-  if (process.env.NODE_ENV === 'production') return null;
-
-  return getPrivateProfileId();
 }
 
 export function getPrivateTenantContext(): TenantContext {
@@ -164,50 +154,6 @@ export async function getTelegramTenantContext({
   }
 
   return getPrivateTenantContext();
-}
-
-function normalizeEmail(value?: string | null) {
-  const trimmed = value?.trim().toLowerCase();
-
-  return trimmed && trimmed.includes('@') ? trimmed : null;
-}
-
-export async function getEmailIngestTenantContext({
-  supabase,
-  email,
-}: {
-  supabase?: SupabaseClient | null;
-  email?: string | null;
-} = {}): Promise<TenantContext> {
-  const normalizedEmail = normalizeEmail(email);
-
-  if (supabase && normalizedEmail) {
-    const { data } = await supabase
-      .from('gmail_integrations')
-      .select('profile_id, email, status')
-      .eq('email', normalizedEmail)
-      .eq('status', 'active')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const profileId = normalizeProfileId((data as { profile_id?: string | null } | null)?.profile_id || null);
-
-    if (profileId) {
-      return { profileId, source: 'email-ingest', email: normalizedEmail };
-    }
-  }
-
-  const profileId = getEmailIngestProfileId();
-
-  if (profileId) {
-    return { profileId, source: 'email-ingest', email: normalizedEmail };
-  }
-
-  if (process.env.NODE_ENV === 'production') {
-    return { profileId: null, source: 'anonymous', email: normalizedEmail };
-  }
-
-  return { ...getPrivateTenantContext(), email: normalizedEmail };
 }
 
 export function withProfile<T extends Record<string, unknown>>(payload: T, profileId?: string | null): T & { profile_id?: string } {

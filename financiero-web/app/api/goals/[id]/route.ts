@@ -43,7 +43,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const { data, error } = await supabase
       .from('financial_goals')
       .update({
-        current_amount: current,
         target_amount: target,
         target_date: targetDate || null,
         updated_at: new Date().toISOString(),

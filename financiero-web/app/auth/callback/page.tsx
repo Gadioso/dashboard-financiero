@@ -10,7 +10,7 @@ function CallbackHandler() {
 
   useEffect(() => {
     async function completeLogin() {
-      const next = searchParams.get('next') || '/';
+      const next = searchParams.get('next') || '/dashboard';
       const queryError = searchParams.get('error_description') || searchParams.get('error');
 
       if (queryError) {

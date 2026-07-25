@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import { clearAuthCookies, getSafeNext, setSupabaseSessionCookies, upsertAuthProfile } from '@/lib/auth-session';
-import { getSupabaseAnonClient, getSupabaseServiceClient } from '@/lib/supabase-server';
+import { clearAuthCookies, getAppOrigin, getPostAuthNext, getSafeNext, setSupabaseSessionCookies, upsertAuthProfile } from '@/lib/auth-session';
+import { clearOAuthVerifierCookie, getSupabaseOAuthClient, getSupabaseServiceClient } from '@/lib/supabase-server';
 
 function redirectToLogin(request: Request, message: string, next: string) {
-  const loginUrl = new URL('/login', request.url);
+  const loginUrl = new URL('/login', getAppOrigin(request));
   loginUrl.searchParams.set('error', message);
   loginUrl.searchParams.set('next', next);
 
   const response = NextResponse.redirect(loginUrl);
   clearAuthCookies(response);
+  clearOAuthVerifierCookie(response);
 
   return response;
 }
@@ -27,23 +28,26 @@ export async function GET(request: Request) {
     return redirectToLogin(request, 'No recibí el código de autenticación.', safeNext);
   }
 
-  const supabase = getSupabaseAnonClient();
+  const oauth = getSupabaseOAuthClient(request);
 
-  if (!supabase) {
+  if (!oauth) {
     return redirectToLogin(request, 'Falta configurar Supabase Auth.', safeNext);
   }
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await oauth.supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.session?.access_token || !data.session.refresh_token || !data.user) {
     return redirectToLogin(request, error?.message || 'No pude completar el inicio de sesión.', safeNext);
   }
 
   await upsertAuthProfile(data.user);
+  const postAuthNext = await getPostAuthNext(data.user.id, safeNext);
 
-  const response = NextResponse.redirect(new URL(safeNext, request.url));
+  const response = NextResponse.redirect(new URL(postAuthNext, getAppOrigin(request)));
   clearAuthCookies(response);
   setSupabaseSessionCookies(response, data.session.access_token, data.session.refresh_token);
+  oauth.applyVerifierCookie(response);
+  response.headers.set('Cache-Control', 'private, no-store');
 
   return response;
 }
@@ -73,10 +77,12 @@ export async function POST(request: Request) {
   }
 
   await upsertAuthProfile(data.user);
+  const postAuthNext = await getPostAuthNext(data.user.id, safeNext);
 
-  const response = NextResponse.json({ success: true, next: safeNext });
+  const response = NextResponse.json({ success: true, next: postAuthNext });
   clearAuthCookies(response);
   setSupabaseSessionCookies(response, accessToken, refreshToken);
+  response.headers.set('Cache-Control', 'private, no-store');
 
   return response;
 }

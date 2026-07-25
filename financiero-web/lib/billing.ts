@@ -2,11 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type BillingPlan = 'free' | 'beta' | 'premium';
 
-export type BillingLimitResource = 'bankConnections' | 'gmailIntegrations' | 'telegramAccounts';
+export type BillingLimitResource = 'bankConnections' | 'telegramAccounts';
 
 export type BillingLimits = {
   bankConnections: number;
-  gmailIntegrations: number;
   telegramAccounts: number;
   bankSyncLookbackDays: number;
 };
@@ -30,19 +29,16 @@ const activeSubscriptionStatuses = new Set(activeSubscriptionStatusList);
 export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
   free: {
     bankConnections: 1,
-    gmailIntegrations: 1,
     telegramAccounts: 0,
     bankSyncLookbackDays: 30,
   },
   beta: {
     bankConnections: 2,
-    gmailIntegrations: 1,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
   },
   premium: {
     bankConnections: 5,
-    gmailIntegrations: 2,
     telegramAccounts: 1,
     bankSyncLookbackDays: 365,
   },
@@ -157,7 +153,6 @@ export class BillingLimitError extends Error {
 
 function resourceLabel(resource: BillingLimitResource) {
   if (resource === 'bankConnections') return 'bancos conectados';
-  if (resource === 'gmailIntegrations') return 'correos Gmail conectados';
   return 'cuentas de Telegram conectadas';
 }
 

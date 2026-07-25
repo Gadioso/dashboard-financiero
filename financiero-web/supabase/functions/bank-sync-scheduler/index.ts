@@ -2,7 +2,7 @@
 // @ts-nocheck -- Supabase Edge Functions execute in Deno, outside the Next.js runtime.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
-const appUrl = 'https://dashboard-financiero-chi.vercel.app';
+const appUrl = 'https://virafi.com';
 
 function toHex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');

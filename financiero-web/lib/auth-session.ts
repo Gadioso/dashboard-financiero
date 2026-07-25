@@ -15,7 +15,24 @@ export function getRequestCookie(request: Request, name: string) {
 }
 
 export function getSafeNext(value?: string | null) {
-  return value?.startsWith('/') && !value.startsWith('//') ? value : '/';
+  return value?.startsWith('/') && !value.startsWith('//') ? value : '/dashboard';
+}
+
+export function getAppOrigin(request: Request) {
+  const requestOrigin = new URL(request.url).origin;
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+
+  if (!configuredAppUrl) return requestOrigin;
+
+  try {
+    const configuredUrl = new URL(configuredAppUrl);
+
+    return configuredUrl.protocol === 'https:' || configuredUrl.protocol === 'http:'
+      ? configuredUrl.origin
+      : requestOrigin;
+  } catch {
+    return requestOrigin;
+  }
 }
 
 function getSessionCookieOptions() {
@@ -75,4 +92,21 @@ export async function upsertAuthProfile(user: User, fallbackEmail?: string | nul
   if (error) {
     throw new Error(`No pude crear o actualizar el perfil de autenticacion: ${error.message}`);
   }
+}
+
+export async function getPostAuthNext(userId: string, requestedNext?: string | null) {
+  const safeNext = getSafeNext(requestedNext);
+  const service = getSupabaseServiceClient();
+
+  if (!service) return safeNext;
+
+  const { data, error } = await service
+    .from('financial_personalization_profiles')
+    .select('profile_id')
+    .eq('profile_id', userId)
+    .maybeSingle();
+
+  if (error) return safeNext;
+
+  return data?.profile_id ? safeNext : '/onboarding?focus=goals';
 }

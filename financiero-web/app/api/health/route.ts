@@ -10,7 +10,6 @@ const requiredEnv = {
   telegramBot: 'TELEGRAM_BOT_TOKEN',
   telegramWebhook: 'TELEGRAM_WEBHOOK_SECRET',
   telegramNotifyChat: 'TELEGRAM_NOTIFY_CHAT_ID',
-  emailIngest: 'EMAIL_INGEST_SECRET',
   openrouter: 'OPENROUTER_API_KEY',
   openai: 'OPENAI_API_KEY',
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],

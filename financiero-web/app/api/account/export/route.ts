@@ -15,8 +15,6 @@ const exportTables = [
   { key: 'classification_preferences', table: 'classification_preferences', select: '*' },
   { key: 'telegram_accounts', table: 'telegram_accounts', select: 'id, profile_id, chat_id, username, first_seen_at, last_seen_at' },
   { key: 'telegram_memoria', table: 'telegram_memoria', select: '*' },
-  { key: 'gmail_integrations', table: 'gmail_integrations', select: 'id, profile_id, email, provider, status, watch_expires_at, connected_at, updated_at, oauth_provider, scope, token_expires_at, history_id' },
-  { key: 'santander_ingest_logs', table: 'santander_ingest_logs', select: '*' },
   { key: 'bank_connections', table: 'bank_connections', select: 'id, profile_id, provider, provider_item_id, institution_id, institution_name, status, last_sync_at, consent_expires_at, transactions_update_status, error_message, created_at, updated_at' },
   { key: 'bank_accounts', table: 'bank_accounts', select: '*' },
   { key: 'bank_transactions_raw', table: 'bank_transactions_raw', select: '*' },

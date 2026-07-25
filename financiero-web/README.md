@@ -64,7 +64,7 @@ El análisis financiero intenta proveedores en este orden: Vercel AI Gateway, Op
 
 La transcripción de voz en Telegram intenta proveedores en este orden: OpenRouter (`OPENROUTER_API_KEY`), OpenAI (`OPENAI_API_KEY`) y Gemini (`GEMINI_API_KEY` o `GOOGLE_API_KEY`). `OPENROUTER_TRANSCRIPTION_MODEL` permite fijar el modelo de voz; el valor por defecto es `openai/whisper-large-v3`.
 
-El CFO proactivo ejecuta `GET /api/agents/proactive-goal` diariamente a las 14:00 UTC. Vercel lo autentica con `Authorization: Bearer $CRON_SECRET`; el agente compara la meta mensual contra ingresos, ritmo del mes y promedio de tres meses, guarda una tarea y un hallazgo en el dashboard, y envía el siguiente paso por Telegram cuando existe una cuenta vinculada.
+Supabase Cron evalúa `GET /api/agents/daily-cfo` cada 15 minutos y se autentica con el mismo `CRON_SECRET` almacenado en Vault y Vercel; así funciona también en el plan Hobby. Cada perfil recibe exactamente un mensaje por fecha local en un horario determinista y variable entre las 08:00 y las 14:00. El mentor cruza movimientos, capacidad mensual, saldos, inversiones, tareas y todas las metas activas, calcula su ritmo diario sin IA, crea de una a tres tareas y abre la misma conversación en el dashboard y Telegram. La tabla `daily_cfo_deliveries` evita duplicados y conserva reintentos de Telegram.
 
 ## Telegram
 

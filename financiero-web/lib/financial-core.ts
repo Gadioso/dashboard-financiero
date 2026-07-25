@@ -138,13 +138,13 @@ export const aliasCategoria: Record<string, CategoriaFinanciera> = {
 export const categoriaParaGastos = (categoria: CategoriaFinanciera): CategoriaGasto =>
   categoria === 'Futuro' ? 'Seguros' : categoria;
 
-function currentMexicoDateParts() {
+function currentMexicoDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Mexico_City',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
 
   return {
@@ -154,7 +154,7 @@ function currentMexicoDateParts() {
   };
 }
 
-export function extraerFechaRelativaMovimiento(texto: string) {
+export function extraerFechaRelativaMovimiento(texto: string, ahora = new Date()) {
   const normalizado = texto.toLowerCase();
   let offset: number | null = null;
 
@@ -164,7 +164,7 @@ export function extraerFechaRelativaMovimiento(texto: string) {
 
   if (offset === null) return null;
 
-  const { year, monthIndex, day } = currentMexicoDateParts();
+  const { year, monthIndex, day } = currentMexicoDateParts(ahora);
 
   return new Date(Date.UTC(year, monthIndex, day + offset, 12));
 }
@@ -198,7 +198,7 @@ const mesesTexto: Record<string, number> = {
   dic: 11,
 };
 
-export function extraerFechaExplicitaMovimiento(texto: string) {
+export function extraerFechaExplicitaMovimiento(texto: string, ahora = new Date()) {
   const normalizado = texto
     .toLowerCase()
     .normalize('NFD')
@@ -209,7 +209,7 @@ export function extraerFechaExplicitaMovimiento(texto: string) {
 
   const day = Number(match[1]);
   const monthIndex = mesesTexto[match[2]];
-  const current = currentMexicoDateParts();
+  const current = currentMexicoDateParts(ahora);
   const year = match[3] ? Number(match[3]) : current.year;
 
   if (!Number.isInteger(day) || day < 1 || day > 31 || monthIndex === undefined || !Number.isInteger(year)) {
@@ -225,8 +225,35 @@ export function extraerFechaExplicitaMovimiento(texto: string) {
   return date;
 }
 
-export function extraerFechaMovimiento(texto: string) {
-  return extraerFechaExplicitaMovimiento(texto) || extraerFechaRelativaMovimiento(texto);
+export function extraerFechaMovimiento(texto: string, ahora = new Date()) {
+  return extraerFechaExplicitaMovimiento(texto, ahora) || extraerFechaRelativaMovimiento(texto, ahora);
+}
+
+export function resolverFechaMovimiento(
+  texto: string,
+  fechaSugerida?: string | null,
+  ahora = new Date(),
+  preferirFechaTexto = true,
+) {
+  const fechaDetectadaEnTexto = extraerFechaMovimiento(texto, ahora);
+
+  if (preferirFechaTexto && fechaDetectadaEnTexto) {
+    return fechaDetectadaEnTexto;
+  }
+
+  const fechaClasificada = fechaSugerida ? new Date(fechaSugerida) : null;
+
+  if (!fechaClasificada || Number.isNaN(fechaClasificada.getTime())) {
+    return fechaDetectadaEnTexto || ahora;
+  }
+
+  const usuarioIndicoAnio = /\b(?:19|20)\d{2}\b/.test(texto);
+
+  if (!usuarioIndicoAnio) {
+    fechaClasificada.setUTCFullYear(currentMexicoDateParts(ahora).year);
+  }
+
+  return fechaClasificada;
 }
 
 export const formatoFechaMX = new Intl.DateTimeFormat('es-MX', {
@@ -382,7 +409,6 @@ export function nombreBolsa(categoria: string) {
 
 export function nombreOrigen(origen: string, subcategoria?: string | null) {
   void subcategoria;
-  if (origen === 'Santander_Email') return 'Santander Email';
   if (origen === 'Supabase') return 'Web';
   if (origen === 'Telegram') return 'Telegram';
   if (origen === 'Web') return 'Web';

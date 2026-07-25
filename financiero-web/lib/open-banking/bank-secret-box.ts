@@ -1,10 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 function getBankTokenKey() {
-  const raw = process.env.BANK_TOKEN_ENCRYPTION_KEY || process.env.GMAIL_TOKEN_ENCRYPTION_KEY || '';
+  const raw = process.env.BANK_TOKEN_ENCRYPTION_KEY || '';
 
   if (!raw.trim()) {
-    throw new Error('Falta configurar BANK_TOKEN_ENCRYPTION_KEY o GMAIL_TOKEN_ENCRYPTION_KEY para cifrar tokens bancarios.');
+    throw new Error('Falta configurar BANK_TOKEN_ENCRYPTION_KEY para cifrar tokens bancarios.');
   }
 
   return createHash('sha256').update(raw).digest();

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getAuthorizedTelegramChatId } from '@/lib/telegram-access';
 
 type MovementNotice = {
   profileId: string;
@@ -125,14 +126,10 @@ export async function deliverPendingMovementNotifications(
     if (claimed.error || !claimed.data) continue;
 
     if (!chatIds.has(delivery.profile_id)) {
-      const account = await supabase
-        .from('telegram_accounts')
-        .select('chat_id')
-        .eq('profile_id', delivery.profile_id)
-        .order('last_seen_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      chatIds.set(delivery.profile_id, account.data?.chat_id || (process.env.TELEGRAM_NOTIFY_CHAT_ID || '').trim() || null);
+      chatIds.set(
+        delivery.profile_id,
+        await getAuthorizedTelegramChatId({ supabase, profileId: delivery.profile_id })
+      );
     }
 
     const chatId = chatIds.get(delivery.profile_id);
