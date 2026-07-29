@@ -12,8 +12,8 @@ const layers = [
   { icon: UserFocus, title: 'Identidad y acceso', text: 'Autenticación por cuenta, sesiones protegidas y controles para que cada perfil acceda únicamente a su espacio.' },
   { icon: Database, title: 'Aislamiento de información', text: 'Los datos financieros se asocian a un perfil y se protegen con reglas de acceso a nivel de base de datos.' },
   { icon: Key, title: 'Secretos fuera del navegador', text: 'Las credenciales privadas y llaves de proveedores se mantienen del lado servidor y no se exponen en la interfaz.' },
-  { icon: LockKey, title: 'Tokens cifrados', text: 'Los tokens de integraciones sensibles se almacenan cifrados y pueden revocarse al desconectar el servicio.' },
-  { icon: Eye, title: 'Acceso mínimo necesario', text: 'Las conexiones bancarias y de mercado priorizan consulta de solo lectura; no se habilitan movimientos de dinero.' },
+  { icon: LockKey, title: 'Integraciones revocables', text: 'Los accesos de canales y proveedores se mantienen del lado servidor y pueden revocarse al desconectar el servicio.' },
+  { icon: Eye, title: 'Acceso mínimo necesario', text: 'Los datos de mercado se consultan en modo de lectura y Virafi no habilita movimientos de dinero.' },
   { icon: ShieldCheck, title: 'Auditoría y operación', text: 'Registramos acciones relevantes, errores operativos y eventos de seguridad para investigar y responder.' },
 ];
 
@@ -45,7 +45,7 @@ export default function SecurityPage() {
             <div className="data-control-list">
               <p><Export /> Exporta una copia estructurada de la información asociada a tu cuenta.</p>
               <p><CheckCircle /> Actualiza tu perfil, preferencias e integraciones desde configuración.</p>
-              <p><LockKey /> Desconecta fuentes externas y revoca su acceso cuando lo decidas.</p>
+              <p><LockKey /> Desconecta canales externos como Telegram y revoca su acceso cuando lo decidas.</p>
               <p><Database /> Solicita la eliminación de datos y el cierre de la cuenta, sujeto a retenciones legales.</p>
             </div>
           </div>

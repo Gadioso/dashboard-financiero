@@ -3,10 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import {
   ArrowRight,
   ArrowsDownUp,
-  Bank,
   Bell,
   CalendarBlank,
   ChartDonut,
@@ -49,7 +49,6 @@ import {
   type Gasto,
   type Ingreso,
   type AbonoTarjetaCredito,
-  type BankTransactionRawView,
   type Movimiento,
   type ResumenMensual,
   nombreBolsa,
@@ -57,6 +56,9 @@ import {
   resumenInicial,
 } from '@/lib/financial-core';
 import type { WealthRoutePlan } from '@/lib/wealth-route';
+import type { GoalCfoPlan } from '@/lib/goal-cfo-plan';
+
+const FinancialImportModal = dynamic(() => import('@/app/Components/FinancialImportModal'), { ssr: false });
 
 type BrowserSpeechRecognitionEvent = {
   resultIndex: number;
@@ -112,7 +114,7 @@ type DashboardApiResponse = {
   gastosAnuales: Gasto[];
   abonosTarjetaAnuales: AbonoTarjetaCredito[];
   fondosAcumulados?: FondoAcumulado[];
-  movimientosBancarios?: BankTransactionRawView[];
+  cfoPlan?: GoalCfoPlan | null;
 };
 
 type BillingStatus = {
@@ -128,9 +130,7 @@ type BillingStatus = {
   cancelAtPeriodEnd: boolean;
   stripeCustomerId: string | null;
   limits?: {
-    bankConnections: number;
     telegramAccounts: number;
-    bankSyncLookbackDays: number;
   };
   error?: string;
 };
@@ -159,29 +159,6 @@ type FondoAcumulado = {
   fecha_objetivo?: string | null;
   updated_at?: string | null;
   ultima_actualizacion?: string | null;
-};
-
-type BankAccount = {
-  id: string;
-  connection_id?: string | null;
-  name?: string | null;
-  official_name?: string | null;
-  type?: string | null;
-  subtype?: string | null;
-  currency?: string | null;
-  current_balance?: number | string | null;
-  available_balance?: number | string | null;
-  updated_at?: string | null;
-};
-
-type BankConnection = {
-  id: string;
-  provider: string;
-  institution_name?: string | null;
-  status: string;
-  last_sync_at?: string | null;
-  consent_expires_at?: string | null;
-  updated_at?: string | null;
 };
 
 type AgentTask = {
@@ -266,7 +243,7 @@ type GoalContribution = {
   id: string;
   amount: number | string;
   contributed_at: string;
-  source: 'manual' | 'bank_transaction' | 'investment_transaction' | 'adjustment';
+  source: 'manual' | 'investment_transaction' | 'adjustment';
   status: 'suggested' | 'confirmed' | 'rejected';
   confidence?: number | string | null;
   note?: string | null;
@@ -290,8 +267,6 @@ type AccountStatus = {
     monthly_income_target?: number | string | null;
   } | null;
   billing?: BillingStatus;
-  bankConnections?: BankConnection[];
-  bankAccounts?: BankAccount[];
   agentTasks?: AgentTask[];
   virafiaMessages?: Array<{
     id: string;
@@ -340,7 +315,7 @@ type DashboardAnalysisFallbackInput = {
 const mesActualKey = mesKeyDesdeFecha(new Date());
 const MOVIMIENTOS_POR_PAGINA = 12;
 
-type DashboardView = 'resumen' | 'movimientos' | 'presupuestos' | 'metas' | 'analisis' | 'cuentas' | 'wealth' | 'planes' | 'reportes';
+type DashboardView = 'resumen' | 'movimientos' | 'presupuestos' | 'metas' | 'analisis' | 'wealth' | 'planes' | 'reportes';
 
 type DashboardChatMessage = {
   id: string;
@@ -550,12 +525,6 @@ function fondoObjetivo(fondo: FondoAcumulado) {
   return valorNumerico(fondo.objetivo, fondo.meta, fondo.monto_objetivo, fondo.meta_monto);
 }
 
-function esCuentaDemo(account: BankAccount) {
-  const label = `${account.name || ''} ${account.official_name || ''}`.toLowerCase();
-
-  return /\b(plaid|checking|savings|money market|sandbox|flight)\b/i.test(label);
-}
-
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
@@ -566,7 +535,6 @@ export default function DashboardFinanciero() {
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
-  const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<MovementEditForm | null>(null);
@@ -577,6 +545,7 @@ export default function DashboardFinanciero() {
   const [goalContributionAmount, setGoalContributionAmount] = useState('');
   const [goalContributionLoading, setGoalContributionLoading] = useState(false);
   const [manualExpenseOpen, setManualExpenseOpen] = useState(false);
+  const [financialImportOpen, setFinancialImportOpen] = useState(false);
   const [manualExpenseSaving, setManualExpenseSaving] = useState(false);
   const [manualExpenseForm, setManualExpenseForm] = useState<ManualExpenseForm>({
     concepto: '',
@@ -593,6 +562,7 @@ export default function DashboardFinanciero() {
   const [resumenMensual, setResumenMensual] = useState<ResumenMensual[]>([]);
   const [gastosAnuales, setGastosAnuales] = useState<Gasto[]>([]);
   const [fondosAcumulados, setFondosAcumulados] = useState<FondoAcumulado[]>([]);
+  const [goalCfoPlan, setGoalCfoPlan] = useState<GoalCfoPlan | null>(null);
   const [ultimosMovimientos, setUltimosMovimientos] = useState<Movimiento[]>([]);
   const [movimientosPage, setMovimientosPage] = useState(0);
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
@@ -601,11 +571,6 @@ export default function DashboardFinanciero() {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [accountProfile, setAccountProfile] = useState<NonNullable<AccountStatus['profile']> | null>(null);
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(0);
-  const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [bankDisconnectingId, setBankDisconnectingId] = useState('');
-  const [bankSyncLoading, setBankSyncLoading] = useState(false);
-  const [lastBankRefreshAt, setLastBankRefreshAt] = useState<string | null>(null);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
   const [notificationTrayOpen, setNotificationTrayOpen] = useState(false);
   const [notificationsSeenAt, setNotificationsSeenAt] = useState(0);
@@ -801,37 +766,6 @@ export default function DashboardFinanciero() {
     setMovimientosPage(0);
   }, []);
 
-  const desconectarBanco = useCallback(async (connection: BankConnection) => {
-    const institutionName = connection.institution_name || connection.provider || 'este banco';
-    const confirmation = window.confirm(`¿Eliminar ${institutionName} de tus conexiones bancarias?`);
-
-    if (!confirmation) return;
-
-    setBankDisconnectingId(connection.id);
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/bank/connections/${encodeURIComponent(connection.id)}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        mostrarMensajeTemporal(`No pude eliminar banco: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setBankConnections((current) => current.map((item) => (
-        item.id === connection.id ? { ...item, status: 'revoked', updated_at: new Date().toISOString() } : item
-      )));
-      setBankAccounts((current) => current.filter((account) => account.connection_id !== connection.id));
-      mostrarMensajeTemporal(`${institutionName} eliminado de tus conexiones.`);
-    } catch {
-      mostrarMensajeTemporal('No pude conectar con el servidor para eliminar el banco.');
-    } finally {
-      setBankDisconnectingId('');
-    }
-  }, [fetchWithSessionRefresh, mostrarMensajeTemporal]);
-
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     try {
       if (!options?.silent) setLoading(true);
@@ -854,6 +788,7 @@ export default function DashboardFinanciero() {
       const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
       setGastosAnuales(gastosTodoElAño);
       setFondosAcumulados(dashboardData.fondosAcumulados || []);
+      setGoalCfoPlan(dashboardData.cfoPlan || null);
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -868,11 +803,6 @@ export default function DashboardFinanciero() {
         const fecha = new Date(abono.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
       }).filter((abono) => !esAbonoTarjetaSospechoso(abono));
-      const movimientosBancariosDelMes = (dashboardData.movimientosBancarios || []).filter((movimiento) => {
-        const fecha = new Date(movimiento.authorized_at || movimiento.posted_at || '').getTime();
-        return Number.isFinite(fecha) && fecha >= inicioMes && fecha < finMes;
-      });
-
       const presupuesto = dashboardData.presupuesto;
       const ingresosMes = calcularIngresosMes(ingresosDelMes);
       const promedioIngresosUltimos3Meses = calcularPromedioIngresosUltimos3Meses({
@@ -895,7 +825,6 @@ export default function DashboardFinanciero() {
         ingresos: ingresosDelMes,
         gastos: gastosDelMes,
         abonosTarjeta: abonosTarjetaDelMes,
-        movimientosBancarios: movimientosBancariosDelMes,
       }));
 
       setResumen({
@@ -912,7 +841,6 @@ export default function DashboardFinanciero() {
           gastos: gastosTodoElAño,
         })
       );
-      setLastBankRefreshAt(new Date().toISOString());
     } catch (err) {
       console.error("Error cargando datos:", err);
     } finally {
@@ -965,22 +893,10 @@ export default function DashboardFinanciero() {
     };
   }, [fetchData]);
 
-  const sincronizarBancos = useCallback(async () => {
-    setBankSyncLoading(true);
-
-    try {
-      await fetchData({ silent: true });
-    } catch (error: unknown) {
-      mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude actualizar los movimientos bancarios.');
-    } finally {
-      setBankSyncLoading(false);
-    }
-  }, [fetchData, mostrarMensajeTemporal]);
-
   useEffect(() => {
     let mounted = true;
 
-    async function fetchAccountAndBankStatus() {
+    async function fetchAccountStatus() {
       try {
         const [accountResult, riskProfileResult, marketResult, briefingResult] = await Promise.allSettled([
           fetchWithSessionRefresh('/api/account/status'),
@@ -997,8 +913,6 @@ export default function DashboardFinanciero() {
               setAccountProfile(accountData.profile);
               setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
             }
-            if (accountData.bankConnections) setBankConnections(accountData.bankConnections);
-            if (accountData.bankAccounts) setBankAccounts(accountData.bankAccounts);
             if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
             if (accountData.virafiaMessages?.length) {
               setChatMessages((current) => current.length ? current : accountData.virafiaMessages!.map((message) => ({
@@ -1034,7 +948,7 @@ export default function DashboardFinanciero() {
       }
     }
 
-    void fetchAccountAndBankStatus();
+    void fetchAccountStatus();
 
     return () => {
       mounted = false;
@@ -1134,9 +1048,8 @@ export default function DashboardFinanciero() {
 
       setMarketSnapshots(data.snapshots || []);
       if (briefingResponse.ok && briefingData?.items) setMarketBriefing(briefingData.items);
-      const cryptoProvider = data.cryptoProvider === 'coinbase' ? 'Coinbase' : 'Binance';
       const warnings = Array.isArray(data.warnings) && data.warnings.length > 0 ? ` Advertencia: ${data.warnings.join(' · ')}` : '';
-      setMensajeStatus(`${data.partial ? 'Mercado actualizado parcialmente' : 'Mercado actualizado'}: ${data.binance || 0} ${cryptoProvider} y ${data.polymarket || 0} Polymarket. Siguiente paso: generar tesis para decidir si vale simular algo.${warnings}`);
+      setMensajeStatus(`${data.partial ? 'Mercado actualizado parcialmente' : 'Mercado actualizado'}: ${data.binance || 0} Binance y ${data.polymarket || 0} Polymarket. Siguiente paso: generar tesis para decidir si vale simular algo.${warnings}`);
     } catch {
       setMensajeStatus('No pude conectar con market sync.');
     } finally {
@@ -1515,70 +1428,6 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const eliminarMovimientoBancario = async (movimiento: Movimiento) => {
-    const confirmar = window.confirm(`¿Eliminar este movimiento?\n\n${movimiento.concepto} - $${formatearMonto(movimiento.monto)}`);
-
-    if (!confirmar) return;
-
-    const transactionId = movimiento.id.replace('banco-', '');
-    setDeletingId(movimiento.id);
-    setMensajeStatus('Eliminando movimiento...');
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/bank/transactions/${transactionId}`, {
-        method: 'DELETE',
-      });
-      const resultado = await response.json();
-
-      if (!response.ok || !resultado.success) {
-        setMensajeStatus(formatActionError(resultado, 'No pude eliminar el movimiento. Intenta nuevamente.'));
-        return;
-      }
-
-      setMensajeStatus('Movimiento eliminado correctamente.');
-      await fetchData();
-    } catch {
-      setMensajeStatus('No pude eliminar el movimiento. Intenta nuevamente.');
-    } finally {
-      setDeletingId(null);
-      setTimeout(() => setMensajeStatus(''), 5000);
-    }
-  };
-
-  const reintentarMovimientoBancario = async (movimiento: Movimiento) => {
-    const transactionId = movimiento.id.replace('banco-', '');
-    setClassifyingId(movimiento.id);
-    setMensajeStatus('Reintentando clasificación...');
-
-    try {
-      const response = await fetchWithSessionRefresh('/api/bank/transactions/classify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transactionId,
-          retryFailed: true,
-          minPostedAt: movimiento.fecha.slice(0, 10),
-          limit: 1,
-        }),
-      });
-      const result = await response.json();
-      const classified = result.results?.[0]?.status === 'classified';
-
-      if (!classified) {
-        setMensajeStatus(formatActionError(result, result.results?.[0]?.error || 'No pude clasificar el movimiento.'));
-        return;
-      }
-
-      setMensajeStatus('Movimiento clasificado correctamente.');
-      await fetchData();
-    } catch {
-      setMensajeStatus('No pude reintentar la clasificación. Intenta nuevamente.');
-    } finally {
-      setClassifyingId(null);
-      setTimeout(() => setMensajeStatus(''), 5000);
-    }
-  };
-
   const abrirEditorMovimiento = (movimiento: Movimiento) => {
     if (movimiento.tipo !== 'gasto' && movimiento.tipo !== 'ingreso') {
       mostrarMensajeTemporal('Este movimiento todavía no se puede editar desde la tabla.');
@@ -1772,6 +1621,11 @@ export default function DashboardFinanciero() {
     }
   };
 
+  const prepararAportacionRecomendada = (goalId: string, amount: number) => {
+    setGoalContributionAmount(String(amount));
+    void cargarAportacionesMeta(goalId);
+  };
+
   const actualizarAportacionesMeta = async (payload: Record<string, unknown>) => {
     if (!goalContributionId) return;
     setGoalContributionLoading(true);
@@ -1786,7 +1640,7 @@ export default function DashboardFinanciero() {
       const refreshedData = await readJsonResponse<GoalContributionPanel>(refreshed);
       if (refreshed.ok && refreshedData?.goal) setGoalContributionPanel(refreshedData);
       await fetchData({ silent: true });
-      mostrarMensajeTemporal(payload.action === 'scan' ? `${data.suggested || 0} movimiento(s) sugerido(s) para revisar.` : 'Aportación actualizada.');
+      mostrarMensajeTemporal('Aportación actualizada.');
     } catch (error) {
       mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude actualizar las aportaciones.');
     } finally {
@@ -1828,10 +1682,6 @@ export default function DashboardFinanciero() {
   const accountName = accountProfile?.full_name?.trim() || 'Tu perfil';
   const accountFirstName = accountName === 'Tu perfil' ? '' : accountName.split(/\s+/)[0];
   const accountInitials = accountName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'V';
-  const activeBankConnections = bankConnections.filter((connection) => connection.status === 'active').length;
-  const bankStatusLabel = activeBankConnections === 0
-    ? 'Sin bancos conectados'
-    : `${activeBankConnections} banco${activeBankConnections === 1 ? '' : 's'} conectado${activeBankConnections === 1 ? '' : 's'}`;
   const statusTone: StatusTone = mensajeStatus.startsWith('Error') || mensajeStatus.startsWith('No pude') || mensajeStatus.startsWith('Ocurrió')
     ? 'error'
     : mensajeStatus.startsWith('Falta') || mensajeStatus.includes('parcial') || mensajeStatus.includes('advertencia')
@@ -1985,7 +1835,6 @@ export default function DashboardFinanciero() {
     { label: 'Presupuestos', view: 'presupuestos', icon: ChartDonut },
     { label: 'Metas', view: 'metas', icon: Target },
     { label: 'Análisis', view: 'analisis', icon: ChartLineUp },
-    { label: 'Cuentas', view: 'cuentas', icon: Bank },
     { label: 'Virafi Wealth', view: 'wealth', icon: Plant },
     { label: 'Planes', view: 'planes', icon: CalendarBlank },
     { label: 'Reportes', view: 'reportes', icon: FileText },
@@ -1994,7 +1843,6 @@ export default function DashboardFinanciero() {
     { label: 'Inicio', view: 'resumen' as const, icon: House },
     { label: 'Mov.', view: 'movimientos' as const, icon: ArrowsDownUp },
     { label: 'Metas', view: 'metas' as const, icon: Target },
-    { label: 'Cuentas', view: 'cuentas' as const, icon: Bank },
     { label: 'Wealth', view: 'wealth' as const, icon: Plant },
   ];
   const activeNav = desktopNavItems.find((item) => item.view === vistaActiva) || desktopNavItems[0];
@@ -2054,7 +1902,6 @@ export default function DashboardFinanciero() {
     setInputIA('');
     setChatAttachments([]);
     setProcesando(true);
-    setMensajeStatus('VirafIA está pensando...');
 
     try {
       const payload = new FormData();
@@ -2265,10 +2112,6 @@ export default function DashboardFinanciero() {
   }, {});
   const bolsaMasPresionada = [...budgetBuckets]
     .sort((a, b) => calcularPorcentaje(b.used, b.limit) - calcularPorcentaje(a.used, a.limit))[0] || null;
-  const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
-  const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
-  const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
-  const patrimonioVisible = saldoCuentas;
   const presupuestoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.limit, 0);
   const gastoPresupuestadoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.used, 0);
   const presupuestoUtilizado = presupuestoTotal > 0 ? Math.min((gastoPresupuestadoTotal / presupuestoTotal) * 100, 100) : 0;
@@ -2321,21 +2164,21 @@ export default function DashboardFinanciero() {
       price: '$0',
       plan: 'free',
       description: 'Para probar a VirafIA con el metodo 33/33/33.',
-      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'VirafIA muy limitada'],
+      features: ['Registro manual', '30 días de historial', 'Presupuesto 33/33/33', 'VirafIA limitada'],
     },
     {
       name: 'Beta',
       price: '$15',
       plan: 'beta',
       description: 'Para usar a VirafIA con automatizacion progresiva.',
-      features: ['Telegram incluido', 'Hasta 2 bancos', '12 meses de historial', 'Analisis mensual con VirafIA'],
+      features: ['Telegram incluido', '12 meses de historial', 'Metas personalizadas', 'Análisis mensual con VirafIA'],
     },
     {
       name: 'Premium',
       price: '$29',
       plan: 'premium',
       description: 'Para seguimiento avanzado con mas analisis y soporte.',
-      features: ['Hasta 5 bancos', '12 meses de historial', 'Analisis mensual/anual con VirafIA', 'Soporte prioritario'],
+      features: ['Historial ampliado', 'Wealth y escenarios', 'Análisis mensual/anual con VirafIA', 'Soporte prioritario'],
     },
   ];
   const manualExpenseModal = manualExpenseOpen ? (
@@ -2730,7 +2573,7 @@ export default function DashboardFinanciero() {
         <aside className="hidden border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
           <div className="border-b border-slate-100 px-6 pb-5 pt-6">
             <VirafiBrand />
-            <p className="mt-4 text-sm leading-5 text-slate-500">Tu dinero, con claridad y rumbo.</p>
+            <p className="mt-4 text-sm leading-5 text-slate-500">Tu CFO personal, todos los días.</p>
           </div>
           <nav className="flex-1 overflow-y-auto px-3 py-4 text-sm font-semibold text-slate-600" aria-label="Secciones del dashboard">
             {desktopNavItems.map((item, index) => {
@@ -2827,7 +2670,7 @@ export default function DashboardFinanciero() {
                     <div className="absolute right-0 top-12 z-50 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
                       <div className="border-b border-slate-100 px-4 py-3">
                         <p className="font-black text-slate-950">Notificaciones</p>
-                        <p className="text-xs text-slate-500">Movimientos detectados por tus conexiones.</p>
+                        <p className="text-xs text-slate-500">Movimientos y acciones que requieren tu atención.</p>
                       </div>
                       <div className="max-h-96 overflow-y-auto p-2">
                         {inboxNotifications.length === 0 ? (
@@ -2886,7 +2729,6 @@ export default function DashboardFinanciero() {
                       vistaActiva === 'presupuestos' ? 'Presupuestos y bolsas' :
                       vistaActiva === 'metas' ? 'Metas financieras' :
                       vistaActiva === 'analisis' ? 'Análisis de comportamiento' :
-                      vistaActiva === 'cuentas' ? 'Cuentas conectadas' :
                       vistaActiva === 'wealth' ? 'Wealth cockpit' :
                       vistaActiva === 'planes' ? 'Plan y facturación' : 'Reportes'}
                   </h1>
@@ -2894,7 +2736,6 @@ export default function DashboardFinanciero() {
                     {loading ? 'Actualizando datos...' : showMonthSelector
                       ? `Vista de ${selectedMonthName.toLowerCase()} 2026.`
                       : vistaActiva === 'metas' ? 'Objetivos creados desde tu experiencia financiera.'
-                      : vistaActiva === 'cuentas' ? 'Administra tus conexiones financieras.'
                       : vistaActiva === 'planes' ? 'Elige o administra tu suscripción.'
                       : 'Información de tu cuenta.'}
                   </p>
@@ -2929,13 +2770,9 @@ export default function DashboardFinanciero() {
                   </button>
                 </div>
                 <div className="mt-8">
-                  <p className="text-sm font-semibold text-slate-500">Saldo visible en cuentas conectadas</p>
-                  <p className="mt-1 break-words font-brand text-[clamp(2.25rem,4vw,3.35rem)] leading-none tracking-tight text-slate-950">{balanceVisible ? formatoDineroCorto(patrimonioVisible) : '••••••'}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                    {cuentasReales.length > 0
-                      ? `Incluye ${cuentasReales.length} ${cuentasReales.length === 1 ? 'cuenta conectada' : 'cuentas conectadas'}. No incluye efectivo, inversiones ni cuentas sin conectar.`
-                      : 'Aún no hay una cuenta bancaria conectada. El flujo mensual no se usa como patrimonio.'}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-500">Flujo neto del mes</p>
+                  <p className="mt-1 break-words font-brand text-[clamp(2.25rem,4vw,3.35rem)] leading-none tracking-tight text-slate-950">{balanceVisible ? formatoDineroCorto(flujoNetoMes) : '••••••'}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-500">Calculado exclusivamente con los ingresos y gastos que registras en Virafi.</p>
                 </div>
                 <div className="mt-7 grid gap-3 rounded-xl bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -3090,8 +2927,8 @@ export default function DashboardFinanciero() {
                       )}
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-semibold text-slate-500">Bancos conectados</p>
-                      <p className="mt-2 text-lg font-bold text-slate-950">{bankStatusLabel}</p>
+                      <p className="text-sm font-semibold text-slate-500">Fuente de movimientos</p>
+                      <p className="mt-2 text-lg font-bold text-slate-950">Registro manual y Telegram</p>
                     </div>
                   </div>
                 </div>
@@ -3231,11 +3068,22 @@ export default function DashboardFinanciero() {
                     </button>
                   ) : null}
                 </div>
-                <div className="mb-5 grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 md:grid-cols-3">
-                  <div><p className="text-sm font-black text-blue-950">1. Virafi detecta</p><p className="mt-1 text-xs leading-5 text-blue-900">Busca transferencias o compras que coincidan con la meta. No toma todos tus ingresos ni todo “Futuro”.</p></div>
-                  <div><p className="text-sm font-black text-blue-950">2. Tú confirmas</p><p className="mt-1 text-xs leading-5 text-blue-900">Si el vínculo no es inequívoco, aparece como sugerencia y no modifica el avance.</p></div>
-                  <div><p className="text-sm font-black text-blue-950">3. Se crea historial</p><p className="mt-1 text-xs leading-5 text-blue-900">Sólo aportaciones confirmadas actualizan el saldo; cada cifra conserva fecha y origen.</p></div>
-                </div>
+                {goalCfoPlan ? (
+                  <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-sm font-black text-blue-950">Plan mensual recomendado</p>
+                    <p className="mt-1 text-sm leading-6 text-blue-900">{goalCfoPlan.summary}</p>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {goalCfoPlan.allocations.map((allocation) => (
+                        <div key={allocation.key} className="rounded-lg bg-white p-3 shadow-sm">
+                          <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold text-slate-700">{allocation.label}</p><span className="text-xs font-black text-blue-700">{allocation.percent}%</span></div>
+                          <p className="mt-1 text-lg font-black text-slate-950">${formatearMonto(allocation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/mes</span></p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">{allocation.purpose}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-blue-900">Es una distribución provisional y explicable. Virafi no asumirá que moviste el dinero: cada aportación requiere tu confirmación.</p>
+                  </div>
+                ) : null}
                 <div className="space-y-3">
                   {metasFinancieras.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
@@ -3243,7 +3091,9 @@ export default function DashboardFinanciero() {
                       <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Completa la breve entrevista de personalización. Con tus respuestas crearemos aquí tus metas reales, sin objetivos genéricos.</p>
                       <button type="button" onClick={() => setGoalsInterviewOpen(true)} className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Comenzar entrevista</button>
                     </div>
-                  ) : metasFinancieras.map((meta) => (
+                  ) : metasFinancieras.map((meta) => {
+                    const recommendation = goalCfoPlan?.goals.find((goal) => goal.id === String(meta.id));
+                    return (
                     <div key={meta.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -3251,7 +3101,7 @@ export default function DashboardFinanciero() {
                           <p className="text-sm text-slate-500">{meta.fechaObjetivo ? `Fecha objetivo: ${formatearFecha(meta.fechaObjetivo)}` : 'Fecha objetivo pendiente de configurar'}</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <p className="text-sm font-bold text-slate-900">{meta.objetivo > 0 ? `$${formatearMonto(meta.actual)} / $${formatearMonto(meta.objetivo)}` : 'Monto por definir'}</p>
+                          <p className="text-sm font-bold text-slate-900">{recommendation?.needsDiscovery ? 'Monto por investigar' : meta.objetivo > 0 ? `$${formatearMonto(meta.actual)} / $${formatearMonto(meta.objetivo)}` : 'Monto por definir'}</p>
                           {/^[0-9a-f-]{36}$/i.test(String(meta.id)) && <button type="button" onClick={() => void cargarAportacionesMeta(String(meta.id))} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Aportaciones</button>}
                           <button type="button" onClick={() => setGoalEditForm({ id: String(meta.id), name: meta.nombre, current: String(meta.actual), target: String(meta.objetivo), targetDate: meta.fechaObjetivo ? meta.fechaObjetivo.slice(0, 10) : '' })} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">{meta.objetivo > 0 ? 'Ajustar' : 'Definir'}</button>
                         </div>
@@ -3259,8 +3109,16 @@ export default function DashboardFinanciero() {
                       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
                         <div className="h-full rounded-full bg-violet-600" style={{ width: `${meta.progreso}%` }} />
                       </div>
+                      {recommendation ? (
+                        <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 lg:grid-cols-[1fr_1fr_auto]">
+                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Qué significa esta meta</p><p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.rationale}</p>{recommendation.targetIssue ? <p className="mt-2 text-xs font-bold text-amber-700">{recommendation.targetIssue}</p> : null}</div>
+                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Siguiente definición</p><p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.nextQuestion}</p><p className="mt-2 text-xs text-slate-500">Primeros hitos: {recommendation.milestones.join(' · ')}</p></div>
+                          <div className="min-w-44 rounded-lg bg-white p-3"><p className="text-xs font-bold text-slate-500">Apartado sugerido</p><p className="mt-1 text-xl font-black text-slate-950">${formatearMonto(recommendation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/mes</span></p>{recommendation.monthlyAmount > 0 && /^[0-9a-f-]{36}$/i.test(String(meta.id)) ? <button type="button" onClick={() => prepararAportacionRecomendada(String(meta.id), recommendation.monthlyAmount)} className="mt-3 w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white hover:bg-violet-700">Registrar si ya lo aparté</button> : null}</div>
+                        </div>
+                      ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </section>
@@ -3270,8 +3128,7 @@ export default function DashboardFinanciero() {
                 <div className="mx-auto max-w-3xl rounded-xl bg-white p-5 shadow-2xl sm:p-7">
                   <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-blue-700">Seguimiento auditable</p><h2 className="mt-1 text-2xl font-black">{goalContributionPanel?.goal.name || 'Aportaciones de la meta'}</h2><p className="mt-2 text-sm leading-6 text-slate-500">El avance no se calcula desde todos tus movimientos. Sólo suma aportaciones confirmadas y vinculadas a esta meta.</p></div><button type="button" onClick={() => { setGoalContributionId(''); setGoalContributionPanel(null); }} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold">Cerrar</button></div>
                   <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]"><label className="grid gap-2 text-sm font-bold text-slate-700">Registrar una aportación manual<input type="number" min="0" step="100" value={goalContributionAmount} onChange={(event) => setGoalContributionAmount(event.target.value)} placeholder="Ej. 2,000" className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500" /></label><button type="button" disabled={goalContributionLoading || Number(goalContributionAmount) <= 0} onClick={() => void actualizarAportacionesMeta({ action: 'record_manual', amount: Number(goalContributionAmount) })} className="self-end h-11 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white disabled:opacity-50">Registrar</button></div>
-                  <button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'scan' })} className="mt-4 rounded-lg border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-50">Buscar candidatos en movimientos</button>
-                  <div className="mt-6 space-y-3">{goalContributionLoading && !goalContributionPanel ? <p className="text-sm text-slate-500">Cargando...</p> : (goalContributionPanel?.contributions || []).length === 0 ? <div className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">Todavía no hay aportaciones. Registra una o busca movimientos candidatos.</div> : goalContributionPanel?.contributions.map((contribution) => <div key={contribution.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">${formatearMonto(Number(contribution.amount))} MXN</p><p className="mt-1 text-xs text-slate-500">{formatearFecha(contribution.contributed_at)} · {contribution.source === 'manual' ? 'Registro manual' : 'Movimiento detectado'}{contribution.note ? ` · ${contribution.note}` : ''}</p></div>{contribution.status === 'suggested' ? <div className="flex gap-2"><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'reject' })} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">No corresponde</button><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'confirm' })} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Confirmar</button></div> : <span className={`w-fit rounded-lg px-3 py-2 text-xs font-bold ${contribution.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{contribution.status === 'confirmed' ? 'Confirmada' : 'Descartada'}</span>}</div>)}</div>
+                  <div className="mt-6 space-y-3">{goalContributionLoading && !goalContributionPanel ? <p className="text-sm text-slate-500">Cargando...</p> : (goalContributionPanel?.contributions || []).length === 0 ? <div className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">Todavía no hay aportaciones. Registra la primera manualmente.</div> : goalContributionPanel?.contributions.map((contribution) => <div key={contribution.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">${formatearMonto(Number(contribution.amount))} MXN</p><p className="mt-1 text-xs text-slate-500">{formatearFecha(contribution.contributed_at)} · {contribution.source === 'manual' ? 'Registro manual' : 'Aportación registrada'}{contribution.note ? ` · ${contribution.note}` : ''}</p></div>{contribution.status === 'suggested' ? <div className="flex gap-2"><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'reject' })} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">No corresponde</button><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'confirm' })} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Confirmar</button></div> : <span className={`w-fit rounded-lg px-3 py-2 text-xs font-bold ${contribution.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{contribution.status === 'confirmed' ? 'Confirmada' : 'Descartada'}</span>}</div>)}</div>
                 </div>
               </div>
             )}
@@ -3324,7 +3181,7 @@ export default function DashboardFinanciero() {
                       <div>
                         <ArrowsDownUp aria-hidden="true" className="mx-auto size-8 text-slate-400" weight="regular" />
                         <p className="mt-3 font-bold text-slate-950">Aún no hay movimientos</p>
-                        <p className="mt-1 text-sm text-slate-500">Conecta una cuenta o registra tu primer gasto.</p>
+                        <p className="mt-1 text-sm text-slate-500">Registra tu primer ingreso o gasto.</p>
                       </div>
                     </div>
                   ) : ultimosMovimientos.slice(0, 5).map((movimiento) => {
@@ -3386,30 +3243,11 @@ export default function DashboardFinanciero() {
 
               <div className="grid gap-4">
                 <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-xl text-slate-950">Cuentas conectadas</h2>
-                    <button type="button" onClick={() => setVistaActiva('cuentas')} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
-                      Ver todas <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
-                    </button>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {cuentasReales.length === 0 ? (
-                      <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4">
-                        <span className="grid size-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><Bank aria-hidden="true" className="size-5" /></span>
-                        <div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-950">Sin cuentas sincronizadas</p><p className="text-xs text-slate-500">Conecta tu banco para ver saldos reales.</p></div>
-                        <Link href="/onboarding" className="text-xs font-bold text-blue-700">Conectar</Link>
-                      </div>
-                    ) : cuentasReales.slice(0, 2).map((account) => (
-                      <div key={account.id} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700"><Bank aria-hidden="true" className="size-5" weight="regular" /></span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-slate-950">{account.name || account.official_name || 'Cuenta bancaria'}</p>
-                          <p className="truncate text-xs text-slate-500">{bankConnections.find((connection) => connection.id === account.connection_id)?.institution_name || account.type || 'Institución bancaria'}</p>
-                        </div>
-                        <p className="shrink-0 text-sm font-bold text-slate-950">{formatoDineroCorto(valorNumerico(account.current_balance))}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <h2 className="text-xl text-slate-950">Registro simple y privado</h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-500">Virafi no solicita credenciales bancarias ni sincroniza cuentas. Registra tus movimientos desde el dashboard o por Telegram.</p>
+                  <button type="button" onClick={abrirGastoManual} className="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Agregar movimiento <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </button>
                 </article>
 
                 <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -3590,91 +3428,6 @@ export default function DashboardFinanciero() {
                 >
                   {analysisLoading ? 'Analizando...' : 'Actualizar análisis'}
                 </button>
-              </div>
-            </section>
-
-            <section className={`${vistaActiva === 'cuentas' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[360px_1fr]`}>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <p className="text-sm font-semibold text-slate-500">Saldo visible</p>
-                <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">${formatearMonto(saldoCuentas)}</p>
-                <p className="mt-1 text-sm text-slate-500">{cuentasReales.length} cuentas reales · {cuentasActivas} conexiones activas</p>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void sincronizarBancos()}
-                    disabled={bankSyncLoading}
-                    className="inline-flex h-10 items-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-                  >
-                    {bankSyncLoading ? 'Actualizando...' : 'Actualizar movimientos'}
-                  </button>
-                  <Link href="/onboarding" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">{cuentasActivas > 0 ? 'Administrar conexión' : 'Conectar cuenta'}</Link>
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  {lastBankRefreshAt ? `Virafi actualizado ${new Date(lastBankRefreshAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}.` : 'Preparando actualización bancaria...'}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <h2 className="text-lg font-bold text-slate-950">Cuentas bancarias</h2>
-                <div className="mt-4 space-y-3">
-                  {cuentasReales.length === 0 ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      No hay cuentas reales sincronizadas. Conecta una institución bancaria real desde Configuración.
-                    </div>
-                  ) : cuentasReales.map((account) => (
-                    <div key={account.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-bold text-slate-950">{account.name || account.official_name || 'Cuenta bancaria'}</p>
-                          <p className="text-sm text-slate-500">{bankConnections.find((connection) => connection.id === account.connection_id)?.institution_name || 'Institución bancaria'} · {account.type || 'Cuenta'} · {account.subtype || 'sin subtipo'}</p>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <p className="font-bold text-slate-950">${formatearMonto(valorNumerico(account.current_balance))}</p>
-                          <p className="text-xs text-slate-500">{account.currency || 'MXN'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-5 border-t border-slate-100 pt-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-950">Bancos conectados</h3>
-                      <p className="text-xs text-slate-500">Plan {planLabel}: {activeBankConnections}/{billingStatus?.limits?.bankConnections ?? 0}</p>
-                    </div>
-                    <Link
-                      href="/onboarding"
-                      className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700"
-                    >
-                      Agregar banco
-                    </Link>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {bankConnections.filter((connection) => connection.status === 'active').length === 0 ? (
-                      <p className="text-sm text-slate-500">Sin bancos conectados todavía.</p>
-                    ) : bankConnections
-                        .filter((connection) => connection.status === 'active')
-                        .map((connection) => (
-                          <div key={connection.id} className="rounded-lg bg-slate-50 p-3 text-sm">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="font-bold text-slate-900">{connection.institution_name || connection.provider}</p>
-                                <p className="text-slate-500">
-                                  Actualización automática · {connection.last_sync_at ? formatearFecha(connection.last_sync_at) : 'pendiente'}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void desconectarBanco(connection)}
-                                disabled={bankDisconnectingId === connection.id}
-                                className="rounded-lg border border-rose-200 px-2 py-1 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                              >
-                                {bankDisconnectingId === connection.id ? 'Eliminando...' : 'Eliminar'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                  </div>
-                </div>
               </div>
             </section>
 
@@ -4122,9 +3875,17 @@ export default function DashboardFinanciero() {
               <div className="flex flex-col gap-2 border-b border-slate-200 p-5 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Movimientos recientes</h2>
-                  <p className="text-sm text-slate-500">Aquí aparecen todos tus movimientos bancarios, incluso mientras terminamos de clasificarlos.</p>
+                  <p className="text-sm text-slate-500">Aquí aparecen los movimientos que registras manualmente, por Telegram o desde un archivo.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setFinancialImportOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-700 hover:bg-blue-100"
+                  >
+                    <FileText className="size-4" weight="duotone" />
+                    Importar archivo
+                  </button>
                   <button
                     type="button"
                     onClick={abrirGastoManual}
@@ -4171,15 +3932,6 @@ export default function DashboardFinanciero() {
                         <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-slate-950">{movimiento.concepto}</p>
                         <p className="mt-1 text-xs text-slate-500">{formatearFecha(movimiento.fecha)} · {nombreOrigen(movimiento.origen, movimiento.subcategoria)}</p>
-                        {movimiento.bankStatus && (
-                          <p className="mt-1 text-xs font-semibold text-amber-700">
-                            {movimiento.bankStatus === 'failed'
-                              ? 'Necesita revisión'
-                              : movimiento.bankStatus === 'ignored'
-                                ? 'Transferencia/contrapartida · no afecta ingresos ni gastos'
-                                : 'Movimiento bancario guardado · clasificando'}
-                          </p>
-                        )}
                         </div>
                         <p className={`shrink-0 text-sm font-black ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-950'}`}>
                           {movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}${formatearMonto(movimiento.monto)}
@@ -4195,27 +3947,6 @@ export default function DashboardFinanciero() {
                         </span>
                         {movimiento.tipo === 'abono_tarjeta' ? (
                           <span className="text-xs font-bold text-violet-700">No cuenta como gasto</span>
-                        ) : movimiento.readOnly ? (
-                          <div className="flex items-center gap-2">
-                            {movimiento.bankStatus === 'failed' && (
-                              <button
-                                type="button"
-                                onClick={() => void reintentarMovimientoBancario(movimiento)}
-                                disabled={classifyingId === movimiento.id}
-                                className="min-h-9 rounded-lg border border-blue-200 px-3 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                              >
-                                {classifyingId === movimiento.id ? 'Reintentando' : 'Reintentar'}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => void eliminarMovimientoBancario(movimiento)}
-                              disabled={deletingId === movimiento.id}
-                              className="min-h-9 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                            >
-                              {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
-                            </button>
-                          </div>
                         ) : <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -4280,15 +4011,6 @@ export default function DashboardFinanciero() {
                           <td className="px-5 py-3">
                             <p className="font-semibold text-slate-900">{movimiento.concepto}</p>
                             <p className="text-xs text-slate-500">{movimiento.subcategoria || 'Sin subcategoría'}</p>
-                            {movimiento.bankStatus && (
-                              <p className="mt-1 text-xs font-semibold text-amber-700">
-                                {movimiento.bankStatus === 'failed'
-                                  ? 'Necesita revisión'
-                                  : movimiento.bankStatus === 'ignored'
-                                    ? 'Transferencia/contrapartida · no afecta totales'
-                                    : 'Clasificando movimiento'}
-                              </p>
-                            )}
                           </td>
                           <td className="px-5 py-3">
                             <span className={`rounded-md px-2 py-1 text-xs font-bold ${
@@ -4306,27 +4028,6 @@ export default function DashboardFinanciero() {
                           <td className="px-5 py-3 text-right">
                             {movimiento.tipo === 'abono_tarjeta' ? (
                               <span className="text-xs font-bold text-violet-700">No afecta gastos</span>
-                            ) : movimiento.readOnly ? (
-                              <div className="flex justify-end gap-2">
-                                {movimiento.bankStatus === 'failed' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => void reintentarMovimientoBancario(movimiento)}
-                                    disabled={classifyingId === movimiento.id}
-                                    className="rounded-md border border-blue-200 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                                  >
-                                    {classifyingId === movimiento.id ? 'Reintentando' : 'Reintentar'}
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => void eliminarMovimientoBancario(movimiento)}
-                                  disabled={deletingId === movimiento.id}
-                                  className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                                >
-                                  {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
-                                </button>
-                              </div>
                             ) : <div className="flex justify-end gap-2">
                               <button
                                 type="button"
@@ -4380,7 +4081,7 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section className={`${['movimientos', 'cuentas'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-2`}>
+            <section className={`${vistaActiva === 'movimientos' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-2`}>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-950">Ingresos del mes</h2>
@@ -4433,6 +4134,14 @@ export default function DashboardFinanciero() {
       {manualExpenseModal}
       {editModal}
       {goalEditModal}
+      {financialImportOpen ? <FinancialImportModal
+        open={financialImportOpen}
+        onClose={() => setFinancialImportOpen(false)}
+        onImported={async (message) => {
+          await fetchData({ silent: true });
+          mostrarMensajeTemporal(message, 9_000);
+        }}
+      /> : null}
       {chatAssistant}
       <nav
         aria-label="Navegación móvil"

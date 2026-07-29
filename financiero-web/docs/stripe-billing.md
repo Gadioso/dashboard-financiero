@@ -46,16 +46,15 @@ Sin suscripcion activa, el producto queda en `free`. Cuando el webhook registra 
 
 ## Limites iniciales
 
-Los limites viven en `lib/billing.ts` y se aplican al agregar nuevas conexiones. Reconectar una integracion existente no consume cupo adicional.
+Los límites viven en `lib/billing.ts` y actualmente se aplican a Telegram.
 
-| Plan | Bancos | Telegram | Sincronizacion historica |
-| --- | ---: | ---: | ---: |
-| free | 1 | 0 | 30 dias |
-| beta | 2 | 1 | 365 dias |
-| premium | 5 | 1 | 365 dias |
+| Plan | Telegram |
+| --- | ---: |
+| free | 0 |
+| beta | 1 |
+| premium | 1 |
 
 Endpoints con bloqueo por limite:
 
-- `POST /api/bank/plaid/exchange-public-token`
 - `POST /api/account/telegram-link-code`
 - `POST /api/account/link-telegram`

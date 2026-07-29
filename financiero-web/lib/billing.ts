@@ -2,12 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type BillingPlan = 'free' | 'beta' | 'premium';
 
-export type BillingLimitResource = 'bankConnections' | 'telegramAccounts';
+export type BillingLimitResource = 'telegramAccounts';
 
 export type BillingLimits = {
-  bankConnections: number;
   telegramAccounts: number;
-  bankSyncLookbackDays: number;
 };
 
 export type BillingStatus = {
@@ -28,19 +26,13 @@ const activeSubscriptionStatuses = new Set(activeSubscriptionStatusList);
 
 export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
   free: {
-    bankConnections: 1,
     telegramAccounts: 0,
-    bankSyncLookbackDays: 30,
   },
   beta: {
-    bankConnections: 2,
     telegramAccounts: 1,
-    bankSyncLookbackDays: 365,
   },
   premium: {
-    bankConnections: 5,
     telegramAccounts: 1,
-    bankSyncLookbackDays: 365,
   },
 };
 
@@ -151,8 +143,7 @@ export class BillingLimitError extends Error {
   }
 }
 
-function resourceLabel(resource: BillingLimitResource) {
-  if (resource === 'bankConnections') return 'bancos conectados';
+function resourceLabel() {
   return 'cuentas de Telegram conectadas';
 }
 
@@ -191,7 +182,7 @@ export async function assertBillingLimit({
 
   if (currentCount >= limit) {
     throw new BillingLimitError(
-      `Tu plan ${billing.plan} permite hasta ${limit} ${resourceLabel(resource)}. Mejora tu plan para agregar más.`
+      `Tu plan ${billing.plan} permite hasta ${limit} ${resourceLabel()}. Mejora tu plan para agregar más.`
     );
   }
 

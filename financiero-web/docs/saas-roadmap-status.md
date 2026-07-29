@@ -44,8 +44,8 @@ Siguiente corte: priorización de una sola acción, explicación auditable y seg
 
 Estado: en progreso.
 
-- Base de Open Banking.
-- Plaid Link en sandbox.
+- Open banking retirado por inviabilidad económica; los movimientos se registran manualmente o por Telegram.
+- Una futura conexión bancaria requiere cobertura mexicana comprobada y coste variable sin mínimo mensual alto.
 - Sincronización a cuentas y transacciones crudas.
 - Clasificación por lotes con backpressure inicial.
 - Orígenes Banco, Telegram y Web asociados al usuario.
@@ -80,7 +80,7 @@ Estado: base operativa.
 
 - Rate limiting, RLS, escaneo de secretos y eventos de auditoría.
 - Exportación y borrado por usuario.
-- Sentry opcional y alertas operativas.
+- Alertas operativas persistidas en Supabase y logs de Railway.
 - Procedimiento de restore en staging.
 
 Siguiente corte: pruebas sobre consentimiento bancario, recomendaciones de inversión, acciones confirmadas y aislamiento entre usuarios.

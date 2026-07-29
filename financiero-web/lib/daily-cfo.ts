@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { extraerJson, generateGeminiText, getConfiguredLlmKey } from '@/lib/gemini';
+import { generateLlmChat, getConfiguredLlmKey } from '@/lib/gemini';
+import { isConcreteFinancialGoal } from '@/lib/personalized-goals';
 import { getAuthorizedTelegramChatId } from '@/lib/telegram-access';
+import {
+  goalFromUserPerspective,
+  removeQuotedGoalLabels,
+  VIRAFIA_CONVERSATION_PRINCIPLES,
+} from '@/lib/virafia-conversation-principles';
 import {
   appendProactiveMessageToTelegramMemory,
   appendVirafiaConversationMessage,
@@ -34,6 +40,7 @@ export type GoalPace = {
   priority: number;
   targetAmount: number;
   currentAmount: number;
+  createdDate: string;
   remainingAmount: number;
   targetDate: string | null;
   daysRemaining: number | null;
@@ -57,7 +64,7 @@ export type DailyCfoAction = {
   impact: string;
 };
 
-type DailyCfoSnapshot = {
+export type DailyCfoSnapshot = {
   localDate: string;
   timezone: string;
   firstName: string;
@@ -73,7 +80,6 @@ type DailyCfoSnapshot = {
   configuredMonthlyCapacity: number;
   requiredMonthlyForGoals: number;
   capacityGap: number;
-  liquidBalance: number;
   investmentValue: number;
   monthlyIncomeTarget: number;
   recentContributions: Array<{ goalName: string; amount: number; date: string }>;
@@ -81,7 +87,6 @@ type DailyCfoSnapshot = {
   pendingTasks: Array<{ title: string; dueAt: string | null }>;
   lifePriorities: string[];
   recommendationStyle: string;
-  dataFreshness: { bankUpdatedAt: string | null; hasBankAccounts: boolean };
   goalPaces: GoalPace[];
 };
 
@@ -144,6 +149,35 @@ function simpleHash(value: string) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+export function proactiveOpening({
+  firstName,
+  localDate,
+  continuingToday,
+}: {
+  firstName: string;
+  localDate: string;
+  continuingToday: boolean;
+}) {
+  const openings = continuingToday
+    ? [
+        `Por cierto, ${firstName}, volví a revisar cómo va tu parte financiera.`,
+        `Retomando lo de hoy, ${firstName}: revisé de nuevo tus números y tus metas.`,
+        `${firstName}, antes de cerrar el día le di otra vuelta a tu panorama financiero.`,
+        `Hay una actualización, ${firstName}: volví a pasar por tus números de hoy.`,
+        `Siguiendo con lo de hoy, ${firstName}, revisé cómo quedó tu frente financiero.`,
+      ]
+    : [
+        `Qué onda, ${firstName}. Estuve revisando cómo va tu día financiero.`,
+        `Hola, ${firstName}. Me di una vuelta por tus números y tus metas de hoy.`,
+        `${firstName}, ya revisé cómo se está moviendo tu día financiero.`,
+        `Te cuento, ${firstName}: acabo de revisar tus números y lo que traes pendiente.`,
+        `${firstName}, hice el corte financiero de hoy y encontré algo que vale la pena revisar.`,
+      ];
+  const dayNumber = Math.floor(Date.parse(`${localDate}T00:00:00.000Z`) / 86_400_000);
+  const index = (Math.max(dayNumber, 0) + simpleHash(firstName)) % openings.length;
+  return openings[index];
 }
 
 export function scheduledMinuteForDay({
@@ -238,6 +272,7 @@ function buildGoalPaces(goals: Array<Record<string, unknown>>, localDate: string
       priority: numberValue(goal.sort_order),
       targetAmount,
       currentAmount,
+      createdDate,
       remainingAmount,
       targetDate,
       daysRemaining,
@@ -264,8 +299,8 @@ function buildActions(snapshot: DailyCfoSnapshot): DailyCfoAction[] {
   const first = actionableGoals[0];
   if (!first) {
     return [{
-      title: 'Define tu siguiente meta financiera',
-      description: 'Ya no tienes una meta activa con brecha pendiente. El siguiente paso es decidir qué quieres financiar y para cuándo.',
+      title: 'Define tu siguiente meta financiera o de negocio',
+      description: 'El siguiente paso es convertir una prioridad personal en un resultado financiable y medible: por ejemplo, una reserva, equipo, capital de trabajo o una meta de ingresos con fecha.',
       goalId: null,
       goalName: null,
       amount: null,
@@ -277,7 +312,7 @@ function buildActions(snapshot: DailyCfoSnapshot): DailyCfoAction[] {
 
   if (first.status === 'needs_amount' || first.status === 'needs_date') {
     return [{
-      title: `Completa el plan de “${first.name}”`,
+      title: `Completa el plan para ${goalFromUserPerspective(first.name)}`,
       description: first.status === 'needs_amount'
         ? 'Falta definir cuánto cuesta esta meta para calcular un ritmo realista.'
         : 'Falta una fecha objetivo para convertir esta meta en un plan diario.',
@@ -296,7 +331,7 @@ function buildActions(snapshot: DailyCfoSnapshot): DailyCfoAction[] {
     Math.max(Math.min(first.weeklyRequired, Math.max(weeklyCapacity, first.dailyRequired)), first.dailyRequired),
   );
   const mainAction: DailyCfoAction = {
-    title: `Aparta ${money(amount)} para “${first.name}”`,
+    title: `Aparta ${money(amount)} para ${goalFromUserPerspective(first.name)}`,
     description: first.status === 'behind'
       ? `Esta aportación recupera parte del atraso de ${money(Math.abs(first.paceGap))} frente al ritmo planeado.`
       : 'Esta aportación mantiene la meta dentro del ritmo necesario para su fecha.',
@@ -312,7 +347,7 @@ function buildActions(snapshot: DailyCfoSnapshot): DailyCfoAction[] {
   const suggested = snapshot.suggestedContributions[0];
   if (suggested) {
     actions.push({
-      title: `Confirma si ${money(suggested.amount)} fueron para “${suggested.goalName}”`,
+      title: `Confirma si ${money(suggested.amount)} fueron para ${goalFromUserPerspective(suggested.goalName)}`,
       description: `VirafIA encontró un movimiento que podría ser una aportación: ${suggested.note}. No contará como avance hasta que lo confirmes.`,
       goalId: null,
       goalName: suggested.goalName,
@@ -353,81 +388,28 @@ function buildActions(snapshot: DailyCfoSnapshot): DailyCfoAction[] {
   return actions.slice(0, 3);
 }
 
-const goalMatchStopWords = new Set(['para', 'una', 'uno', 'unos', 'unas', 'con', 'mis', 'las', 'los', 'del', 'por', 'que', 'quiero', 'ahorrar', 'fondo']);
-
-function goalMatchTokens(name: string) {
-  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/)
-    .filter((token) => token.length >= 4 && !goalMatchStopWords.has(token)).slice(0, 5);
-}
-
-async function detectGoalContributionSuggestions({
-  supabase,
-  profileId,
-  goals,
-  transactions,
-  existingContributions,
-}: {
-  supabase: SupabaseClient;
-  profileId: string;
-  goals: Array<Record<string, unknown>>;
-  transactions: Array<Record<string, unknown>>;
-  existingContributions: Array<Record<string, unknown>>;
-}) {
-  const existingIds = new Set(existingContributions.map((row) => String(row.bank_transaction_id || '')).filter(Boolean));
-  const rows: Array<Record<string, unknown>> = [];
-  for (const goal of goals) {
-    const tokens = goalMatchTokens(String(goal.name || ''));
-    if (!tokens.length) continue;
-    for (const transaction of transactions) {
-      const transactionId = String(transaction.id || '');
-      if (!transactionId || existingIds.has(transactionId)) continue;
-      const haystack = `${transaction.description || ''} ${transaction.merchant_name || ''}`
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      const matchedTokens = tokens.filter((token) => haystack.includes(token));
-      if (!matchedTokens.length) continue;
-      const amount = Math.abs(numberValue(transaction.amount));
-      if (!amount) continue;
-      rows.push({
-        profile_id: profileId,
-        goal_id: goal.id,
-        amount,
-        contributed_at: transaction.posted_at || String(transaction.authorized_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
-        source: 'bank_transaction',
-        bank_transaction_id: transactionId,
-        status: 'suggested',
-        confidence: Math.min(0.55 + matchedTokens.length * 0.1, 0.85),
-        note: transaction.description || transaction.merchant_name || 'Movimiento bancario detectado',
-        metadata: { matchedTokens, detected_by: 'daily_cfo_mentor' },
-      });
-      existingIds.add(transactionId);
-    }
-  }
-  if (!rows.length) return [];
-  const { data, error } = await supabase.from('financial_goal_contributions').insert(rows).select('id, goal_id, amount, contributed_at, note, bank_transaction_id');
-  if (error && /does not exist|schema cache/i.test(error.message)) return [];
-  if (error) throw new Error(`No pude guardar sugerencias de aportación: ${error.message}`);
-  return data || [];
-}
-
-function fallbackMessage(snapshot: DailyCfoSnapshot, actions: DailyCfoAction[], continuingToday: boolean) {
-  const greeting = continuingToday
-    ? `Por cierto, ${snapshot.firstName}, estuve revisando cómo cerró tu parte financiera.`
-    : `Qué onda, ${snapshot.firstName}. Estuve revisando cómo va tu día financiero.`;
+export function fallbackMessage(snapshot: DailyCfoSnapshot, actions: DailyCfoAction[], continuingToday: boolean) {
+  const greeting = proactiveOpening({
+    firstName: snapshot.firstName,
+    localDate: snapshot.localDate,
+    continuingToday,
+  });
   const movementLine = snapshot.todayIncome || snapshot.todayExpenses
     ? `Hoy entraron ${money(snapshot.todayIncome)} y salieron ${money(snapshot.todayExpenses)}; el movimiento neto va en ${snapshot.todayNet >= 0 ? money(snapshot.todayNet) : `-${money(Math.abs(snapshot.todayNet))}`}.`
     : 'Hoy no vi movimientos nuevos, pero igual revisé tus metas y lo que traes pendiente.';
   const mainGoal = snapshot.goalPaces.find((goal) => goal.status !== 'completed');
+  const aspiration = mainGoal ? goalFromUserPerspective(mainGoal.name) : '';
   const goalLine = mainGoal
     ? mainGoal.status === 'behind'
-      ? `La que más atención necesita es “${mainGoal.name}”: vas ${money(Math.abs(mainGoal.paceGap))} abajo del ritmo que necesitamos.`
+      ? `Tu plan para ${aspiration} necesita atención: hoy lleva una brecha de ${money(Math.abs(mainGoal.paceGap))} frente al ritmo planeado.`
       : mainGoal.status === 'needs_amount' || mainGoal.status === 'needs_date'
-        ? `Para poder guiarte bien con “${mainGoal.name}” todavía necesito que completemos ${mainGoal.status === 'needs_amount' ? 'el monto' : 'la fecha'}.`
-        : `“${mainGoal.name}” sigue en ruta; para mantenerla así necesitamos un ritmo equivalente de ${money(mainGoal.weeklyRequired)} por semana.`
-    : 'Tus metas activas ya no tienen una brecha pendiente, así que toca definir el siguiente objetivo.';
+        ? `Para convertir ${aspiration} en un plan útil todavía falta definir ${mainGoal.status === 'needs_amount' ? 'cuánto necesitas' : 'para cuándo lo quieres lograr'}.`
+        : `Tu plan para ${aspiration} sigue en ruta; sostenerlo requiere cerca de ${money(mainGoal.weeklyRequired)} por semana.`
+    : 'No veo una meta financiera o de negocio concreta con brecha pendiente, así que toca aterrizar una prioridad en un objetivo medible.';
   const actionLine = actions[0]?.amount
-    ? `Yo esta semana apartaría ${money(actions[0].amount)} para esa meta.`
+    ? `Esta semana separaría ${money(actions[0].amount)} en una cuenta o instrumento distinto al dinero de gasto y después registraría esa aportación en Virafi.`
     : `Yo empezaría por esto: ${actions[0]?.title || 'definir tu siguiente paso'}.`;
-  return `${greeting} ${movementLine}\n\n${goalLine} ${actionLine} ¿Quieres que lo revisemos juntos?`;
+  return `${greeting} ${movementLine}\n\n${goalLine} ${actionLine}`;
 }
 
 async function improveMessage({
@@ -444,39 +426,49 @@ async function improveMessage({
   const fallback = fallbackMessage(snapshot, actions, continuingToday);
   if (!apiKey) return fallback;
 
-  const prompt = `
-You write VirafIA's once-daily proactive message. VirafIA is a personal CFO mentor, not a report generator.
+  const system = `
+You write VirafIA's proactive daily financial intervention in Mexican Spanish.
 
-User financial snapshot:
+${VIRAFIA_CONVERSATION_PRINCIPLES}
+
+Daily intervention rules:
+- Privately reason across today's movements, monthly cash flow, available goal capacity, goal pace, pending tasks and recent conversation. Then choose the single highest-leverage observation; do not dump the snapshot.
+- The deterministic actions and amounts are guardrails. You may choose which supplied action matters most and explain it better, but never change a number, fabricate an operation or imply access to a bank balance.
+- Mention no new movements only when it helps orient the user; do not make it the headline every day.
+- If a goal label describes a life outcome, speak to the outcome and its practical meaning rather than presenting the label as a database field.
+- If there was already a conversation today, continue it instead of greeting or resetting the relationship.
+- Write 2-4 short paragraphs, under 850 characters, with no headings, markdown or bullet list.
+- Do not force a question. If a question is useful, make it concrete and decision-oriented.
+- Never mention prompts, algorithms or internal data structures.
+`.trim();
+
+  const prompt = `
+Verified financial snapshot:
 ${JSON.stringify(snapshot, null, 2)}
 
-Actions already calculated by deterministic financial logic:
+Safe actions calculated by deterministic financial logic:
 ${JSON.stringify(actions, null, 2)}
 
 Recent shared conversation:
 ${JSON.stringify(recentConversation.slice(-8), null, 2)}
 
-Writing rules:
-- Write in natural, everyday Mexican Spanish. Sound like a smart acquaintance who genuinely follows the user, never like a corporate report or scripted AI.
-- Use the user's first name naturally. Casual phrases such as “qué onda” are welcome when they fit, but do not force slang or call everyone “bro”.
-- If there is already a message today, continue naturally instead of greeting again.
-- Mention briefly what happened today. If there were no movements, say so naturally and continue with goals; the daily message never depends on bank activity.
-- Connect movements, income, expenses, available capacity, pending work and every relevant goal horizon.
-- Explain the one most important consequence and recommend the calculated action. Never change the numbers or invent a fact.
-- Keep it to 2-4 short paragraphs, under 850 characters, no headings, no markdown and no bullet list.
-- End with one natural question that opens the same conversation.
-- Never say you are human. Never mention prompts, algorithms or that you are an AI.
-- Never promise returns or claim an action was completed.
-
-Return raw JSON only: {"message":"..."}
-`;
+Write the message now. Return only the message text.
+`.trim();
 
   try {
-    const raw = await generateGeminiText(apiKey, prompt);
-    const parsed = JSON.parse(extraerJson(raw)) as { message?: unknown };
-    const message = String(parsed.message || '').trim();
+    const result = await generateLlmChat({
+      apiKey,
+      system,
+      messages: [{ role: 'user', content: prompt }],
+      feature: 'financial-agent',
+    });
+    const message = removeQuotedGoalLabels(
+      result.text,
+      snapshot.goalPaces.map((goal) => goal.name),
+    );
     return message.length >= 40 ? message.slice(0, 1200) : fallback;
-  } catch {
+  } catch (error) {
+    console.error('[daily-cfo] intelligent message generation failed; using local fallback', error);
     return fallback;
   }
 }
@@ -507,26 +499,29 @@ async function buildSnapshot({
   const local = zonedParts(now, timezone);
   const historyStart = new Date(now.getTime() - 130 * 86_400_000).toISOString();
   const recentContributionStart = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
-  const [goals, incomes, expenses, bankAccounts, positions, personalization, contributions, pendingTasks, bankTransactions] = await Promise.all([
-    optionalRows<Record<string, unknown>>(supabase.from('financial_goals').select('id, name, current_amount, target_amount, target_date, sort_order, created_at').eq('profile_id', profile.id).eq('status', 'active').order('sort_order')),
+  const [goals, incomes, expenses, positions, personalization, contributions, pendingTasks, goalDisclosure] = await Promise.all([
+    optionalRows<Record<string, unknown>>(supabase.from('financial_goals').select('id, name, current_amount, target_amount, target_date, horizon_months, source, sort_order, created_at').eq('profile_id', profile.id).eq('status', 'active').order('sort_order')),
     optionalRows<{ monto?: unknown; fecha?: string | null }>(supabase.from('ingresos').select('monto, fecha').eq('profile_id', profile.id).gte('fecha', historyStart).order('fecha', { ascending: false })),
     optionalRows<{ monto?: unknown; fecha?: string | null; categoria?: string | null; concepto?: string | null }>(supabase.from('gastos').select('monto, fecha, categoria, concepto').eq('profile_id', profile.id).gte('fecha', historyStart).order('fecha', { ascending: false })),
-    optionalRows<{ current_balance?: unknown; available_balance?: unknown; updated_at?: string | null }>(supabase.from('bank_accounts').select('current_balance, available_balance, updated_at').eq('profile_id', profile.id)),
     optionalRows<{ market_value?: unknown; as_of?: string | null }>(supabase.from('investment_positions').select('market_value, as_of').eq('profile_id', profile.id)),
     optionalRow<Record<string, unknown>>(supabase.from('financial_personalization_profiles').select('goal_priorities, monthly_goal_capacity, recommendation_style').eq('profile_id', profile.id).maybeSingle()),
-    optionalRows<Record<string, unknown>>(supabase.from('financial_goal_contributions').select('id, goal_id, amount, contributed_at, status, note, bank_transaction_id, financial_goals(name)').eq('profile_id', profile.id).gte('contributed_at', recentContributionStart).order('contributed_at', { ascending: false }).limit(40)),
+    optionalRows<Record<string, unknown>>(supabase.from('financial_goal_contributions').select('id, goal_id, amount, contributed_at, status, note, financial_goals(name)').eq('profile_id', profile.id).gte('contributed_at', recentContributionStart).order('contributed_at', { ascending: false }).limit(40)),
     optionalRows<{ title?: string | null; due_at?: string | null }>(supabase.from('agent_tasks').select('title, due_at').eq('profile_id', profile.id).in('status', ['open', 'in_progress', 'waiting_user']).neq('agent_key', 'daily_cfo_mentor').order('due_at', { ascending: true, nullsFirst: false }).limit(5)),
-    optionalRows<Record<string, unknown>>(supabase.from('bank_transactions_raw').select('id, amount, posted_at, authorized_at, description, merchant_name').eq('profile_id', profile.id).gte('created_at', historyStart).order('created_at', { ascending: false }).limit(500)),
+    optionalRow<{ metadata?: unknown }>(supabase.from('advisor_disclosures').select('metadata').eq('profile_id', profile.id).eq('disclosure_type', 'personalized_advice').eq('version', 'financial-goals-v1').maybeSingle()),
   ]);
 
-  const newSuggestions = await detectGoalContributionSuggestions({
-    supabase,
-    profileId: profile.id,
-    goals,
-    transactions: bankTransactions,
-    existingContributions: contributions,
-  });
-  const goalsById = new Map(goals.map((goal) => [String(goal.id), String(goal.name || 'Meta')]));
+  // Life values remain useful personalization context, but stale rows created from
+  // those values must never participate in monetary pacing or contributions.
+  const goalMetadata = goalDisclosure?.metadata as { generatedGoalIds?: Array<string | number> } | null;
+  const legacyIds = new Set((goalMetadata?.generatedGoalIds || []).map(String));
+  const concreteGoals = goals.filter((goal) => isConcreteFinancialGoal(goal.name));
+  const legacyGenerationDetected = legacyIds.size > concreteGoals.length;
+  const financialGoals = concreteGoals.map((goal) => legacyGenerationDetected && goal.source === 'personalization' && legacyIds.has(String(goal.id))
+    ? { ...goal, target_amount: 0 }
+    : goal);
+  const financialGoalIds = new Set(financialGoals.map((goal) => String(goal.id)));
+  const eligibleContributions = contributions.filter((contribution) => financialGoalIds.has(String(contribution.goal_id || '')));
+  const goalsById = new Map(financialGoals.map((goal) => [String(goal.id), String(goal.name || 'Meta')]));
   const contributionGoalName = (contribution: Record<string, unknown>) => {
     const relation = Array.isArray(contribution.financial_goals) ? contribution.financial_goals[0] : null;
     return String((relation && typeof relation === 'object' ? (relation as { name?: unknown }).name : null) || goalsById.get(String(contribution.goal_id || '')) || 'Meta');
@@ -542,12 +537,10 @@ async function buildSnapshot({
   const estimatedMonthlyCapacity = configuredMonthlyCapacity > 0
     ? configuredMonthlyCapacity
     : Math.max((averageMonthlyIncome - averageMonthlyExpenses) * 0.7, 0);
-  const goalPaces = buildGoalPaces(goals, local.date);
+  const goalPaces = buildGoalPaces(financialGoals, local.date);
   const requiredMonthlyForGoals = goalPaces
     .filter((goal) => !['completed', 'needs_amount', 'needs_date'].includes(goal.status))
     .reduce((total, goal) => total + goal.monthlyRequired, 0);
-  const bankUpdatedAt = bankAccounts.map((account) => account.updated_at).filter(Boolean).sort().at(-1) || null;
-
   return {
     localDate: local.date,
     timezone,
@@ -564,25 +557,23 @@ async function buildSnapshot({
     configuredMonthlyCapacity,
     requiredMonthlyForGoals,
     capacityGap: estimatedMonthlyCapacity - requiredMonthlyForGoals,
-    liquidBalance: bankAccounts.reduce((total, account) => total + numberValue(account.available_balance ?? account.current_balance), 0),
     investmentValue: positions.reduce((total, position) => total + numberValue(position.market_value), 0),
     monthlyIncomeTarget: numberValue(profile.monthly_income_target),
-    recentContributions: contributions.filter((contribution) => contribution.status === 'confirmed').map((contribution) => ({
+    recentContributions: eligibleContributions.filter((contribution) => contribution.status === 'confirmed').map((contribution) => ({
       goalName: contributionGoalName(contribution),
       amount: numberValue(contribution.amount),
       date: String(contribution.contributed_at || ''),
     })),
-    suggestedContributions: [...contributions.filter((contribution) => contribution.status === 'suggested'), ...newSuggestions].map((contribution) => ({
+    suggestedContributions: eligibleContributions.filter((contribution) => contribution.status === 'suggested').map((contribution) => ({
       id: contribution.id ? String(contribution.id) : undefined,
       goalName: contributionGoalName(contribution),
       amount: numberValue(contribution.amount),
       date: String(contribution.contributed_at || ''),
-      note: String(contribution.note || 'Movimiento bancario detectado'),
+      note: String(contribution.note || 'Aportación por confirmar'),
     })),
     pendingTasks: pendingTasks.map((task) => ({ title: String(task.title || 'Tarea pendiente'), dueAt: task.due_at || null })),
     lifePriorities: Array.isArray(personalization?.goal_priorities) ? personalization.goal_priorities.map(String) : [],
     recommendationStyle: String(personalization?.recommendation_style || 'natural'),
-    dataFreshness: { bankUpdatedAt, hasBankAccounts: bankAccounts.length > 0 },
     goalPaces,
   };
 }
@@ -729,6 +720,84 @@ async function deliverBriefing({
   return { inAppSent, telegramSent };
 }
 
+type DailyCfoClaim = {
+  id: string;
+  outcome: 'claimed' | 'already-completed' | 'in-progress';
+  leaseToken: string | null;
+};
+
+async function claimDailyCfoBriefing({
+  supabase,
+  profileId,
+  localDate,
+  timezone,
+  scheduledFor,
+}: {
+  supabase: SupabaseClient;
+  profileId: string;
+  localDate: string;
+  timezone: string;
+  scheduledFor: string;
+}): Promise<DailyCfoClaim> {
+  const { data, error } = await supabase.rpc('claim_daily_cfo_briefing', {
+    p_profile_id: profileId,
+    p_local_date: localDate,
+    p_timezone: timezone,
+    p_scheduled_for: scheduledFor,
+    p_workflow_version: 1,
+  });
+
+  if (!error) {
+    const row = (Array.isArray(data) ? data[0] : data) as {
+      briefing_id?: unknown;
+      outcome?: unknown;
+      lease_token?: unknown;
+    } | null;
+    const outcome = String(row?.outcome || '');
+    if (!row?.briefing_id || !['claimed', 'already-completed', 'in-progress'].includes(outcome)) {
+      throw new Error('Supabase no devolvió un claim válido para el CFO diario.');
+    }
+    return {
+      id: String(row.briefing_id),
+      outcome: outcome as DailyCfoClaim['outcome'],
+      leaseToken: row.lease_token ? String(row.lease_token) : null,
+    };
+  }
+
+  if (!/claim_daily_cfo_briefing|schema cache|does not exist/i.test(error.message)) {
+    throw new Error(`No pude reclamar el mensaje diario: ${error.message}`);
+  }
+
+  // Compatibility while the lease migration is being deployed.
+  const fallback = await supabase
+    .from('daily_cfo_briefings')
+    .insert({
+      profile_id: profileId,
+      local_date: localDate,
+      timezone,
+      scheduled_for: scheduledFor,
+      status: 'processing',
+    })
+    .select('id')
+    .single();
+  if (fallback.error?.code === '23505') {
+    const { data: existing } = await supabase
+      .from('daily_cfo_briefings')
+      .select('id')
+      .eq('profile_id', profileId)
+      .eq('local_date', localDate)
+      .maybeSingle();
+    if (!existing?.id) {
+      throw new Error('El briefing diario ya existe, pero no pude recuperar su identificador.');
+    }
+    return { id: String(existing.id), outcome: 'already-completed', leaseToken: null };
+  }
+  if (fallback.error || !fallback.data) {
+    throw new Error(`No pude iniciar el mensaje diario: ${fallback.error?.message || 'sin identificador'}`);
+  }
+  return { id: String(fallback.data.id), outcome: 'claimed', leaseToken: null };
+}
+
 export async function runDailyCfoForProfile({
   supabase,
   profile,
@@ -749,19 +818,16 @@ export async function runDailyCfoForProfile({
   if (preference?.enabled === false) return { profileId: profile.id, skipped: 'disabled' };
   if (!force && !due.due) return { profileId: profile.id, skipped: 'not-due', scheduledMinute: due.scheduledMinute };
 
-  const { data: claimed, error: claimError } = await supabase
-    .from('daily_cfo_briefings')
-    .insert({
-      profile_id: profile.id,
-      local_date: due.localDate,
-      timezone,
-      scheduled_for: now.toISOString(),
-      status: 'processing',
-    })
-    .select('id')
-    .single();
-  if (claimError?.code === '23505') return { profileId: profile.id, skipped: 'already-ran-today' };
-  if (claimError || !claimed) throw new Error(`No pude iniciar el mensaje diario: ${claimError?.message || 'sin identificador'}`);
+  const claimed = await claimDailyCfoBriefing({
+    supabase,
+    profileId: profile.id,
+    localDate: due.localDate,
+    timezone,
+    scheduledFor: now.toISOString(),
+  });
+  if (claimed.outcome !== 'claimed') {
+    return { profileId: profile.id, skipped: claimed.outcome, briefingId: claimed.id };
+  }
 
   try {
     const [snapshot, recentConversation] = await Promise.all([
@@ -773,7 +839,7 @@ export async function runDailyCfoForProfile({
     const summary = actions[0]?.description || 'VirafIA revisó el contexto financiero y dejó el siguiente paso del día.';
     const briefing: GeneratedBriefing = { message, summary, actions };
     const generatedAt = new Date().toISOString();
-    const { error: readyError } = await supabase.from('daily_cfo_briefings').update({
+    let readyQuery = supabase.from('daily_cfo_briefings').update({
       status: 'ready',
       message,
       summary,
@@ -783,7 +849,11 @@ export async function runDailyCfoForProfile({
       generated_at: generatedAt,
       updated_at: generatedAt,
     }).eq('id', claimed.id);
-    if (readyError) throw new Error(`No pude guardar el análisis diario: ${readyError.message}`);
+    if (claimed.leaseToken) readyQuery = readyQuery.eq('claim_token', claimed.leaseToken);
+    const { data: readyClaim, error: readyError } = await readyQuery.select('id').maybeSingle();
+    if (readyError || !readyClaim) {
+      throw new Error(`No pude guardar el análisis diario o el lease dejó de pertenecer a esta corrida: ${readyError?.message || 'claim perdido'}`);
+    }
 
     await saveTasksAndFinding({ supabase, profileId: profile.id, briefingId: claimed.id, briefing, snapshot });
     const delivery = await deliverBriefing({
@@ -796,15 +866,27 @@ export async function runDailyCfoForProfile({
     });
     const completedAt = new Date().toISOString();
     const status = delivery.inAppSent && delivery.telegramSent ? 'sent' : 'partial';
-    await supabase.from('daily_cfo_briefings').update({ status, sent_at: completedAt, updated_at: completedAt }).eq('id', claimed.id);
+    let completeQuery = supabase.from('daily_cfo_briefings').update({
+      status,
+      sent_at: completedAt,
+      claim_token: null,
+      lease_expires_at: null,
+      updated_at: completedAt,
+    }).eq('id', claimed.id);
+    if (claimed.leaseToken) completeQuery = completeQuery.eq('claim_token', claimed.leaseToken);
+    await completeQuery;
     return { profileId: profile.id, briefingId: claimed.id, status, message, actions };
   } catch (error) {
     const failedAt = new Date().toISOString();
-    await supabase.from('daily_cfo_briefings').update({
+    let failedQuery = supabase.from('daily_cfo_briefings').update({
       status: 'failed',
       error_message: error instanceof Error ? error.message.slice(0, 1500) : 'Error desconocido.',
+      claim_token: null,
+      lease_expires_at: null,
       updated_at: failedAt,
     }).eq('id', claimed.id);
+    if (claimed.leaseToken) failedQuery = failedQuery.eq('claim_token', claimed.leaseToken);
+    await failedQuery;
     throw error;
   }
 }

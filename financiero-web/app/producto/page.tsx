@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   ArrowRight,
-  Bank,
   ChartLineUp,
   ChatCircleDots,
   Plant,
@@ -14,16 +13,16 @@ import MarketingShell from '@/app/Components/MarketingShell';
 
 export const metadata: Metadata = {
   title: 'Producto',
-  description: 'Conoce cómo Virafi conecta cuentas, metas, patrimonio, mercados e inteligencia financiera en una sola experiencia.',
+  description: 'Conoce al CFO personal de Virafi: revisa tus finanzas, prioriza acciones y te acompaña proactivamente hasta cumplir tus metas.',
 };
 
 const modules = [
-  { icon: Bank, title: 'Cuentas y movimientos', text: 'Centraliza información bancaria de solo lectura, movimientos capturados en web y registros conversacionales por Telegram.' },
-  { icon: Target, title: 'Presupuesto y metas', text: 'Parte de tus ingresos reales y adapta la regla 33/33/33 a tus prioridades, obligaciones y etapa financiera.' },
-  { icon: ChatCircleDots, title: 'Agente VirafIA', text: 'Pregunta cómo vas, qué cambió o cuál debería ser tu siguiente paso usando el contexto de tu propio panorama.' },
-  { icon: Plant, title: 'Patrimonio y escenarios', text: 'Conoce tu posición, capacidad de aportación y exposición antes de tomar una decisión; Virafi no custodia activos.' },
-  { icon: ChartLineUp, title: 'Mercados e inversión', text: 'Consulta contexto de mercado y explora opciones compatibles con tus metas, horizonte, liquidez y perfil de riesgo.' },
-  { icon: Target, title: 'Agente proactivo', text: 'VirafIA monitorea tu avance, detecta desvíos y convierte cada hallazgo en un siguiente paso concreto.' },
+  { icon: ChartLineUp, title: 'Revisión financiera diaria', text: 'Tu CFO analiza los movimientos que registras, tu flujo, presupuestos, aportaciones y pendientes para detectar qué requiere atención.' },
+  { icon: Target, title: 'Metas convertidas en planes', text: 'Separa metas grandes en etapas, identifica los datos que faltan y propone cuánto apartar sin inventar el costo del objetivo.' },
+  { icon: ChatCircleDots, title: 'Conversación con criterio', text: 'Entiende preguntas de seguimiento, explica de dónde sale cada cifra y usa tu contexto personal para priorizar.' },
+  { icon: Plant, title: 'Acompañamiento proactivo', text: 'No espera a que abras el dashboard: te avisa, vuelve a revisar y da seguimiento al siguiente paso acordado.' },
+  { icon: ChartLineUp, title: 'Inversión ligada al propósito', text: 'Separa el dinero de corto plazo del capital de largo plazo y filtra alternativas según horizonte, liquidez y perfil de riesgo.' },
+  { icon: ShieldCheck, title: 'Confirmación antes de actuar', text: 'Virafi recomienda y registra. Ninguna aportación, operación o decisión sensible ocurre sin una confirmación explícita.' },
 ];
 
 export default function ProductPage() {
@@ -33,16 +32,16 @@ export default function ProductPage() {
         <section className="marketing-page-hero">
           <div className="marketing-container marketing-page-hero-grid">
             <div>
-              <h1>Un sistema financiero que entiende el panorama completo.</h1>
-              <p>Virafi reúne lo que normalmente vive separado —cuentas, movimientos, metas, patrimonio y mercados— para convertirlo en un plan coherente y próximos pasos concretos.</p>
+              <h1>Un CFO que trabaja todos los días para tus metas.</h1>
+              <p>Virafi entiende tu situación, decide qué merece atención y convierte tus números en una acción concreta. Después vuelve para comprobar que avances.</p>
               <div className="marketing-actions">
-                <Link href="/login?next=%2Fdashboard" className="marketing-button marketing-button-primary">Probar Virafi</Link>
+                <Link href="/login?next=%2Fdashboard" className="marketing-button marketing-button-primary">Quiero mi CFO</Link>
                 <Link href="/seguridad" className="marketing-button marketing-button-secondary">Cómo cuidamos tus datos</Link>
               </div>
             </div>
             <div className="page-hero-note">
               <ChartLineUp weight="duotone" />
-              <p><strong>Una sola conversación.</strong> Distintos especialistas financieros trabajan con el mismo contexto, sin obligarte a traducir tus finanzas entre herramientas.</p>
+              <p><strong>No es un chatbot que espera órdenes.</strong> Es un sistema financiero proactivo que revisa, razona, explica y te acompaña con el mismo contexto todos los días.</p>
             </div>
           </div>
         </section>
@@ -54,8 +53,8 @@ export default function ProductPage() {
         <section className="marketing-section product-modules">
           <div className="marketing-container">
             <div className="marketing-section-heading">
-              <h2>De la operación diaria<br />a la visión de largo plazo.</h2>
-              <p>Cada módulo aporta contexto al siguiente. El objetivo no es mostrar más datos, sino ayudarte a decidir mejor.</p>
+              <h2>De lo que hiciste hoy<br />a la vida que quieres construir.</h2>
+              <p>Cada parte del producto alimenta al mismo CFO. El objetivo no es mostrar más gráficas, sino producir mejores decisiones y sostenerlas en el tiempo.</p>
             </div>
             <div className="module-list">
               {modules.map(({ icon: Icon, title, text }, index) => (
@@ -72,11 +71,11 @@ export default function ProductPage() {
         <section className="marketing-security-band product-principles">
           <div className="marketing-container">
             <div className="security-band-intro">
-              <h2>Diseñado para informar antes de actuar.</h2>
-              <p>La automatización organiza, detecta y explica. Las decisiones con consecuencias financieras permanecen bajo tu control.</p>
+              <h2>Proactivo no significa fuera de control.</h2>
+              <p>El CFO puede investigar, priorizar, explicar e insistir. Las decisiones con consecuencias financieras permanecen bajo tu control.</p>
             </div>
             <div className="product-principle-list">
-              <p><ShieldCheck /> Integraciones en modo de consulta cuando la función no requiere escritura.</p>
+              <p><ShieldCheck /> Tus datos se mantienen aislados por perfil y se usan para tu propio plan.</p>
               <p><Target /> Recomendaciones ligadas a tus metas, liquidez y tolerancia al riesgo.</p>
               <p><ChartLineUp /> Evidencia, contexto de mercado y límites visibles para revisar cada sugerencia.</p>
             </div>
@@ -85,8 +84,8 @@ export default function ProductPage() {
 
         <section className="marketing-cta">
           <div className="marketing-container">
-            <div><h2>Construye tu panorama financiero.</h2><p>Empieza con lo que ya tienes y agrega contexto a tu ritmo.</p></div>
-            <Link href="/login?next=%2Fdashboard" className="marketing-button marketing-button-primary">Crear cuenta <ArrowRight /></Link>
+            <div><h2>Deja de cargar tus metas tú solo.</h2><p>Dale contexto a Virafi y recibe un plan que se revisa contigo cada día.</p></div>
+            <Link href="/login?next=%2Fdashboard" className="marketing-button marketing-button-primary">Quiero mi CFO <ArrowRight /></Link>
           </div>
         </section>
       </main>

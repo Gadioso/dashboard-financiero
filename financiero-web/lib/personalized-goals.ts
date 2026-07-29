@@ -63,13 +63,26 @@ export async function syncPersonalizedGoals({ supabase, profileId, personalizati
     if (goalsError || settingsError) throw new Error(`No pude actualizar tus metas: ${goalsError?.message || settingsError?.message}`);
     return { generated: 0 };
   }
-  const { data: existing, error: existingError } = await supabase
-    .from('financial_goals')
-    .select('id, name, current_amount, target_amount, target_date')
-    .eq('profile_id', profileId)
-    .eq('source', 'personalization');
+  const [{ data: existing, error: existingError }, { data: priorDisclosure, error: disclosureError }] = await Promise.all([
+    supabase
+      .from('financial_goals')
+      .select('id, name, current_amount, target_amount, target_date')
+      .eq('profile_id', profileId)
+      .eq('source', 'personalization'),
+    supabase
+      .from('advisor_disclosures')
+      .select('metadata')
+      .eq('profile_id', profileId)
+      .eq('disclosure_type', 'personalized_advice')
+      .eq('version', 'financial-goals-v1')
+      .maybeSingle(),
+  ]);
   if (existingError) throw new Error(`No pude leer tus metas: ${existingError.message}`);
+  if (disclosureError) throw new Error(`No pude leer el origen de tus metas: ${disclosureError.message}`);
   const byName = new Map((existing || []).map((row) => [normalizedName(row.name), row]));
+  const priorMetadata = priorDisclosure?.metadata as { generatedGoalIds?: Array<string | number> } | null;
+  const legacyIds = new Set((priorMetadata?.generatedGoalIds || []).map(String));
+  const legacyGenerationDetected = legacyIds.size > names.length;
   const now = new Date().toISOString();
   const rows = names.map((name, index) => {
     const months = horizonMonths(name, personalization);
@@ -80,7 +93,9 @@ export async function syncPersonalizedGoals({ supabase, profileId, personalizati
       name,
       current_amount: Number(previous?.current_amount || 0),
       // Monthly capacity constrains the plan; it is not the invented price of a goal.
-      target_amount: Number(previous?.target_amount || 0),
+      target_amount: previous && legacyGenerationDetected && legacyIds.has(String(previous.id))
+        ? 0
+        : Number(previous?.target_amount || 0),
       target_date: previous?.target_date || targetDate.toISOString().slice(0, 10),
       horizon_months: months,
       source: 'personalization',

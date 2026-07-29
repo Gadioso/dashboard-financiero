@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import LegalPage from '@/app/Components/LegalPage';
 
-const updatedAt = '20 de julio de 2026';
+const updatedAt = '29 de julio de 2026';
 
 export const metadata: Metadata = {
   title: 'Aviso de privacidad integral',
@@ -30,10 +30,10 @@ const sections = [
     title: 'Datos personales que tratamos',
     content: <>
       <h3>Identificación y cuenta</h3><p>Nombre, correo electrónico, identificador de usuario, fotografía de perfil, país, ubicación general, ocupación, tipo de actividad, preferencias y credenciales de sesión. No almacenamos tu contraseña en texto legible.</p>
-      <h3>Información financiera y patrimonial</h3><p>Ingresos, gastos, presupuestos, metas, categorías, saldos, cuentas, tarjetas, movimientos, deudas, fondos, inversiones declaradas, tolerancia al riesgo, horizonte y demás información que captures o autorices consultar. Por su naturaleza, estos datos requieren protección reforzada aunque no todos estén clasificados legalmente como sensibles.</p>
+      <h3>Información financiera y patrimonial</h3><p>Ingresos, gastos, presupuestos, metas, categorías, saldos declarados, tarjetas, movimientos, deudas, fondos, inversiones declaradas, tolerancia al riesgo, horizonte y demás información que captures. Virafi no conecta ni sincroniza cuentas bancarias. Por su naturaleza, estos datos requieren protección reforzada aunque no todos estén clasificados legalmente como sensibles.</p>
       <h3>Información de metas e inversión</h3><p>Objetivos de vida, plazos, aportaciones, perfil de riesgo, experiencia, preferencias, posiciones declaradas, tesis y simulaciones que guardas para recibir orientación contextual.</p>
       <h3>Conversaciones y archivos</h3><p>Mensajes, notas de voz, transcripciones, archivos, imágenes y documentos que envías por web o Telegram, junto con las respuestas y confirmaciones necesarias para atender tu solicitud.</p>
-      <h3>Integraciones y datos técnicos</h3><p>Proveedor conectado, institución, estado de conexión, identificadores y tokens cifrados, fechas de sincronización, dirección IP convertida en hash para auditoría, dispositivo, navegador, registros de seguridad, errores y uso del servicio.</p>
+      <h3>Integraciones y datos técnicos</h3><p>Canal o proveedor conectado, estado de conexión, identificadores técnicos, fechas de actividad, dirección IP convertida en hash para auditoría, dispositivo, navegador, registros de seguridad, errores y uso del servicio.</p>
       <p>No solicitamos datos sensibles como salud, origen étnico, religión, opiniones políticas o preferencia sexual. Si los incluyes voluntariamente en texto o documentos, los trataremos sólo para atender la función solicitada y te recomendamos no compartirlos cuando no sean necesarios.</p>
     </>,
   },
@@ -41,7 +41,7 @@ const sections = [
     id: 'origen',
     title: 'Cómo obtenemos la información',
     content: <>
-      <ul><li>Directamente de ti al crear la cuenta, completar el perfil, registrar movimientos, conversar o subir archivos.</li><li>De Telegram cuando vinculas voluntariamente tu chat y envías instrucciones o archivos.</li><li>De proveedores de open banking o agregación financiera cuando autorizas una conexión de solo lectura.</li><li>De fuentes de mercado públicas o contratadas para mostrar contexto general, sin atribuir esos datos a tu identidad salvo que los guardes en una tesis o simulación.</li><li>Automáticamente mediante cookies de sesión, registros técnicos, seguridad y diagnóstico.</li></ul>
+      <ul><li>Directamente de ti al crear la cuenta, completar el perfil, registrar movimientos, conversar o subir archivos.</li><li>De Telegram cuando vinculas voluntariamente tu chat y envías instrucciones o archivos.</li><li>De fuentes de mercado públicas o contratadas para mostrar contexto general, sin atribuir esos datos a tu identidad salvo que los guardes en una tesis o simulación.</li><li>Automáticamente mediante cookies de sesión, registros técnicos, seguridad y diagnóstico.</li></ul>
     </>,
   },
   {
@@ -68,8 +68,8 @@ const sections = [
     id: 'encargados',
     title: 'Encargados, integraciones y transferencias',
     content: <>
-      <p>Para operar el servicio podemos utilizar proveedores de infraestructura, base de datos, autenticación, observabilidad, pagos, mensajería, open banking, datos de mercado, transcripción y modelos de inteligencia artificial. Según la función activada, estos pueden incluir Vercel, Supabase, Sentry, Stripe, Telegram, Syncfy, Plaid, proveedores de datos de mercado y proveedores de modelos a través de pasarelas configuradas.</p>
-      <p>Estos proveedores pueden tratar información en México u otros países bajo contratos, instrucciones y medidas de protección aplicables. Algunos actúan como encargados por cuenta de Virafi; otros, como Stripe, Telegram o tu banco, también pueden determinar parte de su tratamiento conforme a sus propios avisos.</p>
+      <p>Para operar el servicio utilizamos proveedores especializados únicamente cuando son necesarios. Estos pueden incluir Railway para infraestructura, Supabase para datos y autenticación, Stripe para pagos, Telegram para mensajería, proveedores de datos de mercado y Google Gemini para inteligencia artificial.</p>
+      <p>Estos proveedores pueden tratar información en México u otros países bajo contratos, instrucciones y medidas de protección aplicables. Algunos actúan como encargados por cuenta de Virafi; otros, como Stripe o Telegram, también pueden determinar parte de su tratamiento conforme a sus propios avisos.</p>
       <p>Podemos comunicar datos a autoridades cuando exista un mandato fundado y motivado, o cuando la ley lo permita o exija. Cualquier transferencia que requiera consentimiento se realizará después de informarte y obtenerlo en la forma correspondiente.</p>
     </>,
   },
@@ -104,7 +104,7 @@ const sections = [
       <p>Puedes ejercer tus derechos de acceso, rectificación, cancelación u oposición (ARCO), revocar el consentimiento o limitar el uso y divulgación de tus datos enviando una solicitud a <a href="mailto:info@virafi.com">info@virafi.com</a> con:</p>
       <ul><li>Tu nombre y un medio para recibir notificaciones.</li><li>Documento para acreditar identidad y, en su caso, representación.</li><li>Descripción clara de los datos y del derecho que deseas ejercer.</li><li>Para rectificación, la corrección solicitada y documentación de soporte.</li><li>Cualquier elemento que ayude a localizar la información.</li></ul>
       <p>Confirmaremos nuestra determinación en un plazo máximo de 20 días hábiles desde una solicitud completa. Si resulta procedente, la haremos efectiva dentro de los 15 días hábiles siguientes. Los plazos pueden ampliarse una vez por un periodo igual cuando las circunstancias lo justifiquen. El ejercicio es gratuito, salvo costos razonables de reproducción o envío.</p>
-      <p>También puedes exportar información desde los controles disponibles en la cuenta y desconectar Telegram, banca u otras integraciones desde Virafi o desde el proveedor correspondiente.</p>
+      <p>También puedes exportar información desde los controles disponibles en la cuenta y desconectar Telegram u otras integraciones desde Virafi o desde el proveedor correspondiente.</p>
     </>,
   },
   {

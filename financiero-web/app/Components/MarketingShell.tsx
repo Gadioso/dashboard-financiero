@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import MarketingMotionController from '@/app/Components/MarketingMotionController';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 
 const navigation = [
@@ -41,7 +42,7 @@ export function MarketingFooter() {
       <div className="marketing-container marketing-footer-grid">
         <div className="marketing-footer-brand">
           <Link href="/" aria-label="Virafi, inicio"><VirafiBrand compact /></Link>
-          <p>Tu dinero, con claridad y rumbo.</p>
+          <p>Tu CFO personal, todos los días.</p>
         </div>
         <div>
           <p className="marketing-footer-title">Producto</p>
@@ -72,6 +73,7 @@ export function MarketingFooter() {
 export default function MarketingShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="marketing-site">
+      <MarketingMotionController />
       <MarketingHeader />
       {children}
       <MarketingFooter />

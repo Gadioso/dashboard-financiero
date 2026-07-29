@@ -4,9 +4,7 @@ import path from 'node:path';
 const cwd = process.cwd();
 const mode = process.argv.includes('--multi-user')
   ? 'multi-user'
-  : process.argv.includes('--open-banking')
-    ? 'open-banking'
-    : process.argv.includes('--agentic-foundation')
+  : process.argv.includes('--agentic-foundation')
       ? 'agentic-foundation'
       : process.argv.includes('--classification-rules')
           ? 'classification-rules'
@@ -26,13 +24,6 @@ const migrationSets = {
     '20260608000100_multi_user_foundation.sql',
     '20260612000100_self_serve_onboarding_integrations.sql',
     '20260630000300_profile_scoped_monthly_budgets.sql',
-  ],
-  'open-banking': [
-    '20260613000100_open_banking_foundation.sql',
-    '20260614000100_add_bank_connection_sync_cursor.sql',
-    '20260710035554_bank_transaction_classification_queue.sql',
-    '20260709000100_add_syncfy_open_banking_provider.sql',
-    '20260709000200_syncfy_users.sql',
   ],
   'agentic-foundation': [
     '20260630000100_agentic_business_wealth_foundation.sql',

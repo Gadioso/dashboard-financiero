@@ -154,3 +154,110 @@ final result: passed
 - Initial comparison: no P0/P1/P2 mismatch in the requested provider-branding region, so no visual correction loop was required.
 
 final result: passed
+
+---
+
+# Virafi marketing redesign — visual QA
+
+## Source of visual truth
+
+- Desktop concept: `.design-captures/virafi-hybrid-approved.jpg`
+- Mobile concept: `.design-captures/virafi-mobile-approved.jpg`
+- Final desktop implementation: `.design-captures/virafi-implementation-desktop-final.jpg`
+- Final mobile implementation: `.design-captures/virafi-implementation-mobile-final.jpg`
+- Final mobile journey scene: `.design-captures/virafi-implementation-mobile-scene-final.jpg`
+
+## Verification environment
+
+- Desktop viewport: 1440 × 1024 CSS pixels, device scale factor 1.
+- Mobile viewport: 390 × 844 CSS pixels, device scale factor 1.
+- Browser: Codex in-app browser against `http://localhost:3000/`.
+- Desktop document width: 1440 / 1440 (no horizontal overflow).
+- Mobile document width: 390 / 390 (no horizontal overflow).
+- Fresh-page browser console: no warnings or errors.
+
+## Comparison evidence
+
+The approved desktop concept and final desktop screenshot were inspected side by side at native viewport size. The approved mobile concept was compared with both the final first viewport and the focused landscape scene. Text and dashboard details remained readable in the full-view comparison, so no enlarged crop was necessary.
+
+Five critical comparison points:
+
+1. Typography — the editorial serif headline, italic Virafi wordmark, sans-serif body, labels, and button weights match the selected direction.
+2. Composition — left-aligned copy, staged dashboard, illuminated goal route, home/travel/security landmarks, and proof strip preserve the approved hierarchy.
+3. Spacing — navigation, hero copy rhythm, CTA spacing, dashboard overlap, and proof-strip entry align with the reference at desktop and collapse cleanly on mobile.
+4. Color and image treatment — warm ivory surfaces, restrained violet accents, soft atmospheric landscape, and glass-like dashboard treatment match the approved palette and density.
+5. Copy — navigation, above-the-fold headline, description, primary CTA, secondary CTA, dashboard greeting, daily recommendation, proof title, and proof labels match the approved concept.
+
+## Iteration history
+
+- Pass 1, P2: the proof headline rendered on one line instead of two. Fixed with a narrower heading measure and tuned type size.
+- Pass 1, P2: mobile left too much space between the CTAs and dashboard. Fixed by compacting the mobile header and moving the dashboard and journey scene upward.
+- Pass 1, P2: both responsive landscape sources were being requested during development. Fixed by using breakpoint-specific CSS backgrounds and optimized JPEG assets.
+- Pass 2: repeated desktop/mobile screenshots and side-by-side inspection. No remaining P0, P1, or P2 visual issues.
+
+## Interaction verification
+
+- Scroll-driven hero progress updates in both directions; scrolling upward reverses the visual state.
+- Desktop pointer movement adds restrained depth parallax.
+- The secondary CTA navigates to `#como-funciona`.
+- The mobile menu opens and exposes the primary navigation links.
+- Reduced-motion styles remove the decorative movement while preserving content and navigation.
+
+## Above-the-fold copy diff
+
+No unintended differences. The implemented navigation, hero headline, body copy, CTAs, dashboard message, and proof points use the approved wording.
+
+## Intentional deviation
+
+The portrait concept shows the entire journey as one tall presentation board. In the implementation, the mobile scene is distributed across the natural page scroll so the dashboard, route, landmarks, and proof strip reveal progressively—the behavior requested for mobile rather than a compressed static composition.
+
+## Result
+
+passed
+
+---
+
+# Virafi sitewide motion refinement — visual QA
+
+## Source and implementation evidence
+
+- Desktop visual truth: `.design-captures/virafi-hybrid-approved.jpg` (1487 × 1058 px).
+- Desktop implementation: `.design-captures/virafi-sitewide-motion-home-final.jpg` (1440 × 1024 px at a 1440 × 1024 CSS viewport, density 1).
+- Mobile visual truth: `.design-captures/virafi-mobile-approved.jpg` (853 × 1844 px).
+- Mobile implementation: `.design-captures/virafi-sitewide-motion-home-mobile-final.jpg` (390 × 844 px at a 390 × 844 CSS viewport, density 1).
+- Secondary-route desktop evidence: `.design-captures/virafi-sitewide-motion-desktop-final.jpg` (`/seguridad`, 1440 × 1024).
+- Secondary-route mobile evidence: `.design-captures/virafi-sitewide-motion-mobile-final.jpg` (`/seguridad`, menu open, 390 × 844).
+- State: initial viewport after the route-entry transition settled.
+
+## Full-view and focused comparison
+
+The accepted desktop concept and the latest home render were opened together with `view_image`; the mobile concept and latest mobile render were inspected in the same way. The full-view comparison confirmed that the motion refactor did not change the approved typography, copy, layout, palette, dashboard framing, landscape treatment, navigation, CTAs, or first-section preview. Focused secondary-route screenshots confirmed that the shared motion layer preserves the existing Producto, Nosotros, Seguridad and legal-page compositions.
+
+## Findings and comparison history
+
+- Initial P2: the home reveal transformed both the section container and its children, doubling travel and opacity changes. Fixed by animating one item layer only.
+- Initial P2: a CSS transition on the dashboard and route highlight competed with scroll-driven values, creating lag and a rubber-band effect. Fixed with one frame-rate-independent interpolation loop and smaller movement amplitudes.
+- Initial P2: only the home route mounted the motion controller. Fixed by mounting it in `MarketingShell` and automatically covering public page heroes, sections, grouped list rows, legal sections, CTAs and footer content.
+- Post-fix evidence: desktop scrolling changed hero progress from `0.9488` at 620 px to `0.2063` at 250 px and `0.0085` at the top, confirming smooth reversible movement.
+- Post-fix route evidence: Producto (14+ animated targets), Nosotros (15+), Seguridad (13+), and Privacidad (53 targets across 17 motion sections) all initialized and responded to scroll without console warnings or errors.
+- No actionable P0, P1 or P2 findings remain.
+
+## Interaction and responsive verification
+
+- Tested flow: Inicio → scroll down/up → `#como-funciona` → Producto → Nosotros → Seguridad → mobile menu → Privacidad.
+- `#como-funciona` reached the expected hash and section position.
+- Client-side route entry animation ran on each public route without reloading the shared header.
+- Desktop and mobile documents matched their viewport widths (1440/1440 and 390/390); no horizontal overflow.
+- Mobile navigation opened and navigated correctly.
+- `prefers-reduced-motion` keeps all content visible and disables decorative transforms and transitions.
+- Fresh Browser/IAB logs: no warnings or errors.
+
+## Above-the-fold copy diff
+
+No copy changes. The approved navigation, headline, body, CTAs, dashboard message and proof strip remain identical.
+
+## Intentional deviation
+
+As in the approved implementation, the tall mobile landscape is revealed progressively through natural page scroll rather than compressed into the first 844 px viewport.
+
+final result: passed

@@ -6,6 +6,7 @@ import { applyProfileFilter } from '@/lib/tenant-context';
 import { extraerJson, generateGeminiText, generateLlmChat } from '@/lib/gemini';
 import { runFinancialToolAgent } from '@/lib/financial-tool-agent';
 import { shouldUseIntentLlm } from '@/lib/ai-policy';
+import { VIRAFIA_CONVERSATION_PRINCIPLES } from '@/lib/virafia-conversation-principles';
 import {
   calcularGastadoPorBolsa,
   calcularIngresosMes,
@@ -1149,6 +1150,8 @@ async function responderConversacionAbierta({
   const system = `
 You are VirafIA, the conversational financial assistant in Virafi. Speak as a consistent personal assistant with this name.
 
+${VIRAFIA_CONVERSATION_PRINCIPLES}
+
 Operating context:
 ${JSON.stringify({
   financial_context: contexto,
@@ -1161,8 +1164,6 @@ ${JSON.stringify({
 }, null, 2)}
 
 Behavior contract:
-- Respond in natural Mexican Spanish. Be direct, intelligent, warm, concrete and conversational.
-- Sound like a financially savvy acquaintance who has been following the user over time, not like a report, corporate advisor or scripted AI. Natural phrases such as “qué onda” are fine when they match the user's style; never force slang.
 - Answer the actual message first. Do not sound like a command menu, tutorial or scripted bot.
 - Use only the supplied financial context for factual financial claims. Never invent balances, movements or actions.
 - Use identidadPerfil as personal context for tone, priorities and recommendations. It never overrides explicit financial amounts, movements or goals.
@@ -1171,7 +1172,7 @@ Behavior contract:
 - When ultimoMensajeDiario exists, treat questions about “eso”, “lo que me dijiste”, an amount, a goal or today's recommendation as follow-ups to that briefing.
 - Use metasFinancieras and tareasDelMentor to explain the daily pace, pending action and impact on deadlines. Life priorities are purpose, not priced goals.
 - If the user asks where a number comes from, show the exact breakdown from the context.
-- If the user asks for an opinion, give a diagnosis, the main risk and one best next action.
+- If the user asks for an opinion, give a diagnosis, the main risk and one best next action. If they ask how to carry out a recommendation, explain the mechanics instead of repeating it.
 - If information is missing, ask exactly one useful clarifying question.
 - Never claim an operation was performed unless the context or conversation says it was completed.
 - You may explain that the assistant can register, query, reclassify and delete movements, but this response itself is conversational.
@@ -1410,7 +1411,6 @@ export async function responderConversacionFinanciera({
         if (agentResult.text) return { action: 'reply', message: agentResult.text };
       } catch (error) {
         console.error('[financial-tool-agent] attachment analysis failed', error);
-        if (process.env.OPENROUTER_API_KEY) throw error;
       }
     }
 
@@ -1461,8 +1461,7 @@ export async function responderConversacionFinanciera({
       }
     } catch (error) {
       console.error('[financial-tool-agent] agent loop failed', error);
-      if (process.env.OPENROUTER_API_KEY) throw error;
-      // Only use deterministic handlers when the agent provider is not configured.
+      // Deterministic handlers remain available if Gemini is temporarily unavailable.
     }
   }
 

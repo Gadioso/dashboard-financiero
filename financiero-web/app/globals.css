@@ -120,7 +120,7 @@ h2 {
 
 /* Public Virafi website */
 .marketing-site {
-  --marketing-max: 1240px;
+  --marketing-max: 1400px;
   background: var(--brand-cream);
   color: var(--brand-ink);
   min-height: 100vh;
@@ -155,7 +155,7 @@ h2 {
 
 .marketing-hero { position: relative; padding: 72px 0 116px; }
 .marketing-hero-grid { display: grid; grid-template-columns: .78fr 1.42fr; align-items: center; gap: 56px; }
-.marketing-hero-copy { padding-bottom: 10px; }
+.marketing-hero-copy { min-width: 0; padding-bottom: 10px; }
 .marketing-hero-copy h1, .marketing-page-hero h1 { margin: 0; font-size: clamp(4.25rem, 7vw, 7rem); line-height: .93; letter-spacing: -.055em; text-wrap: balance; }
 .marketing-hero-copy > p { max-width: 500px; margin: 34px 0 30px; color: oklch(36% 0.018 85); font-size: 17px; line-height: 1.75; }
 .marketing-rise-line { position: absolute; bottom: 0; left: 0; width: 100%; height: 78px; opacity: .55; background: linear-gradient(152deg, transparent 0 56%, color-mix(in oklab, var(--brand-violet) 45%, transparent) 56.3% 56.7%, transparent 57%) right bottom / 42% 100% no-repeat; border-bottom: 1px solid color-mix(in oklab, var(--brand-violet) 45%, transparent); }
@@ -200,6 +200,213 @@ h2 {
 .preview-assistant > p { margin: 29px 0 22px; color: oklch(36% 0.018 85); font-size: 10px; line-height: 1.65; }
 .preview-assistant > span { display: inline-block; border: 1px solid color-mix(in oklab, var(--brand-violet) 40%, transparent); border-radius: 2px; padding: 8px 10px; color: var(--brand-violet); font-size: 9px; font-weight: 750; }
 
+.cfo-hero { padding-top: 48px; padding-bottom: 58px; }
+.cfo-hero .marketing-hero-grid { grid-template-columns: .88fr 1.12fr; gap: 48px; }
+.cfo-hero .marketing-hero-copy h1 { font-size: clamp(3.7rem, 5.35vw, 5.7rem); }
+.cfo-product-preview { min-height: 500px; grid-template-columns: 144px 1fr; box-shadow: 0 22px 60px color-mix(in oklab, var(--brand-ink) 7%, transparent); }
+.cfo-preview-main { padding: 38px 40px 30px; }
+.cfo-preview-heading { display: flex; align-items: center; gap: 15px; }
+.cfo-preview-heading > span { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-violet-soft); color: var(--brand-violet); }
+.cfo-preview-heading svg { width: 23px; height: 23px; }
+.cfo-preview-heading h2 { margin: 0; font-size: 30px; line-height: 1; }
+.cfo-preview-message { width: 75%; margin: 28px auto 20px; border-radius: 20px 20px 20px 4px; padding: 17px 25px; background: var(--brand-violet-soft); text-align: center; font-family: var(--font-newsreader), Georgia, serif; font-size: 20px; line-height: 1.3; }
+.cfo-preview-message strong { color: var(--brand-violet); font-weight: 700; }
+.cfo-preview-label { margin: 0 0 11px; color: var(--brand-muted); font-size: 10px; }
+.cfo-preview-allocation { display: grid; grid-template-columns: repeat(4, 1fr); }
+.cfo-preview-allocation > div > span { display: block; height: 30px; border-right: 2px solid var(--brand-surface); background: oklch(65% 0.13 150); color: white; text-align: center; }
+.cfo-preview-allocation > div > span.goal { background: var(--brand-violet); }
+.cfo-preview-allocation > div > span.property { background: oklch(73% 0.11 80); }
+.cfo-preview-allocation > div > span.investment { background: oklch(66% 0.1 245); }
+.cfo-preview-allocation i { font-size: 10px; font-style: normal; font-weight: 800; line-height: 30px; }
+.cfo-preview-allocation p { min-height: 30px; margin: 9px 6px 2px 0; font-size: 8px; line-height: 1.3; }
+.cfo-preview-allocation strong { font-size: 9px; }
+.cfo-preview-insight { display: flex; align-items: center; gap: 8px; margin-top: 19px; border-top: 1px solid var(--brand-border); padding-top: 15px; color: var(--brand-muted); font-size: 9px; line-height: 1.4; }
+.cfo-preview-insight svg { flex: none; width: 15px; height: 15px; color: var(--brand-violet); }
+.cfo-preview-main > button { min-height: 42px; display: block; margin: 20px auto 0; border: 0; border-radius: 2px; padding: 0 26px; background: var(--brand-violet); color: white; font-family: var(--font-figtree), sans-serif; font-size: 10px; font-weight: 750; }
+
+.cfo-promise-strip { border-block: 1px solid var(--brand-border); }
+.cfo-promise-strip > .marketing-container { display: grid; grid-template-columns: 1.5fr repeat(3, 1fr); align-items: stretch; }
+.cfo-promise-strip h2 { align-self: center; max-width: 340px; margin: 0; padding: 40px 38px 40px 0; font-size: 34px; line-height: 1.05; }
+.cfo-promise-strip > .marketing-container > div { display: flex; align-items: center; gap: 15px; border-left: 1px solid var(--brand-border); padding: 34px 24px; }
+.cfo-promise-strip svg { flex: none; width: 32px; height: 32px; color: var(--brand-violet); }
+.cfo-promise-strip svg,
+.cfo-daily-line svg,
+.security-band-list svg { transition: transform 240ms cubic-bezier(.2,.8,.2,1), color 240ms ease; }
+.cfo-promise-strip > .marketing-container > div:hover svg { transform: translateY(-5px) rotate(-4deg) scale(1.06); }
+.cfo-promise-strip p, .cfo-promise-strip strong, .cfo-promise-strip span { display: block; margin: 0; }
+.cfo-promise-strip strong { font-size: 13px; }
+.cfo-promise-strip span { margin-top: 4px; color: var(--brand-muted); font-size: 11px; line-height: 1.45; }
+
+.cfo-section-intro { max-width: 900px; }
+.cfo-section-intro > p { max-width: 700px; margin: 25px 0 0; color: var(--brand-muted); font-family: var(--font-newsreader), Georgia, serif; font-size: 25px; line-height: 1.45; }
+.cfo-section-intro.centered { margin-inline: auto; text-align: center; }
+.cfo-section-intro.centered > p { margin-inline: auto; }
+.cfo-daily-line { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 54px; margin-top: 72px; padding-top: 44px; border-top: 1px solid var(--brand-ink); }
+.cfo-daily-line article::before { content: ''; position: absolute; top: -6px; width: 12px; height: 12px; background: var(--brand-violet); }
+.cfo-daily-line article { display: grid; grid-template-columns: 42px 54px 1fr; align-items: start; gap: 18px; }
+.cfo-daily-line article > span { color: var(--brand-violet); font-family: var(--font-newsreader), Georgia, serif; font-size: 18px; }
+.cfo-daily-line svg { width: 45px; height: 45px; }
+.cfo-daily-line h3 { margin: 0 0 8px; font-family: var(--font-newsreader), Georgia, serif; font-size: 29px; font-weight: 560; }
+.cfo-daily-line p { margin: 0; color: var(--brand-muted); font-size: 13px; line-height: 1.6; }
+.cfo-daily-line article:hover svg { color: var(--brand-violet); transform: translateY(-6px) rotate(3deg); }
+.cfo-conversation { max-width: 850px; margin: 68px auto 0; border-left: 2px solid color-mix(in oklab, var(--brand-violet) 70%, transparent); padding-left: 26px; }
+.cfo-conversation > div { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 17px; border-bottom: 1px solid var(--brand-border); padding: 18px 10px; }
+.cfo-conversation > div:last-child { border-bottom: 0; }
+.cfo-conversation p { margin: 0; font-family: var(--font-newsreader), Georgia, serif; font-size: 18px; line-height: 1.45; }
+.cfo-conversation strong { margin-right: 10px; color: var(--brand-violet); }
+.cfo-avatar, .user-avatar { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--brand-violet); border-radius: 50%; color: var(--brand-violet); font-size: 12px; }
+.cfo-avatar svg { width: 20px; height: 20px; }
+.user-avatar { border-color: var(--brand-ink); color: var(--brand-ink); }
+
+.cfo-goals { padding-bottom: 70px; }
+.goal-journey-list { margin-top: 76px; border-top: 1px solid var(--brand-border); }
+.goal-journey-list > article { display: grid; grid-template-columns: 105px 1fr; gap: 28px; border-bottom: 1px solid var(--brand-border); padding: 38px 0; }
+.goal-journey-number { color: color-mix(in oklab, var(--brand-violet) 74%, transparent); font-family: var(--font-newsreader), Georgia, serif; font-size: 62px; line-height: 1; }
+.goal-journey-content h3 { margin: 0 0 26px; font-family: var(--font-newsreader), Georgia, serif; font-size: 33px; font-weight: 560; }
+.goal-stage-line { display: grid; grid-template-columns: repeat(3, 1fr); }
+.goal-stage-line > span { position: relative; display: grid; place-items: center; gap: 8px; border-top: 1px solid var(--brand-violet); padding-top: 0; font-size: 12px; }
+.goal-stage-line i { width: 38px; height: 38px; display: grid; place-items: center; margin-top: -20px; border: 1px solid var(--brand-violet); border-radius: 50%; background: var(--brand-cream); color: var(--brand-violet); font-style: normal; }
+.goal-journey-detail { display: grid; grid-template-columns: .8fr 1.2fr; gap: 26px; margin-top: 26px; border-top: 1px solid var(--brand-border); padding-top: 20px; }
+.goal-journey-detail p { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 13px; }
+.goal-journey-detail svg { flex: none; width: 24px; height: 24px; color: var(--brand-violet); }
+.goal-journey-detail strong { color: var(--brand-violet); }
+.cfo-final-cta { padding: 70px 0; background: var(--brand-ink); color: var(--brand-cream); }
+.cfo-final-cta h2 { max-width: 900px; font-size: clamp(2.5rem, 4.4vw, 4.5rem); }
+.cfo-final-cta .marketing-button-primary { min-width: 200px; }
+.cfo-final-cta .marketing-button svg { transition: transform 200ms ease; }
+.cfo-final-cta .marketing-button:hover svg { transform: translateX(5px); }
+
+/* Immersive CFO landing experience */
+.immersive-hero {
+  --hero-scroll: 0;
+  --hero-entry: 0;
+  --pointer-x: 0;
+  --pointer-y: 0;
+  --route-reveal: 100%;
+  position: relative;
+  min-height: 790px;
+  isolation: isolate;
+  overflow: clip;
+  border-bottom: 1px solid var(--brand-border);
+  padding-top: 58px;
+}
+
+.immersive-hero-stage { position: relative; min-height: 700px; }
+.immersive-hero-copy {
+  position: relative;
+  z-index: 5;
+  width: min(43%, 620px);
+  padding-top: 10px;
+  transform: translate3d(0, calc(var(--hero-scroll) * -26px), 0);
+  will-change: transform;
+}
+.immersive-hero-copy h1 { margin: 0; font-size: clamp(3.9rem, 5.65vw, 5.95rem); line-height: .94; letter-spacing: -.055em; }
+.immersive-hero-copy > p { max-width: 500px; }
+
+.immersive-dashboard {
+  position: absolute;
+  z-index: 4;
+  top: 16px;
+  right: -1%;
+  width: 57%;
+  transform:
+    perspective(1400px)
+    translate3d(
+      calc(var(--pointer-x) * -13px),
+      calc(var(--hero-scroll) * -52px + var(--pointer-y) * -10px),
+      0
+    )
+    rotateX(calc(-1.5deg + var(--pointer-y) * -2deg))
+    rotateY(calc(-1.8deg + var(--pointer-x) * 3deg))
+    rotateZ(calc(-1.2deg + var(--hero-scroll) * .35deg));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.immersive-dashboard .product-preview { min-height: 490px; border-color: color-mix(in oklab, var(--brand-ink) 16%, transparent); border-radius: 14px; box-shadow: 0 36px 90px color-mix(in oklab, var(--brand-ink) 17%, transparent); }
+.immersive-dashboard .cfo-preview-allocation > div > span { transform-origin: left center; animation: immersive-bar-grow 820ms cubic-bezier(.2,.8,.2,1) both; }
+.immersive-dashboard .cfo-preview-allocation > div:nth-child(2) > span { animation-delay: 90ms; }
+.immersive-dashboard .cfo-preview-allocation > div:nth-child(3) > span { animation-delay: 170ms; }
+.immersive-dashboard .cfo-preview-allocation > div:nth-child(4) > span { animation-delay: 240ms; }
+
+.immersive-landscape {
+  position: absolute;
+  z-index: 1;
+  inset: auto -2.5% -9% -2.5%;
+  height: 66%;
+  background: url('/marketing/virafi-goal-landscape-desktop.jpg') center bottom / cover no-repeat;
+  transform: translate3d(calc(var(--hero-scroll) * -10px), calc(var(--hero-scroll) * 28px), 0) scale(calc(1.035 + var(--hero-scroll) * .018));
+  transform-origin: 50% 80%;
+  will-change: transform;
+}
+.immersive-route-highlight {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 var(--route-reveal) 0 0);
+  background: url('/marketing/virafi-goal-landscape-desktop.jpg') center bottom / cover no-repeat;
+  filter: saturate(1.2) contrast(1.02) brightness(1.03);
+  opacity: .75;
+}
+
+.immersive-waypoint {
+  position: absolute;
+  z-index: 3;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in oklab, white 76%, var(--brand-violet));
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--brand-violet) 88%, white);
+  color: white;
+  box-shadow: 0 0 0 7px color-mix(in oklab, var(--brand-violet) 13%, transparent), 0 13px 35px color-mix(in oklab, var(--brand-violet) 28%, transparent);
+  transform: translate3d(0, calc(var(--hero-scroll) * -18px), 0) scale(calc(.92 + var(--hero-entry) * .08));
+  will-change: transform;
+}
+.immersive-waypoint svg { width: 25px; height: 25px; }
+.waypoint-home { left: 17%; bottom: 17%; }
+.waypoint-travel { left: 47%; bottom: 29%; }
+.waypoint-compass { left: 55%; bottom: 8%; }
+.waypoint-safety { right: 11%; bottom: 16%; }
+
+@keyframes immersive-bar-grow {
+  from { transform: scaleX(0); opacity: .35; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+[data-motion-section] { --section-travel: .5; --section-parallax: 0; }
+[data-motion-item] { --motion-reveal: 1; }
+html[data-marketing-motion='ready'] [data-motion-item] {
+  opacity: calc(.18 + var(--motion-reveal) * .82);
+  transform: translate3d(0, calc((1 - var(--motion-reveal)) * 34px), 0) scale(calc(.992 + var(--motion-reveal) * .008));
+  will-change: transform, opacity;
+}
+html[data-marketing-motion='ready'] .cfo-promise-strip [data-motion-item] {
+  opacity: 1;
+  transform: none;
+}
+.marketing-site main { transform-origin: 50% 0; }
+html[data-marketing-route='enter'] .marketing-site main { opacity: 0; transform: translate3d(0, 14px, 0); }
+html[data-marketing-route='ready'] .marketing-site main {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 520ms cubic-bezier(.22, 1, .36, 1), transform 620ms cubic-bezier(.22, 1, .36, 1);
+}
+.cfo-proactive { position: relative; overflow: clip; }
+.cfo-conversation {
+  opacity: calc(.18 + var(--motion-reveal, 1) * .82);
+  transform: translate3d(calc(var(--section-parallax) * -8px), calc((1 - var(--motion-reveal, 1)) * 34px), 0);
+}
+.marketing-page-hero .page-hero-note,
+.security-hero .security-orbit {
+  opacity: calc(.18 + var(--motion-reveal, 1) * .82);
+  transform: translate3d(0, calc((1 - var(--motion-reveal, 1)) * 34px + var(--section-parallax) * -10px), 0);
+}
+.goal-journey-list > article { transition: padding 260ms ease, background-color 260ms ease; }
+.goal-journey-list > article:hover { padding-inline: 24px; background: color-mix(in oklab, var(--brand-violet) 4%, transparent); }
+.goal-stage-line i { transition: color 220ms ease, background-color 220ms ease, transform 220ms ease; }
+.goal-journey-list > article:hover .goal-stage-line i { background: var(--brand-violet); color: white; transform: translateY(-4px); }
+.marketing-security-band { position: relative; overflow: clip; }
+
 .marketing-section { padding: 126px 0; border-bottom: 1px solid var(--brand-border); }
 .marketing-section h2, .marketing-security-band h2, .marketing-cta h2 { margin: 0; font-size: clamp(2.9rem, 5vw, 5.25rem); line-height: .98; letter-spacing: -.045em; }
 .marketing-capabilities h2 { text-align: center; }
@@ -241,6 +448,7 @@ h2 {
 .security-band-list svg { width: 39px; height: 39px; color: oklch(72% 0.14 292); }
 .security-band-list h3 { margin: 28px 0 12px; font-size: 16px; line-height: 1.3; }
 .security-band-list p { margin: 0; color: color-mix(in oklab, var(--brand-cream) 64%, transparent); font-size: 12px; line-height: 1.7; }
+.security-band-list article:hover svg { color: white; transform: translateY(-6px) scale(1.05); }
 
 .boundaries-grid { display: grid; grid-template-columns: .8fr 1.2fr; align-items: center; gap: 90px; }
 .boundaries-grid ul { margin: 0; padding: 0 0 0 42px; border-left: 2px solid color-mix(in oklab, var(--brand-violet) 50%, transparent); list-style: none; }
@@ -356,6 +564,17 @@ h2 {
   .marketing-footer-meta { grid-column: 1 / -1; padding: 24px 0 0; border-left: 0; border-top: 1px solid var(--brand-border); }
   .marketing-page-hero-grid, .about-hero .marketing-container { grid-template-columns: 1fr; }
   .page-hero-note { max-width: 540px; }
+  .cfo-hero .marketing-hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .cfo-promise-strip > .marketing-container { grid-template-columns: repeat(3, 1fr); }
+  .cfo-promise-strip h2 { grid-column: 1 / -1; border-bottom: 1px solid var(--brand-border); }
+  .cfo-promise-strip > .marketing-container > div:first-of-type { border-left: 0; }
+  .immersive-hero { min-height: 1120px; }
+  .immersive-hero-stage { min-height: 1030px; }
+  .immersive-hero-copy { width: min(72%, 700px); }
+  .immersive-dashboard { top: 390px; right: 0; width: 82%; }
+  .immersive-landscape { height: 61%; }
+  .waypoint-home { left: 13%; bottom: 15%; }
+  .waypoint-travel { left: 47%; bottom: 27%; }
 }
 
 @media (max-width: 800px) {
@@ -390,10 +609,29 @@ h2 {
   .legal-layout { grid-template-columns: 1fr; gap: 44px; }
   .legal-layout > aside { position: static; }
   .legal-layout aside nav { grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  .cfo-promise-strip > .marketing-container { grid-template-columns: 1fr; }
+  .cfo-promise-strip h2 { padding-inline: 0; }
+  .cfo-promise-strip > .marketing-container > div { border-left: 0; border-bottom: 1px solid var(--brand-border); padding-inline: 0; }
+  .cfo-daily-line { grid-template-columns: 1fr; gap: 34px; border-top: 0; padding-top: 0; }
+  .cfo-daily-line article { border-top: 1px solid var(--brand-border); padding-top: 25px; }
+  .cfo-daily-line article::before { display: none; }
+  .goal-journey-list > article { grid-template-columns: 74px 1fr; }
+  .goal-journey-detail { grid-template-columns: 1fr; }
+  .immersive-hero { min-height: 1260px; padding-top: 48px; }
+  .immersive-hero-stage { min-height: 1160px; }
+  .immersive-hero-copy { width: min(92%, 700px); }
+  .immersive-hero-copy h1 { font-size: clamp(3.6rem, 10vw, 5.25rem); }
+  .immersive-dashboard { top: 470px; right: -6%; width: 96%; }
+  .immersive-dashboard .product-preview { min-width: 720px; }
+  .immersive-landscape { inset-inline: -8%; height: 59%; }
+  .waypoint-home { left: 12%; }
+  .waypoint-travel { left: 48%; bottom: 25%; }
+  .waypoint-safety { right: 8%; }
 }
 
 @media (max-width: 560px) {
-  .marketing-nav { grid-template-columns: 1fr auto auto; }
+  .marketing-nav { min-height: 64px; grid-template-columns: 1fr auto; }
+  .marketing-nav-actions { display: none; }
   .marketing-mobile-menu { display: block; }
   .marketing-header .marketing-logo .font-brand { font-size: 1.35rem; }
   .marketing-header .marketing-logo svg { width: 27px; height: 27px; }
@@ -423,8 +661,62 @@ h2 {
   .legal-hero { padding: 65px 0 50px; }
   .legal-layout { padding-block: 45px 80px; }
   .legal-layout aside nav { grid-template-columns: 1fr; }
+  .cfo-hero .marketing-hero-copy h1 { max-width: 100%; font-size: clamp(3rem, 13vw, 3.45rem); overflow-wrap: anywhere; }
+  .cfo-product-preview { min-height: 500px; }
+  .cfo-preview-main { padding: 32px 28px; }
+  .cfo-section-intro > p { font-size: 20px; }
+  .cfo-conversation { margin-top: 48px; padding-left: 14px; }
+  .cfo-conversation p { font-size: 16px; }
+  .goal-journey-list > article { grid-template-columns: 1fr; gap: 14px; }
+  .goal-journey-number { font-size: 40px; }
+  .goal-stage-line { gap: 0; }
+  .goal-stage-line > span { text-align: center; font-size: 10px; }
+  .immersive-hero { min-height: 1580px; padding-top: 28px; }
+  .immersive-hero-stage { min-height: 1490px; }
+  .immersive-hero-copy { width: 100%; padding-top: 0; transform: translate3d(0, calc(var(--hero-scroll) * -16px), 0); }
+  .immersive-hero-copy h1 { font-size: clamp(2.72rem, 12vw, 3.2rem); line-height: .98; }
+  .immersive-hero-copy > p { margin: 25px 0 24px; }
+  .immersive-hero .marketing-actions { flex-wrap: nowrap; gap: 10px; }
+  .immersive-hero .marketing-actions .marketing-button { flex: 1 1 0; width: auto; min-height: 52px; padding-inline: 10px; font-size: 12px; }
+  .immersive-dashboard {
+    top: 370px;
+    left: 0;
+    right: auto;
+    width: 200%;
+    transform:
+      perspective(1200px)
+      translate3d(calc(var(--pointer-x) * -6px), calc(var(--hero-scroll) * -28px), 0)
+      scale(.5)
+      rotateZ(calc(-1.4deg + var(--hero-scroll) * .3deg));
+    transform-origin: top left;
+  }
+  .immersive-dashboard .product-preview { min-width: 720px; min-height: 500px; border-radius: 14px; }
+  .immersive-landscape { inset: auto -18% 7% -18%; height: 840px; transform: translate3d(0, calc(var(--hero-scroll) * 18px), 0) scale(calc(1.02 + var(--hero-scroll) * .014)); }
+  .immersive-landscape,
+  .immersive-route-highlight { background-image: url('/marketing/virafi-goal-landscape-mobile.jpg'); background-position: center bottom; }
+  .immersive-waypoint { width: 44px; height: 44px; transform: translate3d(0, calc(var(--hero-scroll) * -12px), 0) scale(calc(.9 + var(--hero-entry) * .1)); }
+  .immersive-waypoint svg { width: 23px; height: 23px; }
+  .waypoint-home { left: 22%; bottom: 42%; }
+  .waypoint-travel { left: auto; right: 20%; bottom: 35%; }
+  .waypoint-compass { left: 47%; bottom: 22%; }
+  .waypoint-safety { right: 16%; bottom: 11%; }
+  .cfo-promise-strip h2 { font-size: 38px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marketing-button { transition: none; }
+  .marketing-button,
+  .cfo-promise-strip svg,
+  .cfo-daily-line svg,
+  .security-band-list svg,
+  .immersive-dashboard,
+  .immersive-route-highlight,
+  .goal-journey-list > article,
+  .goal-stage-line i { transition: none; }
+  .immersive-dashboard .cfo-preview-allocation > div > span { animation: none; }
+  .immersive-hero-copy,
+  .immersive-dashboard,
+  .immersive-landscape,
+  .immersive-waypoint,
+  html[data-marketing-motion='ready'] [data-motion-item],
+  html[data-marketing-route] .marketing-site main { transform: none; opacity: 1; transition: none; }
 }

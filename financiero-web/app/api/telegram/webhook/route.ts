@@ -14,9 +14,7 @@ import { appendVirafiaExchange } from '@/lib/virafia-conversation';
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const openRouterApiKey = process.env.OPENROUTER_API_KEY || '';
-const conversationApiKey = openRouterApiKey || googleApiKey;
-const openAiApiKey = process.env.OPENAI_API_KEY || '';
+const conversationApiKey = googleApiKey;
 
 type TelegramMessage = {
   message_id?: number;
@@ -377,11 +375,8 @@ async function transcribirAudioTelegram(message?: TelegramMessage) {
 
   return transcribirAudioFinanciero({
     geminiApiKey: googleApiKey,
-    openRouterApiKey,
-    openAiApiKey,
     audio: audioBuffer,
     mimeType: audio.mimeType,
-    fileName: file.file_path.split('/').pop() || undefined,
   });
 }
 

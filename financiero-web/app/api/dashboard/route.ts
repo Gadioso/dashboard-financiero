@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { applyProfileFilter, getRequestTenantContext } from '@/lib/tenant-context';
 import { isConcreteFinancialGoal } from '@/lib/personalized-goals';
+import { buildGoalCfoPlan } from '@/lib/goal-cfo-plan';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,14 +15,6 @@ function validarMes(mes: string | null) {
 
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-function limitesMes(mes: string) {
-  const [year, month] = mes.split('-').map(Number);
-  return {
-    inicio: new Date(Date.UTC(year, month - 1, 1)).toISOString(),
-    fin: new Date(Date.UTC(year, month, 1)).toISOString(),
-  };
 }
 
 export async function GET(request: Request) {
@@ -37,7 +30,6 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const mesActivo = validarMes(url.searchParams.get('mes'));
-    const mesLimites = limitesMes(mesActivo);
     const tenant = await getRequestTenantContext(request);
 
     if (!tenant.profileId) {
@@ -52,12 +44,12 @@ export async function GET(request: Request) {
       .eq('mes_anio', `${mesActivo}-01`);
     const ingresosQuery = supabase
       .from('ingresos')
-      .select('id, concepto, monto, tipo, fecha, bank_transaction_raw_id')
+      .select('id, concepto, monto, tipo, fecha')
       .gte('fecha', inicio2026)
       .lt('fecha', fin2026);
     const gastosQuery = supabase
       .from('gastos')
-      .select('id, concepto, monto, categoria, subcategoria, origen, fecha, bank_transaction_raw_id')
+      .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
       .gte('fecha', inicio2026)
       .lt('fecha', fin2026);
     const abonosQuery = supabase
@@ -71,37 +63,14 @@ export async function GET(request: Request) {
       .select('*');
     const personalizedGoalsQuery = supabase
       .from('financial_goals')
-      .select('id, name, current_amount, target_amount, target_date, updated_at')
+      .select('id, name, current_amount, target_amount, target_date, horizon_months, source, updated_at')
       .eq('status', 'active')
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
-    const movimientosBancariosQuery = supabase
-      .from('bank_transactions_raw')
-      .select(`
-        id,
-        posted_at,
-        authorized_at,
-        description,
-        merchant_name,
-        amount,
-        currency,
-        normalized_status,
-        classification_error,
-        gasto_id,
-        ingreso_id,
-        created_at,
-        updated_at,
-        bank_accounts(name, official_name),
-        bank_connections(provider, institution_name, last_sync_at)
-      `)
-      .in('normalized_status', ['pending', 'failed', 'ignored'])
-      .gte('posted_at', mesLimites.inicio)
-      .lt('posted_at', mesLimites.fin)
-      .order('posted_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(200);
-
-    const [{ data: pres, error: errorPres }, { data: ingresosAnuales, error: errorIngresos }, { data: gastosAnuales, error: errorGastos }, abonosTarjetaResult, fondosResult, personalizedGoalsResult, movimientosBancariosResult] =
+    const personalizationQuery = supabase
+      .from('financial_personalization_profiles')
+      .select('monthly_goal_capacity, emergency_fund_status, investment_experience, risk_tolerance, work_model, goal_priorities');
+    const [{ data: pres, error: errorPres }, { data: ingresosAnuales, error: errorIngresos }, { data: gastosAnuales, error: errorGastos }, abonosTarjetaResult, fondosResult, personalizedGoalsResult, personalizationResult] =
       await Promise.all([
         applyProfileFilter(presupuestosQuery, tenant.profileId).maybeSingle(),
         applyProfileFilter(ingresosQuery, tenant.profileId),
@@ -109,7 +78,7 @@ export async function GET(request: Request) {
         applyProfileFilter(abonosQuery, tenant.profileId),
         applyProfileFilter(fondosQuery, tenant.profileId),
         applyProfileFilter(personalizedGoalsQuery, tenant.profileId),
-        applyProfileFilter(movimientosBancariosQuery, tenant.profileId),
+        applyProfileFilter(personalizationQuery, tenant.profileId).maybeSingle(),
       ]);
 
     if (errorPres) throw new Error(`No pude consultar presupuestos: ${errorPres.message}`);
@@ -150,6 +119,13 @@ export async function GET(request: Request) {
       fecha_objetivo: goal.target_date,
       updated_at: goal.updated_at,
       }));
+    const cfoPlan = personalizationResult.data
+      ? buildGoalCfoPlan({
+          personalization: personalizationResult.data,
+          goals: (personalizedGoalsResult.data || []).filter((goal) => isConcreteFinancialGoal(goal.name)),
+          legacyGeneratedGoalIds: goalMetadata.generatedGoalIds,
+        })
+      : null;
 
     return NextResponse.json({
       success: true,
@@ -161,7 +137,7 @@ export async function GET(request: Request) {
       fondosAcumulados: personalizedGoals.length > 0
         ? personalizedGoals
         : fondosResult.error && !canIgnoreOptionalTableError(fondosResult.error) ? [] : enrichedGoals,
-      movimientosBancarios: movimientosBancariosResult.error ? [] : movimientosBancariosResult.data || [],
+      cfoPlan,
       schema: {
         acceptsAbonosTarjetaCredito: !abonosTarjetaResult.error,
         abonosTarjetaError: abonosTarjetaResult.error?.message || null,
@@ -169,8 +145,6 @@ export async function GET(request: Request) {
         fondosAcumuladosError: fondosResult.error?.message || null,
         acceptsPersonalizedGoals: !personalizedGoalsResult.error,
         personalizedGoalsError: personalizedGoalsResult.error?.message || null,
-        acceptsBankTransactions: !movimientosBancariosResult.error,
-        bankTransactionsError: movimientosBancariosResult.error?.message || null,
         profileScoped: Boolean(tenant.profileId),
         tenantSource: tenant.source,
       },

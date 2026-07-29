@@ -1,92 +1,21 @@
-# Open Banking / Open Finance provider plan
+# Open banking pausado
 
-La ruta para escalar el SaaS es conectar bancos con proveedores Open Banking en modo read-only; los otros orígenes de captura son Telegram y web.
+Virafi no conecta cuentas bancarias ni conserva credenciales de instituciones financieras. Los movimientos se registran desde la web o Telegram.
 
-## Prioridad
+## Decisión de julio de 2026
 
-1. Syncfy para Mexico.
-2. Plaid para Estados Unidos.
-3. Prometeo para cobertura regional LATAM.
-4. Belvo para LATAM, especialmente cuando la cobertura comercial convenga.
-5. Finerio Connect para Mexico, sujeto a alta comercial.
+- Syncfy fue retirado porque su mínimo comercial de MXN 30,000 al mes no es viable para la etapa actual.
+- Plaid no ofrece agregación de cuentas y transacciones bancarias en México; su cobertura bancaria se limita a Estados Unidos, Canadá y mercados europeos.
+- Belvo sí cubre México, pero su plan productivo publicado empieza en USD 1,000 al mes.
+- Finerio Connect y Prometeo requieren cotización comercial y no publican una opción productiva de autoservicio suficientemente económica para Virafi.
 
-## Variables de entorno
+## Criterio para reconsiderar
 
-No guardar estos valores en git. Configurarlos en Vercel y, solo para pruebas locales, en `.env.local`.
+Sólo reabrir esta función si un proveedor ofrece cobertura comprobable de los bancos mexicanos prioritarios, consentimiento de solo lectura, webhooks o actualización bajo demanda, borrado verificable y coste variable sin mínimo mensual alto.
 
-```bash
-PLAID_CLIENT_ID=
-PLAID_SECRET=
-PLAID_ENV=sandbox
-BANK_TOKEN_ENCRYPTION_KEY=
+Fuentes primarias:
 
-SYNCFY_ENV=sandbox
-SYNCFY_BASE_URL=https://opendata-api.syncfy.com/v1
-SYNCFY_API_KEY=
-
-PROMETEO_API_KEY=
-PROMETEO_ENV=sandbox
-
-BELVO_SECRET_ID=
-BELVO_SECRET_PASSWORD=
-BELVO_ENV=sandbox
-
-FINERIO_CLIENT_ID=
-FINERIO_CLIENT_SECRET=
-FINERIO_ENV=sandbox
-```
-
-## Supabase
-
-Aplicar la migracion:
-
-```bash
-npm run sql:open-banking
-```
-
-Tablas nuevas:
-
-- `bank_connections`: una conexion bancaria por usuario/proveedor/institucion.
-- `bank_accounts`: cuentas y balances leidos desde el proveedor.
-- `bank_transactions_raw`: movimientos crudos antes de clasificarlos como gasto/ingreso.
-- `bank_sync_runs`: auditoria de sincronizaciones.
-
-Todas usan `profile_id` y RLS con `auth.uid()`.
-
-## Syncfy Mexico sandbox
-
-Syncfy es el proveedor principal para Mexico. La integracion queda read-only para el MVP:
-
-- base sandbox confirmada: `https://opendata-api.syncfy.com/v1`
-- autenticacion: header `Authorization: API_KEY api_key=...`
-- catalogo de paises: `GET /catalogues/countries`
-- catalogo de sitios por pais: `GET /catalogues/sites?country=MX`
-- organizaciones/sitios: `GET /sites?country=MX`
-- ruta interna inicial: `GET /api/bank/syncfy/catalogue?country=MX`
-- crear/reusar usuario Syncfy: `POST /v1/users`
-- crear sesion corta para widget: `POST /v1/sessions`
-- ruta interna de sesion: `POST /api/bank/syncfy/session`
-- pagina interna del widget: `/bank/syncfy`
-
-No se habilitan pagos, transferencias ni initiation flows en esta fase. El siguiente paso es usar el endpoint de `credentials/pulls` con usuarios sandbox de prueba y mapear cuentas/transacciones hacia `bank_accounts` y `bank_transactions_raw`.
-
-## API interna inicial
-
-`GET /api/bank/providers` devuelve que proveedores estan configurados por env var sin exponer secretos.
-
-## Siguiente implementacion
-
-1. Plaid Link sandbox:
-   - `POST /api/bank/plaid/link-token`
-   - `POST /api/bank/plaid/exchange-public-token`
-   - sincronizar `/transactions/sync`
-2. Prometeo sandbox:
-   - flujo de credencial/link segun institucion sandbox disponible
-   - normalizar cuentas y transacciones al mismo modelo interno
-3. Motor comun:
-   - normalizar montos y fechas
-   - deduplicar por `connection_id + provider_transaction_id`
-   - mandar transacciones nuevas al clasificador actual con `POST /api/bank/transactions/classify`
-   - crear `gastos` / `ingresos` con `profile_id`
-   - procesar en lotes chicos con `BANK_CLASSIFICATION_BATCH_SIZE` para backpressure
-   - auditar conteos de procesadas, clasificadas, fallidas y pendientes restantes
+- https://belvo.com/es/planes-precios/
+- https://developers.belvo.com/es/apis/belvoopenapispec/section/introduccion/informacion-disponible-y-metodos-de-pago
+- https://plaid.com/docs/api/institutions/
+- https://support.plaid.com/hc/en-us/articles/27895826947735-What-Plaid-products-are-supported-in-each-country-and-region

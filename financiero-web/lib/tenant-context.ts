@@ -1,5 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+export {
+  applyProfileFilter,
+  normalizeProfileId,
+  withProfile,
+} from '@/lib/profile-scope';
+import { normalizeProfileId } from '@/lib/profile-scope';
 
 export type TenantContext = {
   profileId: string | null;
@@ -7,17 +13,8 @@ export type TenantContext = {
   email?: string | null;
 };
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const dashboardAuthCookieName = 'dashboard_auth';
 const supabaseAccessCookieName = 'sb_access_token';
-
-export function normalizeProfileId(value?: string | null) {
-  const trimmed = value?.trim();
-
-  if (!trimmed) return null;
-
-  return uuidPattern.test(trimmed) ? trimmed : null;
-}
 
 export function getPrivateProfileId() {
   return normalizeProfileId(process.env.DASHBOARD_PRIVATE_PROFILE_ID || null);
@@ -154,19 +151,4 @@ export async function getTelegramTenantContext({
   }
 
   return getPrivateTenantContext();
-}
-
-export function withProfile<T extends Record<string, unknown>>(payload: T, profileId?: string | null): T & { profile_id?: string } {
-  if (!profileId) return payload;
-
-  return {
-    ...payload,
-    profile_id: profileId,
-  };
-}
-
-export function applyProfileFilter<Query>(query: Query, profileId?: string | null): Query {
-  if (!profileId) return query;
-
-  return (query as Query & { eq: (column: string, value: string) => Query }).eq('profile_id', profileId);
 }

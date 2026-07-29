@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { MovementInputError } from '@/lib/ai-classifier';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { esAbonoTarjetaCredito, extraerMontoAbonoTarjeta } from '@/lib/card-payment-intent';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
@@ -423,6 +424,14 @@ export async function POST(request: Request) {
       message: `Registrado. ${respuesta.message}`,
     } });
   } catch (error: unknown) {
+    if (error instanceof MovementInputError) {
+      return NextResponse.json({
+        success: true,
+        action: 'reply',
+        message: error.message,
+      });
+    }
+
     const supabase = getSupabaseServiceClient();
     await logErrorEvent({
       supabase,

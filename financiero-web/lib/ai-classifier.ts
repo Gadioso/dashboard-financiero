@@ -15,6 +15,13 @@ const herramientaProductivaRegex =
 const senalIngresoRegex =
   /(?<![\p{L}\p{N}])(?:gan[eé]|gener[eé]|ingres[eé]|me\s+pagaron|pagaron|cobr[eé]|recib[ií]|depositaron|dep[oó]sito|sueldo|salario|n[oó]mina|quincena|bono|freelance|ingresos?|utilidad|comisi[oó]n|cashback|reembolso|devoluci[oó]n)(?![\p{L}\p{N}])/u;
 
+export class MovementInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MovementInputError';
+  }
+}
+
 function validarClasificacion(valor: unknown): ClasificacionMovimiento {
   const data = valor as Partial<ClasificacionMovimiento>;
   const categoria = data.categoria as CategoriaFinanciera;
@@ -276,8 +283,8 @@ export async function clasificarMovimientoFinanciero(
   context: { supabase?: SupabaseClient | null; profileId?: string | null } = {},
 ): Promise<ClasificacionMovimiento> {
   if (esComandoAyuda(texto)) {
-    throw new Error(
-      'Listo para registrar movimientos. Puedes escribir: pagué 250 de gasolina, 150 tacos, metí 1000 a cetes, o 500 fondo emergencia.'
+    throw new MovementInputError(
+      'Aquí estoy. Cuéntame qué quieres entender o hacer con tus finanzas y partimos de ahí.'
     );
   }
 

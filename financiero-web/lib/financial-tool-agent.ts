@@ -1,10 +1,14 @@
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { stepCountIs, tool, ToolLoopAgent } from 'ai';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import type { MensajeMemoria } from '@/lib/conversation-agent';
-import { getAiModels, getAiOutputLimit } from '@/lib/ai-policy';
+import { getAiOutputLimit } from '@/lib/ai-policy';
 import { recordAiUsage } from '@/lib/ai-usage';
+import { getGeminiModelName } from '@/lib/gemini';
+import { VIRAFIA_CONVERSATION_PRINCIPLES } from '@/lib/virafia-conversation-principles';
+import { buildGoalCfoPlan } from '@/lib/goal-cfo-plan';
+import { isConcreteFinancialGoal } from '@/lib/personalized-goals';
 
 type AgentRunInput = {
   text: string;
@@ -26,7 +30,7 @@ function numberValue(value: unknown) {
 }
 
 function getAgentModel() {
-  return getAiModels('financial-agent', 'openrouter')[0];
+  return getGeminiModelName('financial-agent');
 }
 
 function compactQueryResult<T>(result: { data: T | null; error: { message: string } | null }) {
@@ -34,16 +38,10 @@ function compactQueryResult<T>(result: { data: T | null; error: { message: strin
 }
 
 export async function runFinancialToolAgent({ text, memory, supabase, profileId }: AgentRunInput) {
-  const apiKey = process.env.OPENROUTER_API_KEY || '';
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY no está configurada.');
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+  if (!apiKey) throw new Error('GEMINI_API_KEY no está configurada.');
 
-  const openrouter = createOpenRouter({
-    apiKey,
-    headers: {
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app',
-      'X-OpenRouter-Title': 'Virafi Agent',
-    },
-  });
+  const google = createGoogleGenerativeAI({ apiKey });
 
   const tools = {
     getFinancialOverview: tool({
@@ -95,22 +93,42 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       },
     }),
     getConnectedAccounts: tool({
-      description: 'Get bank and investment connection status plus visible balances without exposing credentials. Use for connected-account status, visible net worth and balance-source questions.',
+      description: 'Get investment connection status. Virafi does not connect bank accounts or expose real-time bank balances.',
       inputSchema: z.object({}),
       execute: async () => {
-        const [bankResult, accountResult, investmentResult] = await Promise.all([
-          supabase.from('bank_connections').select('provider, institution_name, status, last_sync_at').eq('profile_id', profileId),
-          supabase.from('bank_accounts').select('name, official_name, type, subtype, currency, current_balance, available_balance, updated_at').eq('profile_id', profileId),
-          supabase.from('investment_accounts').select('provider, account_name, account_type, mode, status, base_currency').eq('profile_id', profileId),
-        ]);
-        if (bankResult.error) throw new Error(bankResult.error.message);
-        if (accountResult.error) throw new Error(accountResult.error.message);
+        const investmentResult = await supabase
+          .from('investment_accounts')
+          .select('provider, account_name, account_type, mode, status, base_currency')
+          .eq('profile_id', profileId);
+        if (investmentResult.error) throw new Error(investmentResult.error.message);
         return {
-          bankConnections: bankResult.data || [],
-          bankAccounts: accountResult.data || [],
-          visibleBankBalance: (accountResult.data || []).reduce((sum, account) => sum + numberValue(account.current_balance), 0),
           investmentAccounts: investmentResult.data || [],
-          balanceScope: 'The visible bank balance only includes connected bank accounts. It excludes cash, unconnected accounts and investment value unless a separate tool provides it.',
+          balanceScope: 'Virafi uses user-entered movements and does not have access to real-time bank balances.',
+        };
+      },
+    }),
+    getInvestmentResearch: tool({
+      description: 'Get the profile-scoped investment research, allowed risk settings and latest available market snapshots. Use before naming any cryptocurrency, fund, ETF, stock or other instrument. Results are a research watchlist, never an automatic buy instruction.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const [riskResult, thesesResult, snapshotsResult] = await Promise.all([
+          supabase.from('advisor_disclosures').select('metadata, accepted_at').eq('profile_id', profileId).eq('disclosure_type', 'risk_profile').order('accepted_at', { ascending: false }).limit(1).maybeSingle(),
+          supabase.from('investment_theses').select('asset_id, title, summary, stance, horizon, confidence, evidence, invalidation_rules, updated_at').eq('profile_id', profileId).eq('status', 'active').order('updated_at', { ascending: false }).limit(12),
+          supabase.from('market_data_snapshots').select('asset_id, provider, captured_at, price, spread_bps, volume_24h').order('captured_at', { ascending: false }).limit(30),
+        ]);
+        const assetIds = [...new Set([
+          ...(thesesResult.data || []).map((row) => row.asset_id),
+          ...(snapshotsResult.data || []).map((row) => row.asset_id),
+        ].filter(Boolean))] as string[];
+        const assetsResult = assetIds.length
+          ? await supabase.from('market_assets').select('id, asset_type, symbol, name, exchange, currency, provider').in('id', assetIds)
+          : { data: [], error: null };
+        return {
+          riskProfile: compactQueryResult(riskResult),
+          theses: compactQueryResult(thesesResult),
+          snapshots: compactQueryResult(snapshotsResult),
+          assets: compactQueryResult(assetsResult),
+          boundary: 'Only discuss instruments supported by current research and allowed by the saved risk profile. Require explicit confirmation and an execution provider for any real order.',
         };
       },
     }),
@@ -131,6 +149,25 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
           accumulatedFunds: compactQueryResult(fundsResult),
           financialGoals: compactQueryResult(goalsResult),
         };
+      },
+    }),
+    getCfoGoalPlan: tool({
+      description: 'Build the explainable CFO allocation for the user: emergency reserve, each real goal, long-term investing, goal milestones, unsupported legacy amounts and the next discovery question. Use whenever the user asks how to achieve, fund, prioritize or break down goals.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const [personalizationResult, goalsResult, disclosureResult] = await Promise.all([
+          supabase.from('financial_personalization_profiles').select('monthly_goal_capacity, emergency_fund_status, investment_experience, risk_tolerance, work_model, goal_priorities').eq('profile_id', profileId).maybeSingle(),
+          supabase.from('financial_goals').select('id, name, current_amount, target_amount, target_date, horizon_months, source').eq('profile_id', profileId).eq('status', 'active').order('sort_order'),
+          supabase.from('advisor_disclosures').select('metadata').eq('profile_id', profileId).eq('disclosure_type', 'personalized_advice').eq('version', 'financial-goals-v1').maybeSingle(),
+        ]);
+        if (personalizationResult.error) throw new Error(personalizationResult.error.message);
+        if (goalsResult.error) throw new Error(goalsResult.error.message);
+        const metadata = disclosureResult.data?.metadata as { generatedGoalIds?: Array<string | number> } | null;
+        return buildGoalCfoPlan({
+          personalization: personalizationResult.data || {},
+          goals: (goalsResult.data || []).filter((goal) => isConcreteFinancialGoal(goal.name)),
+          legacyGeneratedGoalIds: metadata?.generatedGoalIds,
+        });
       },
     }),
     getBudgetsAndCardPayments: tool({
@@ -157,22 +194,62 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
         return { tasks: compactQueryResult(tasks), findings: compactQueryResult(findings) };
       },
     }),
+    getDailyCfoContext: tool({
+      description: 'Get the latest proactive CFO message with its exact deterministic actions, goal pacing and financial snapshot. Use this for follow-ups such as "¿qué hago para eso?", "¿cómo lo aparto?", "¿de dónde salió esa cantidad?" or references to what VirafIA said today.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const [briefingResult, contributionsResult] = await Promise.all([
+          supabase
+            .from('daily_cfo_briefings')
+            .select('local_date, message, summary, actions, goal_paces, financial_snapshot, status, generated_at, sent_at')
+            .eq('profile_id', profileId)
+            .in('status', ['ready', 'sent', 'partial'])
+            .order('local_date', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('financial_goal_contributions')
+            .select('amount, contributed_at, source, status, note, financial_goals(name)')
+            .eq('profile_id', profileId)
+            .order('created_at', { ascending: false })
+            .limit(20),
+        ]);
+
+        return {
+          latestBriefing: compactQueryResult(briefingResult),
+          recentGoalContributions: compactQueryResult(contributionsResult),
+          executionBoundary: {
+            canMoveMoney: false,
+            canTrackConfirmedContribution: true,
+            explanation: 'The user moves money in their real bank or investment account; Virafi records confirmed goal progress.',
+          },
+        };
+      },
+    }),
   };
 
   const now = new Date();
   const currentYear = now.getUTCFullYear();
   const currentMonth = now.getUTCMonth();
   const agent = new ToolLoopAgent({
-    model: openrouter.chat(getAgentModel()),
+    model: google(getAgentModel()),
     maxOutputTokens: getAiOutputLimit('financial-agent'),
     stopWhen: stepCountIs(8),
     tools,
     instructions: `You are the real financial operating agent for Virafi.
 Current date: ${now.toISOString()}. Current year: ${currentYear}. Current month index: ${currentMonth}.
-Respond in natural Mexican Spanish, directly and intelligently.
+
+${VIRAFIA_CONVERSATION_PRINCIPLES}
+
 For every factual financial answer, call at least one tool. Never reuse a number from chat memory as evidence.
 You may call multiple tools, inspect results, and call another tool if the first result is incomplete or inconsistent.
-You can inspect the full read-only Virafi workspace for this authenticated profile: movements, income, connected bank balances, planning, personalization, goals, investment context, tasks and findings. Never imply access to data outside these profile-scoped tools.
+You can inspect the full read-only Virafi workspace for this authenticated profile: movements, income, planning, personalization, goals, investment context, tasks and findings. Never imply access to bank accounts or data outside these profile-scoped tools.
+When the user follows up on a proactive message, amount or recommendation, call getDailyCfoContext. Use its structured action and snapshot to answer the new intent; do not merely paraphrase the proactive message.
+For questions about achieving, funding, prioritizing or decomposing goals, call getCfoGoalPlan. Treat its allocation as a proposal, explain the tradeoff, and ask only its single highest-leverage nextQuestion when a goal still needs discovery.
+Before naming a cryptocurrency, fund, ETF, stock or other instrument, call getInvestmentResearch as well as getCfoGoalPlan. Recommend only a research shortlist supported by fresh data and the saved risk profile; state why it fits, what could invalidate it, and never use money needed within three years for volatile assets.
+Never present an unsupported legacy target as the price of a goal. A monthly saving capacity constrains the plan; it does not determine what moving, travel, property or financial independence costs.
+If a goal combines different outcomes, separate them into milestones with different costs, dates and liquidity needs. Do not quote the raw goal name as though it were a variable label; speak naturally about what the person is trying to accomplish.
+When asked how to set money aside, distinguish three steps when applicable: where the money should physically go, how to keep it unavailable for ordinary spending, and how its confirmed contribution is tracked in Virafi. Ask a specific question only if the destination depends on liquidity or timing that the tools do not establish.
 For "anual", "anualmente" or "este año", use January 1 through the first day of next month (year-to-date), unless the user names another year.
 Futuro includes persisted categories Futuro and Seguros.
 The profile field monthly_income_target is the user's monthly income goal. The risk-profile field monthlyContribution is only the planned monthly investment contribution. Never confuse those two numbers.
@@ -191,7 +268,7 @@ Plain text only. Be concise unless the user asks for detail.`,
   const result = await agent.generate({ prompt });
   recordAiUsage({
     feature: 'financial-agent',
-    provider: 'openrouter',
+    provider: 'gemini',
     model: getAgentModel(),
     inputTokens: result.totalUsage.inputTokens,
     outputTokens: result.totalUsage.outputTokens,

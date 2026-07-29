@@ -166,7 +166,7 @@ export async function DELETE(request: Request, context: RouteContext) {
       .from('gastos')
       .delete()
       .eq('id', id)
-      .select('id, bank_transaction_raw_id');
+      .select('id');
     const { data, error } = await applyProfileFilter(deleteQuery, tenant.profileId).maybeSingle();
 
     if (error) {
@@ -185,23 +185,6 @@ export async function DELETE(request: Request, context: RouteContext) {
 
     if (!data) {
       return NextResponse.json({ success: false, error: 'No se encontró el gasto para eliminar.' }, { status: 404 });
-    }
-
-    if (data.bank_transaction_raw_id) {
-      const { error: bankTransactionError } = await supabase
-        .from('bank_transactions_raw')
-        .update({
-          normalized_status: 'ignored',
-          gasto_id: null,
-          classification_error: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', data.bank_transaction_raw_id)
-        .eq('profile_id', tenant.profileId);
-
-      if (bankTransactionError) {
-        return NextResponse.json({ success: false, error: 'El gasto se eliminó, pero no pude evitar que el banco lo importe nuevamente.' }, { status: 500 });
-      }
     }
 
     await logAuditEvent({

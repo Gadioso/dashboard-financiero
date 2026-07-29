@@ -50,7 +50,7 @@ export default function VirafiBrand({
       </span>
       {showTagline && (
         <span className={`mt-2 font-brand text-sm italic ${inverse ? 'text-white/65' : 'text-[var(--brand-muted)]'}`}>
-          Tu dinero, con claridad y rumbo.
+          Tu CFO personal, todos los días.
         </span>
       )}
     </span>

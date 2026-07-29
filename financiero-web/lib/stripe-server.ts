@@ -77,8 +77,8 @@ export async function getOrCreateBillingPortalConfiguration() {
   const configuration = await stripe.billingPortal.configurations.create({
     business_profile: {
       headline: 'Administra tu plan de Virafi',
-      privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app'}/privacy`,
-      terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app'}/terms`,
+      privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://virafi.com'}/privacy`,
+      terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://virafi.com'}/terms`,
     },
     features: {
       invoice_history: { enabled: true },

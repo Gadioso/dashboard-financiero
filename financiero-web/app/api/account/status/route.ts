@@ -16,10 +16,6 @@ const scopedTables = [
 ] as const;
 
 const optionalScopedTables = [
-  'bank_connections',
-  'bank_accounts',
-  'bank_transactions_raw',
-  'bank_sync_runs',
   'business_entities',
   'business_members',
   'transaction_splits',
@@ -52,16 +48,6 @@ async function countProfileRows(
   };
 }
 
-type BankConnectionRow = {
-  id: string;
-  provider: string;
-  institution_name?: string | null;
-  status: string;
-  last_sync_at?: string | null;
-  consent_expires_at?: string | null;
-  updated_at?: string | null;
-};
-
 type BusinessEntityRow = {
   id: string;
   name: string;
@@ -84,22 +70,6 @@ type InvestmentAccountRow = {
   last_sync_at?: string | null;
   created_at?: string | null;
 };
-
-function dedupeBankConnections(connections: BankConnectionRow[]) {
-  const seen = new Set<string>();
-
-  return connections.filter((connection) => {
-    const key = [
-      connection.provider,
-      connection.institution_name?.trim().toLowerCase() || connection.id,
-      connection.status,
-    ].join(':');
-
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
 
 function missingTable(error?: { code?: string; message?: string } | null) {
   return error?.code === '42P01' || /schema cache|does not exist|Could not find/i.test(error?.message || '');
@@ -141,8 +111,6 @@ export async function GET(request: Request) {
     const [
       profileResult,
       telegramResult,
-      bankConnectionResult,
-      bankAccountResult,
       businessEntitiesResult,
       investmentAccountsResult,
       agentTasksResult,
@@ -154,8 +122,6 @@ export async function GET(request: Request) {
     ] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, avatar_path, bio, professional_headline, location, website_url, financial_why, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
-      supabase.from('bank_connections').select('id, provider, institution_name, status, last_sync_at, consent_expires_at, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
-      supabase.from('bank_accounts').select('id, connection_id, name, official_name, type, subtype, currency, current_balance, available_balance, updated_at').eq('profile_id', profileId).order('updated_at', { ascending: false }),
       supabase.from('business_entities').select('id, name, entity_type, country, currency, status, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(12),
       supabase.from('investment_accounts').select('id, business_entity_id, provider, account_name, account_type, mode, status, base_currency, last_sync_at, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(12),
       supabase.from('agent_tasks').select('id, agent_key, title, status, priority, due_at, created_at').eq('profile_id', profileId).in('status', ['open', 'in_progress', 'waiting_user']).order('created_at', { ascending: false }).limit(8),
@@ -170,13 +136,10 @@ export async function GET(request: Request) {
       .filter((result) => result.error && !optionalScopedTables.includes(result.table as (typeof optionalScopedTables)[number]))
       .map((result) => `${result.table}: ${result.error}`);
     const financialCounts = Object.fromEntries(countResults.map((result) => [result.table, result.count]));
-    const missingOpenBankingTables = missingTable(bankConnectionResult.error) || missingTable(bankAccountResult.error);
     const missingAgenticTables = [businessEntitiesResult.error, investmentAccountsResult.error, agentTasksResult.error, agentFindingsResult.error].some(missingTable);
     const errors = [
       profileResult.error,
       telegramResult.error,
-      missingOpenBankingTables ? null : bankConnectionResult.error,
-      missingOpenBankingTables ? null : bankAccountResult.error,
       missingAgenticTables ? null : businessEntitiesResult.error,
       missingAgenticTables ? null : investmentAccountsResult.error,
       missingAgenticTables ? null : agentTasksResult.error,
@@ -202,8 +165,6 @@ export async function GET(request: Request) {
         name: process.env.TELEGRAM_BOT_DISPLAY_NAME || 'Finance Dashboard',
         username: process.env.TELEGRAM_BOT_USERNAME || null,
       },
-      bankConnections: missingOpenBankingTables ? [] : dedupeBankConnections(bankConnectionResult.data || []),
-      bankAccounts: missingOpenBankingTables ? [] : bankAccountResult.data || [],
       businessEntities: missingAgenticTables ? [] : (businessEntitiesResult.data || []) as BusinessEntityRow[],
       investmentAccounts: missingAgenticTables ? [] : (investmentAccountsResult.data || []) as InvestmentAccountRow[],
       agentTasks: missingAgenticTables ? [] : agentTasksResult.data || [],

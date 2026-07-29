@@ -7,9 +7,8 @@ Dashboard Financiero calcula cuánto puede destinar el usuario, explica la distr
 ## Fuentes
 
 - Binance Spot Market Data: precios y volumen público de cripto. Usar `https://data-api.binance.vision` cuando solo se requieran datos públicos.
-- Coinbase Exchange: respaldo público si Binance no está disponible desde la región del servidor.
 - Polymarket Gamma y CLOB: mercados, probabilidades implícitas, precios y liquidez pública. No usar la API autenticada para ejecutar órdenes.
-- Alpaca Market Data: precios, barras y snapshots de acciones y ETFs. Requiere `ALPACA_API_KEY_ID` y `ALPACA_API_SECRET_KEY` guardadas únicamente en Vercel.
+- Alpaca Market Data: precios, barras y snapshots de acciones y ETFs. Requiere `ALPACA_API_KEY_ID` y `ALPACA_API_SECRET_KEY` guardadas únicamente en Railway.
 - Alpaca News: titulares, resumen, símbolos, fuente y URL mediante REST o WebSocket. Requiere las mismas credenciales de Market Data.
 
 ## Orden de implementación
@@ -30,7 +29,7 @@ Dashboard Financiero calcula cuánto puede destinar el usuario, explica la distr
 
 ## Credenciales pendientes
 
-Para activar acciones, ETFs y noticias en producción se requieren dos variables privadas en Vercel:
+Para activar acciones, ETFs y noticias en producción se requieren dos variables privadas en Railway:
 
 - `ALPACA_API_KEY_ID`
 - `ALPACA_API_SECRET_KEY`

@@ -38,7 +38,7 @@ Weekly operating ceiling: 75 estimated Opus credits. If no verified UI capture e
 
 ## Automated workflow
 
-Mastra workflow: `virafi-weekly-content-workflow`.
+Flujo editorial: proceso determinístico ejecutado desde la aplicación y programado por Supabase cuando se active.
 
 Input:
 

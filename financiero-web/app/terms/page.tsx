@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import LegalPage from '@/app/Components/LegalPage';
 
-const updatedAt = '20 de julio de 2026';
+const updatedAt = '29 de julio de 2026';
 
 export const metadata: Metadata = {
   title: 'Términos y condiciones',
@@ -29,7 +29,7 @@ const sections = [
     id: 'servicio',
     title: 'Descripción y alcance del servicio',
     content: <>
-      <p>Virafi es una plataforma de organización e inteligencia financiera. Según el plan, país, configuración y disponibilidad, puede permitirte registrar y clasificar movimientos; conectar fuentes autorizadas; calcular presupuestos; consultar reportes; conversar con VirafIA; analizar archivos; organizar metas, patrimonio y escenarios; y consultar contexto de mercado.</p>
+      <p>Virafi es una plataforma de organización e inteligencia financiera. Según el plan, país, configuración y disponibilidad, puede permitirte registrar y clasificar movimientos; calcular presupuestos; consultar reportes; conversar con VirafIA; analizar archivos; organizar metas, patrimonio y escenarios; y consultar contexto de mercado. Virafi no conecta ni sincroniza cuentas bancarias.</p>
       <p>Algunas funciones se encuentran en beta, requieren proveedores externos o están sujetas a disponibilidad regional. La descripción mostrada dentro del producto o antes de contratar forma parte de la oferta aplicable. No garantizamos que toda función esté disponible para todas las cuentas.</p>
       <p>Virafi no es banco, casa de bolsa, asesor de inversiones, institución de fondos de pago electrónico, transmisor de dinero ni aseguradora. No recibe, custodia, transfiere o invierte tu dinero.</p>
     </>,
@@ -55,8 +55,8 @@ const sections = [
     id: 'integraciones',
     title: 'Integraciones y servicios de terceros',
     content: <>
-      <p>Al conectar Telegram, una institución financiera, un agregador open banking, un proveedor de datos de mercado, Stripe u otro servicio, autorizas a Virafi a intercambiar la información necesaria para la función elegida. Debes usar únicamente cuentas que te pertenezcan o para las que tengas autorización.</p>
-      <p>Las conexiones bancarias del producto se diseñan en modo de consulta. Virafi no debe solicitar ni conservar credenciales bancarias cuando el proveedor autorizado gestiona ese acceso en su propio entorno. Puedes revocar una integración desde Virafi o desde el tercero, sujeto a sus procesos.</p>
+      <p>Al conectar Telegram, un proveedor de datos de mercado, Stripe u otro servicio disponible, autorizas a Virafi a intercambiar la información necesaria para la función elegida. Debes usar únicamente cuentas que te pertenezcan o para las que tengas autorización.</p>
+      <p>Puedes revocar una integración disponible desde Virafi o desde el tercero, sujeto a sus procesos. Virafi no debe solicitar contraseñas, NIP ni credenciales de banca electrónica.</p>
       <p>Los terceros pueden suspender, modificar o descontinuar sus servicios. Sus términos y avisos también aplican a la relación directa que mantengas con ellos. No respondemos por actos de terceros fuera de nuestro control, sin perjuicio de la responsabilidad que legalmente nos corresponda por nuestra selección, instrucciones o tratamiento.</p>
     </>,
   },

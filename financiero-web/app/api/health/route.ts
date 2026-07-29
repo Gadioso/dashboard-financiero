@@ -10,8 +10,11 @@ const requiredEnv = {
   telegramBot: 'TELEGRAM_BOT_TOKEN',
   telegramWebhook: 'TELEGRAM_WEBHOOK_SECRET',
   telegramNotifyChat: 'TELEGRAM_NOTIFY_CHAT_ID',
-  openrouter: 'OPENROUTER_API_KEY',
-  openai: 'OPENAI_API_KEY',
+  whatsappAccessToken: 'WHATSAPP_ACCESS_TOKEN',
+  whatsappPhoneNumberId: 'WHATSAPP_PHONE_NUMBER_ID',
+  whatsappAppSecret: 'WHATSAPP_APP_SECRET',
+  whatsappWebhookVerifyToken: 'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
+  whatsappGraphApiVersion: 'WHATSAPP_GRAPH_API_VERSION',
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   stripeSecret: 'STRIPE_SECRET_KEY',
   stripeWebhook: 'STRIPE_WEBHOOK_SECRET',
@@ -30,18 +33,21 @@ function envConfigured() {
 
 function capabilities() {
   const env = envConfigured();
-  const hasTranscriptionProvider = Boolean(env.openrouter || env.openai || env.gemini);
+  const hasTranscriptionProvider = Boolean(env.gemini);
   const hasTelegramWebhook = Boolean(env.telegramBot && env.telegramWebhook);
+  const hasWhatsAppWebhook = Boolean(env.whatsappAppSecret && env.whatsappWebhookVerifyToken);
+  const hasWhatsAppSending = Boolean(env.whatsappAccessToken && env.whatsappPhoneNumberId && env.whatsappGraphApiVersion);
 
   return {
     telegramText: hasTelegramWebhook,
     telegramVoice: hasTelegramWebhook && hasTranscriptionProvider,
-    aiAnalysis: Boolean(env.openrouter || env.gemini),
+    whatsappWebhook: hasWhatsAppWebhook,
+    whatsappSending: hasWhatsAppSending,
+    whatsappAssistant: hasWhatsAppWebhook && hasWhatsAppSending && process.env.WHATSAPP_CHANNEL_MODE === 'assistant' && process.env.WHATSAPP_AI_POLICY_APPROVED === 'true',
+    aiAnalysis: Boolean(env.gemini),
     transcriptionProviders: {
-      openrouter: Boolean(env.openrouter),
-      openai: Boolean(env.openai),
       gemini: Boolean(env.gemini),
-      preferred: env.openrouter ? 'openrouter' : env.openai ? 'openai' : env.gemini ? 'gemini' : null,
+      preferred: env.gemini ? 'gemini' : null,
     },
   };
 }

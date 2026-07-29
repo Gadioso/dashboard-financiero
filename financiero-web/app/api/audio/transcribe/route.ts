@@ -6,8 +6,6 @@ export const dynamic = 'force-dynamic';
 
 const maxAudioBytes = 12 * 1024 * 1024;
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const openRouterApiKey = process.env.OPENROUTER_API_KEY || '';
-const openAiApiKey = process.env.OPENAI_API_KEY || '';
 
 export async function POST(request: Request) {
   try {
@@ -34,11 +32,8 @@ export async function POST(request: Request) {
 
     const transcript = await transcribirAudioFinanciero({
       geminiApiKey: googleApiKey,
-      openRouterApiKey,
-      openAiApiKey,
       audio: await audio.arrayBuffer(),
       mimeType: audio.type || 'audio/webm',
-      fileName: audio.name || undefined,
     });
 
     return NextResponse.json({ success: true, transcript });

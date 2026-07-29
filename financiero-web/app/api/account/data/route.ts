@@ -9,10 +9,6 @@ export const dynamic = 'force-dynamic';
 const confirmationPhrase = 'BORRAR MIS DATOS';
 
 const dataTables = [
-  'bank_transactions_raw',
-  'bank_accounts',
-  'bank_sync_runs',
-  'bank_connections',
   'abonos_tarjeta_credito',
   'gastos',
   'ingresos',

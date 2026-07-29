@@ -28,8 +28,8 @@ function isTrustedWebhook(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === '/api/telegram/webhook') return true;
+  if (pathname === '/api/whatsapp/webhook') return true;
   if (pathname === '/api/billing/webhook' && request.method === 'POST') return true;
-  if (pathname === '/api/bank/syncfy/webhook' && request.method === 'POST') return true;
 
   return false;
 }
@@ -48,18 +48,39 @@ function isTrustedServerToServer(request: NextRequest) {
 
   if (!cronSecret) return false;
   if (
-    pathname !== '/api/bank/syncfy/auto-sync' &&
     pathname !== '/api/agents/proactive-goal' &&
     pathname !== '/api/agents/daily-cfo' &&
     pathname !== '/api/investments/market-sync' &&
-    pathname !== '/api/ops/error-alerts' &&
-    pathname !== '/api/ops/sentry-test'
+    pathname !== '/api/ops/error-alerts'
   ) return false;
 
   return getBearerToken(request) === cronSecret;
 }
 
-export function proxy(request: NextRequest) {
+async function hasValidSupabaseSession(accessToken: string) {
+  if (!accessToken) return false;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+  if (!supabaseUrl || !anonKey) return false;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: anonKey,
+        authorization: `Bearer ${accessToken}`,
+      },
+      cache: 'no-store',
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function proxy(request: NextRequest) {
   if (
     !dashboardAuthEnabled() ||
     isPublicPath(request.nextUrl.pathname) ||
@@ -77,7 +98,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (supabaseAccessToken) {
+  if (await hasValidSupabaseSession(supabaseAccessToken)) {
     return NextResponse.next();
   }
 

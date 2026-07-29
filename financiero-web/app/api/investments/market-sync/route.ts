@@ -15,15 +15,6 @@ type BinanceTicker = {
   priceChangePercent?: string;
 };
 
-type CoinbaseTicker = {
-  price: string;
-  bid: string;
-  ask: string;
-  volume: string;
-  time?: string;
-  trade_id?: number;
-};
-
 type PolymarketMarket = {
   id: string;
   question?: string;
@@ -69,11 +60,6 @@ type ProviderSyncResult = {
 };
 
 const binanceSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
-const coinbaseProducts = [
-  { productId: 'BTC-USD', symbol: 'BTCUSD', name: 'BTC/USD' },
-  { productId: 'ETH-USD', symbol: 'ETHUSD', name: 'ETH/USD' },
-  { productId: 'SOL-USD', symbol: 'SOLUSD', name: 'SOL/USD' },
-];
 
 class ProviderUnavailableError extends Error {
   provider: ProviderSyncResult['provider'];
@@ -244,85 +230,6 @@ async function syncBinance(supabase: NonNullable<ReturnType<typeof getSupabaseSe
   return data as MarketSnapshotRow[];
 }
 
-async function syncCoinbase(supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>) {
-  const snapshots = [];
-
-  for (const product of coinbaseProducts) {
-    const response = await fetch(`https://api.exchange.coinbase.com/products/${product.productId}/ticker`, {
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'dashboard-financiero/market-sync',
-      },
-    });
-
-    if (!response.ok) throw new Error(`Coinbase respondió ${response.status} para ${product.productId}.`);
-
-    const ticker = (await response.json()) as CoinbaseTicker;
-    const asset = await upsertMarketAsset({
-      supabase,
-      asset: {
-        asset_type: 'crypto',
-        symbol: product.symbol,
-        name: product.name,
-        exchange: 'Coinbase Exchange',
-        currency: 'USD',
-        provider: 'coinbase',
-        provider_asset_id: product.productId,
-        metadata: { source: 'coinbase_product_ticker', fallbackFor: 'binance_24hr_ticker' },
-      },
-    });
-    const bid = parseNumber(ticker.bid);
-    const ask = parseNumber(ticker.ask);
-
-    snapshots.push({
-      asset_id: asset.id,
-      provider: 'coinbase',
-      price: parseNumber(ticker.price),
-      bid,
-      ask,
-      spread_bps: spreadBps({ bid, ask }),
-      volume_24h: parseNumber(ticker.volume),
-      raw: ticker as Record<string, unknown>,
-    });
-  }
-
-  const { data, error } = await supabase
-    .from('market_data_snapshots')
-    .insert(snapshots)
-    .select('id, asset_id, provider, captured_at, price, bid, ask, spread_bps, volume_24h, raw');
-
-  if (error) throw new Error(`No pude guardar snapshots Coinbase: ${error.message}`);
-
-  return data as MarketSnapshotRow[];
-}
-
-async function syncCryptoMarket(supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>) {
-  try {
-    return {
-      provider: 'binance' as const,
-      snapshots: await syncBinance(supabase),
-      fallbackReason: null as string | null,
-      fallbackCode: null as string | null,
-    };
-  } catch (binanceError) {
-    const fallbackReason = binanceError instanceof Error ? binanceError.message : 'Binance no respondió.';
-    const fallbackCode = binanceError instanceof ProviderUnavailableError ? binanceError.code : 'binance_unavailable';
-
-    try {
-      return {
-        provider: 'coinbase' as const,
-        snapshots: await syncCoinbase(supabase),
-        fallbackReason,
-        fallbackCode,
-      };
-    } catch (coinbaseError) {
-      const coinbaseMessage = coinbaseError instanceof Error ? coinbaseError.message : 'Coinbase no respondió.';
-      throw new Error(`${fallbackReason} Respaldo Coinbase falló: ${coinbaseMessage}`);
-    }
-  }
-}
-
 async function syncPolymarket(supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>) {
   const response = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volume&ascending=false', { cache: 'no-store' });
 
@@ -428,16 +335,13 @@ async function runMarketSync({
   source: 'cron' | 'user';
 }) {
   const providerResults = await Promise.allSettled([
-    syncCryptoMarket(supabase),
+    syncBinance(supabase),
     syncPolymarket(supabase),
   ]);
   const [cryptoResult, polymarketResult] = providerResults;
   const cryptoSync: ProviderSyncResult = cryptoResult.status === 'fulfilled'
-    ? { provider: 'binance', snapshots: cryptoResult.value.snapshots }
+    ? { provider: 'binance', snapshots: cryptoResult.value }
     : providerErrorResult('binance', cryptoResult.reason);
-  const cryptoProvider = cryptoResult.status === 'fulfilled' ? cryptoResult.value.provider : 'binance';
-  const cryptoFallbackReason = cryptoResult.status === 'fulfilled' ? cryptoResult.value.fallbackReason : null;
-  const cryptoFallbackCode = cryptoResult.status === 'fulfilled' ? cryptoResult.value.fallbackCode : null;
   const polymarket: ProviderSyncResult = polymarketResult.status === 'fulfilled'
     ? { provider: 'polymarket', snapshots: polymarketResult.value }
     : providerErrorResult('polymarket', polymarketResult.reason);
@@ -460,17 +364,11 @@ async function runMarketSync({
     metadata: {
       source,
       binance: cryptoSync.snapshots.length,
-      cryptoProvider,
-      fallbackProvider: cryptoProvider === 'coinbase' ? 'coinbase' : null,
-      fallbackReason: cryptoFallbackReason,
       polymarket: polymarket.snapshots.length,
       partial: Boolean(cryptoSync.error || polymarket.error),
       warnings: providerErrors.filter((result) => result.severity === 'warning').map((result) => result.error),
       errors: blockingErrors.map((result) => result.error),
-      codes: [
-        ...providerErrors.map((result) => result.code).filter(Boolean),
-        cryptoFallbackCode,
-      ].filter(Boolean),
+      codes: providerErrors.map((result) => result.code).filter(Boolean),
     },
   });
 
@@ -479,7 +377,6 @@ async function runMarketSync({
     partial: Boolean(cryptoSync.error || polymarket.error),
     inserted,
     binance: cryptoSync.snapshots.length,
-    cryptoProvider,
     polymarket: polymarket.snapshots.length,
     warnings: [cryptoSync.error, polymarket.error].filter(Boolean),
     snapshots: await latestSnapshots(supabase),

@@ -58,7 +58,11 @@ export async function POST(request: Request) {
       .single();
     if (error) throw new Error(`No pude leer el perfil: ${error.message}`);
 
-    const run = await runDailyCfoScheduler({ supabase, profiles: [data as ProfileRow], force: true });
+    const run = await runDailyCfoScheduler({
+      supabase,
+      profiles: [data as ProfileRow],
+      force: true,
+    });
     return NextResponse.json({ success: true, processed: run.results.length, ...run });
   } catch (error: unknown) {
     await logErrorEvent({ supabase, request, action: 'agents.daily_cfo.manual', error });

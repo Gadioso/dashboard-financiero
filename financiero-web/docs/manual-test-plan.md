@@ -4,7 +4,7 @@ Ejecutar después de aplicar SQL/RLS y antes de considerar v1 lista.
 
 ## Dashboard
 
-- Abrir `https://dashboard-financiero-chi.vercel.app`.
+- Abrir `https://virafi.com`.
 - Confirmar redirección a `/login`.
 - Entrar con `DASHBOARD_ACCESS_TOKEN`.
 - Confirmar que carga Junio 2026.
@@ -75,6 +75,6 @@ npm run build
 npm run test:card-payment-intent
 npm run ops:env-audit
 npm run security:secrets
-LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app npm run launch:check
-LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check
+LAUNCH_CHECK_BASE_URL=https://virafi.com npm run launch:check
+LAUNCH_CHECK_BASE_URL=https://virafi.com LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check
 ```

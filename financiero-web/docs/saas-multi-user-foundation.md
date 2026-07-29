@@ -35,7 +35,6 @@ Producción requiere SMTP personalizado, plantillas breves de Virafi, confirmaci
 
 - `npm run tenant:bootstrap` prepara un perfil privado y su vínculo con Telegram.
 - `npm run sql:multi-user` imprime la base multiusuario.
-- `npm run sql:open-banking` imprime la base de conexiones bancarias.
 - `npm run launch:check` comprueba autenticación, aislamiento y health.
 - `npm run restore:verify` valida una restauración en staging.
 

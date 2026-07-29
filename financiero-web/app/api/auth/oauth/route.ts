@@ -15,13 +15,6 @@ export async function GET(request: Request) {
   const safeNext = getSafeNext(requestUrl.searchParams.get('next'));
   const appOrigin = getAppOrigin(request);
 
-  if (requestUrl.origin !== appOrigin) {
-    return NextResponse.redirect(
-      new URL(`${requestUrl.pathname}${requestUrl.search}`, appOrigin),
-      307
-    );
-  }
-
   if (!provider) {
     return NextResponse.redirect(new URL(`/login?error=Proveedor no soportado&next=${encodeURIComponent(safeNext)}`, request.url));
   }

@@ -21,7 +21,7 @@
 ## Seguridad y operación
 
 - Rotar secretos que hayan salido del gestor autorizado.
-- Confirmar variables de producción en Vercel sin exponer valores.
+- Confirmar variables de producción en Railway sin exponer valores.
 - Verificar rate limiting, auditoría, alertas y exportación/borrado de cuenta.
 - Probar restore en staging y documentar responsable y tiempo de recuperación.
 - Revisar que ninguna integración pueda mover dinero o ejecutar operaciones sin consentimiento explícito.

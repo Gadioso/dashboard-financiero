@@ -1,30 +1,43 @@
-# Dashboard Financiero
+# Virafi
 
-Welcome to your new [Mastra](https://mastra.ai/) project! We're excited to see what you'll build.
+Virafi es una aplicación financiera multiusuario en Next.js. La arquitectura productiva usa Railway para ejecutar la aplicación, Supabase como fuente canónica de identidad y datos, Gemini como único proveedor de IA y Stripe para cobros. Los movimientos se registran manualmente, por importación de archivos o mediante canales de mensajería aprobados; Virafi no conecta cuentas bancarias.
 
-## Getting Started
+## Estructura
 
-Start the development server:
+- `financiero-web/`: aplicación Next.js, APIs y configuración de Railway.
+- `financiero-web/supabase/migrations/`: esquema, RLS y tareas programadas.
+- `docs/`: decisiones de arquitectura.
 
-```shell
+La aplicación es un monolito modular. Las consultas privilegiadas siempre se filtran por `profile_id`; las escrituras financieras iniciadas por IA permanecen detrás de confirmaciones determinísticas.
+
+## Desarrollo
+
+Requiere Node.js `>=22.13.0`.
+
+```bash
+npm install --prefix financiero-web
+cp financiero-web/.env.example financiero-web/.env.local
 npm run dev
 ```
 
-Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/studio/overview). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+Verificación:
 
-You can start editing files inside the `src/mastra` directory. The development server will automatically reload whenever you make changes.
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-## Learn more
+## Despliegue en Railway
 
-To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
+El servicio debe usar `financiero-web` como Root Directory. Railway detecta `Dockerfile` y `railway.json`; el contenedor escucha el `PORT` inyectado y valida `/api/health` antes del cambio de tráfico.
 
-If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+1. Conecta el repositorio desde Railway.
+2. Selecciona `financiero-web` como Root Directory.
+3. Copia las variables documentadas en `financiero-web/.env.example` al entorno Production.
+4. Genera un dominio Railway, valida el despliegue y agrega `virafi.com` como dominio personalizado.
+5. Cambia DNS sólo después de comprobar login, Stripe, Telegram y los endpoints programados.
 
-## Deploy to the Mastra platform
+Supabase Cron es el único programador de tareas. El dominio estable `https://virafi.com` desacopla esas tareas del proveedor de hosting.
 
-The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework:
-
-- **Studio**: A hosted visual environment for testing agents, running workflows, and inspecting traces
-- **Server**: A production deployment target that runs your Mastra application as an API server
-
-Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).
+Nunca publiques archivos `.env`, service-role keys, tokens de proveedores ni datos bancarios.

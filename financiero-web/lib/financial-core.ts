@@ -10,7 +10,6 @@ export type Gasto = {
   monto: number | string;
   origen: string;
   fecha: string;
-  bank_transaction_raw_id?: string | null;
 };
 
 export type Ingreso = {
@@ -18,8 +17,8 @@ export type Ingreso = {
   concepto: string | null;
   monto: number | string;
   tipo?: string | null;
+  origen?: string | null;
   fecha: string;
-  bank_transaction_raw_id?: string | null;
 };
 
 export type AbonoTarjetaCredito = {
@@ -41,26 +40,6 @@ export type Movimiento = {
   origen: string;
   fecha: string;
   currency?: string | null;
-  bankStatus?: 'pending' | 'ignored' | 'classified' | 'failed' | null;
-  bankAccountName?: string | null;
-  bankInstitutionName?: string | null;
-  readOnly?: boolean;
-};
-
-export type BankTransactionRawView = {
-  id: string;
-  posted_at?: string | null;
-  authorized_at?: string | null;
-  description: string;
-  merchant_name?: string | null;
-  amount: number | string;
-  currency?: string | null;
-  normalized_status: 'pending' | 'ignored' | 'classified' | 'failed';
-  classification_error?: string | null;
-  gasto_id?: string | number | null;
-  ingreso_id?: string | number | null;
-  bank_accounts?: { name?: string | null; official_name?: string | null } | null;
-  bank_connections?: { provider?: string | null; institution_name?: string | null } | null;
 };
 
 export type ClasificacionMovimiento = {
@@ -412,22 +391,17 @@ export function nombreOrigen(origen: string, subcategoria?: string | null) {
   if (origen === 'Supabase') return 'Web';
   if (origen === 'Telegram') return 'Telegram';
   if (origen === 'Web') return 'Web';
-  if (origen === 'Banco' || origen === 'Banco conectado') return 'Banco';
-  if (origen.startsWith('Banco · ')) return origen;
-
-  return origen ? `Banco · ${origen}` : 'Banco';
+  return origen || 'Web';
 }
 
 export function combinarMovimientos({
   ingresos,
   gastos,
   abonosTarjeta = [],
-  movimientosBancarios = [],
 }: {
   ingresos: Ingreso[];
   gastos: Gasto[];
   abonosTarjeta?: AbonoTarjetaCredito[];
-  movimientosBancarios?: BankTransactionRawView[];
 }) {
   const movimientosIngreso: Movimiento[] = ingresos.map((ingreso) => ({
     id: `ingreso-${ingreso.id}`,
@@ -436,7 +410,7 @@ export function combinarMovimientos({
     categoria: 'Ingreso',
     subcategoria: ingreso.tipo || 'Ingreso',
     monto: ingreso.monto,
-    origen: ingreso.bank_transaction_raw_id ? 'Banco' : 'Web',
+    origen: nombreOrigen(ingreso.origen || 'Web'),
     fecha: ingreso.fecha,
   }));
   const movimientosGasto: Movimiento[] = gastos.map((gasto) => ({
@@ -459,43 +433,7 @@ export function combinarMovimientos({
     origen: nombreOrigen(abono.origen),
     fecha: abono.fecha,
   }));
-  const movimientosNormalizados = new Set([
-    ...ingresos.map((ingreso) => ingreso.bank_transaction_raw_id).filter(Boolean),
-    ...gastos.map((gasto) => gasto.bank_transaction_raw_id).filter(Boolean),
-  ]);
-  const movimientosBancoPendientes: Movimiento[] = movimientosBancarios
-    .filter((movimiento) => (
-      !movimientosNormalizados.has(movimiento.id)
-      && movimiento.classification_error !== 'Contrapartida del abono a tarjeta; no cuenta como ingreso.'
-    ))
-    .map((movimiento) => {
-      const amount = Number(movimiento.amount || 0);
-      const isIncome = amount > 0;
-      const account = movimiento.bank_accounts;
-      const connection = movimiento.bank_connections;
-
-      return {
-        id: `banco-${movimiento.id}`,
-        tipo: isIncome ? 'ingreso' : 'gasto',
-        concepto: movimiento.merchant_name || movimiento.description || 'Movimiento bancario',
-        categoria: movimiento.normalized_status === 'failed'
-          ? 'Revisar'
-          : movimiento.normalized_status === 'ignored'
-            ? 'Transferencia'
-            : 'Clasificando',
-        subcategoria: account?.official_name || account?.name || 'Cuenta bancaria',
-        monto: Math.abs(amount),
-        origen: connection?.institution_name || connection?.provider || 'Banco',
-        fecha: movimiento.authorized_at || movimiento.posted_at || new Date().toISOString(),
-        currency: movimiento.currency || 'MXN',
-        bankStatus: movimiento.normalized_status,
-        bankAccountName: account?.official_name || account?.name || null,
-        bankInstitutionName: connection?.institution_name || null,
-        readOnly: true,
-      } satisfies Movimiento;
-    });
-
-  return [...movimientosIngreso, ...movimientosGasto, ...movimientosAbono, ...movimientosBancoPendientes].sort(
+  return [...movimientosIngreso, ...movimientosGasto, ...movimientosAbono].sort(
     (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 }

@@ -1,14 +1,12 @@
 output.txt
 node_modules
 dist
-.mastra
 .env.development
 .env
 *.db
 *.db-*
-.netlify
-.vercel
 .DS_Store
+supabase/.temp/
 
 # Local QA and generated artifacts
 financiero-web/output/
