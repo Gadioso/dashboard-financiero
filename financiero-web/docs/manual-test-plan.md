@@ -4,7 +4,7 @@ Ejecutar después de aplicar SQL/RLS y antes de considerar v1 lista.
 
 ## Dashboard
 
-- Abrir `https://dashboard-financiero-chi.vercel.app`.
+- Abrir `https://virafi.com`.
 - Confirmar redirección a `/login`.
 - Entrar con `DASHBOARD_ACCESS_TOKEN`.
 - Confirmar que carga Junio 2026.
@@ -26,17 +26,12 @@ Ejecutar después de aplicar SQL/RLS y antes de considerar v1 lista.
 - Eliminar el gasto de prueba.
 - Eliminar el ingreso de prueba.
 
-## Santander / Gmail
+## Origen de movimientos
 
-- Ejecutar Apps Script `santanderIngest`.
-- Confirmar que un correo Santander real crea:
-  - gasto si es compra/cargo,
-  - abono TDC si es pago a tarjeta,
-  - ingreso si realmente entra dinero.
-- Confirmar que Telegram manda alerta al usuario `945363158`.
-- Confirmar que duplicados no crean doble gasto.
-- Confirmar en el dashboard que el evento muestra latencia de `Ingesta` y `Telegram`.
-- Ejecutar Apps Script `crearTriggerSantanderCadaMinuto` y confirmar que existe un trigger de `santanderIngest` cada 1 minuto.
+- Confirmar que los movimientos automáticos del proveedor muestran `Banco` o `Banco · <institución>`.
+- Confirmar que los movimientos registrados por el bot muestran `Telegram`.
+- Confirmar que los movimientos registrados manualmente muestran `Web`.
+- Confirmar que ningún movimiento muestra `Santander Email`.
 
 ## Telegram
 
@@ -57,12 +52,20 @@ Enviar al bot:
 ## Seguridad
 
 - Sin cookie, `GET /api/dashboard?mes=2026-06` debe responder `401`.
-- Sin cookie, `GET /api/email/santander` debe responder `401`.
-- `POST /api/email/santander` sin secret debe responder `401`.
 - `GET /api/health` debe responder `200` sin datos financieros.
 - `GET /api/health` con `x-healthcheck-secret` o `Authorization: Bearer <CRON_SECRET>` debe reportar `capabilities.telegramVoice=true` cuando exista al menos un proveedor de transcripción.
 - Supabase debe mostrar RLS habilitado en tablas financieras.
 - Con token válido, `launch:check` debe confirmar que `anon` no puede escribir en `gastos`.
+
+### Control de acceso de Telegram
+
+- Un chat privado no vinculado que envía `hola` no recibe respuesta.
+- Un chat privado no vinculado que envía una llave inexistente no recibe respuesta.
+- Un grupo, supergrupo, canal u otro bot no recibe respuesta.
+- Una llave válida generada desde una sesión autenticada vincula el chat una sola vez.
+- Un chat vinculado recibe confirmación con `/estado`.
+- `/desconectar` elimina `telegram_accounts` y `telegram_memoria`; mensajes posteriores no reciben respuesta.
+- Borrar o bloquear el usuario de Supabase Auth revoca el vínculo en la siguiente interacción y evita notificaciones proactivas y bancarias.
 
 ## Automatizado
 
@@ -70,9 +73,8 @@ Enviar al bot:
 npm run lint
 npm run build
 npm run test:card-payment-intent
-npm run test:santander-parser
 npm run ops:env-audit
 npm run security:secrets
-LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app npm run launch:check
-LAUNCH_CHECK_BASE_URL=https://dashboard-financiero-chi.vercel.app LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check
+LAUNCH_CHECK_BASE_URL=https://virafi.com npm run launch:check
+LAUNCH_CHECK_BASE_URL=https://virafi.com LAUNCH_CHECK_DASHBOARD_TOKEN=... npm run launch:check
 ```

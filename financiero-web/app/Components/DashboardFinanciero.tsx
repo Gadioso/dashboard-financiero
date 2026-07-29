@@ -2,8 +2,35 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Bell, ShieldCheck, Target } from '@phosphor-icons/react';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import {
+  ArrowRight,
+  ArrowsDownUp,
+  Bell,
+  CalendarBlank,
+  ChartDonut,
+  ChartLineUp,
+  CreditCard,
+  Eye,
+  EyeSlash,
+  FileText,
+  Gear,
+  House,
+  Microphone,
+  Paperclip,
+  PencilSimple,
+  Plant,
+  Receipt,
+  ShieldCheck,
+  Sparkle,
+  Target,
+  Wallet,
+  X,
+} from '@phosphor-icons/react';
 import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview';
+import VirafiBrand, { VirafiMark } from '@/app/Components/VirafiBrand';
+import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -22,7 +49,6 @@ import {
   type Gasto,
   type Ingreso,
   type AbonoTarjetaCredito,
-  type BankTransactionRawView,
   type Movimiento,
   type ResumenMensual,
   nombreBolsa,
@@ -30,6 +56,9 @@ import {
   resumenInicial,
 } from '@/lib/financial-core';
 import type { WealthRoutePlan } from '@/lib/wealth-route';
+import type { GoalCfoPlan } from '@/lib/goal-cfo-plan';
+
+const FinancialImportModal = dynamic(() => import('@/app/Components/FinancialImportModal'), { ssr: false });
 
 type BrowserSpeechRecognitionEvent = {
   resultIndex: number;
@@ -85,46 +114,7 @@ type DashboardApiResponse = {
   gastosAnuales: Gasto[];
   abonosTarjetaAnuales: AbonoTarjetaCredito[];
   fondosAcumulados?: FondoAcumulado[];
-  movimientosBancarios?: BankTransactionRawView[];
-};
-
-type SantanderStatus = {
-  configured?: {
-    supabase: boolean;
-    emailIngestSecret: boolean;
-  };
-  supabaseSchema?: {
-    acceptsSantanderEmailOrigin: boolean;
-    acceptsRegla333333Phase: boolean;
-    acceptsAbonosTarjetaCredito?: boolean;
-    acceptsSantanderIngestLogs?: boolean;
-    acceptsSantanderIngestLatency?: boolean;
-    migrationRequired: boolean;
-  };
-  ingestLogs?: {
-    available: boolean;
-    error?: string | null;
-    logs: Array<{
-      id: string;
-      created_at: string;
-      status: 'inserted' | 'duplicate' | 'ignored' | 'error';
-      reason?: string | null;
-      movimiento_tipo?: string | null;
-      concepto?: string | null;
-      monto?: number | string | null;
-      categoria?: string | null;
-      subcategoria?: string | null;
-      telegram_notified?: boolean | null;
-      gmail_received_at?: string | null;
-      apps_script_detected_at?: string | null;
-      backend_received_at?: string | null;
-      telegram_sent_at?: string | null;
-      ingest_latency_ms?: number | null;
-      telegram_latency_ms?: number | null;
-      error?: string | null;
-    }>;
-  };
-  error?: string;
+  cfoPlan?: GoalCfoPlan | null;
 };
 
 type BillingStatus = {
@@ -140,10 +130,7 @@ type BillingStatus = {
   cancelAtPeriodEnd: boolean;
   stripeCustomerId: string | null;
   limits?: {
-    bankConnections: number;
-    gmailIntegrations: number;
     telegramAccounts: number;
-    bankSyncLookbackDays: number;
   };
   error?: string;
 };
@@ -174,29 +161,6 @@ type FondoAcumulado = {
   ultima_actualizacion?: string | null;
 };
 
-type BankAccount = {
-  id: string;
-  connection_id?: string | null;
-  name?: string | null;
-  official_name?: string | null;
-  type?: string | null;
-  subtype?: string | null;
-  currency?: string | null;
-  current_balance?: number | string | null;
-  available_balance?: number | string | null;
-  updated_at?: string | null;
-};
-
-type BankConnection = {
-  id: string;
-  provider: string;
-  institution_name?: string | null;
-  status: string;
-  last_sync_at?: string | null;
-  consent_expires_at?: string | null;
-  updated_at?: string | null;
-};
-
 type AgentTask = {
   id: string;
   agent_key: string;
@@ -217,6 +181,7 @@ type MarketSnapshot = {
   ask?: number | null;
   spread_bps?: number | null;
   volume_24h?: number | null;
+  raw?: Record<string, unknown> | null;
   asset?: {
     id: string;
     asset_type: string;
@@ -226,6 +191,20 @@ type MarketSnapshot = {
     currency?: string | null;
     provider?: string | null;
   } | null;
+};
+
+type MarketBriefingItem = {
+  id: string;
+  topic: 'geopolitics' | 'rates' | 'crypto' | 'technology';
+  topicLabel: string;
+  headline: string;
+  url: string;
+  source: string;
+  domain: string;
+  publishedAt?: string | null;
+  whyItMatters: string;
+  watchNext: string;
+  beginnerContext: string;
 };
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
@@ -260,17 +239,43 @@ type WealthGoalSummary = {
   horizonMonths: number;
 };
 
+type GoalContribution = {
+  id: string;
+  amount: number | string;
+  contributed_at: string;
+  source: 'manual' | 'investment_transaction' | 'adjustment';
+  status: 'suggested' | 'confirmed' | 'rejected';
+  confidence?: number | string | null;
+  note?: string | null;
+};
+
+type GoalContributionPanel = {
+  goal: { id: string; name: string; current_amount: number | string; target_amount: number | string };
+  contributions: GoalContribution[];
+};
+
 type AccountStatus = {
   success: boolean;
   profile?: {
     id: string;
     full_name?: string | null;
+    avatarUrl?: string | null;
+    professional_headline?: string | null;
+    bio?: string | null;
+    location?: string | null;
+    financial_why?: string | null;
     monthly_income_target?: number | string | null;
   } | null;
   billing?: BillingStatus;
-  bankConnections?: BankConnection[];
-  bankAccounts?: BankAccount[];
   agentTasks?: AgentTask[];
+  virafiaMessages?: Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    channel?: string;
+    createdAt: string;
+    metadata?: { lastExpenseId?: string };
+  }>;
   error?: string;
 };
 
@@ -303,7 +308,6 @@ type DashboardAnalysisFallbackInput = {
   totalGastadoMes: number;
   flujoNetoMes: number;
   tasaFuturo: number;
-  deudaTdcEstimadaMes: number;
   buckets: Array<{ label: string; used: number; limit: number; remaining: number; percent: number }>;
   monthlySeries?: Array<{ mes: string; ingresos: number; egresos: number; resultado: number }>;
 };
@@ -311,7 +315,7 @@ type DashboardAnalysisFallbackInput = {
 const mesActualKey = mesKeyDesdeFecha(new Date());
 const MOVIMIENTOS_POR_PAGINA = 12;
 
-type DashboardView = 'resumen' | 'movimientos' | 'presupuestos' | 'metas' | 'analisis' | 'cuentas' | 'wealth' | 'planes' | 'reportes';
+type DashboardView = 'resumen' | 'movimientos' | 'presupuestos' | 'metas' | 'analisis' | 'wealth' | 'planes' | 'reportes';
 
 type DashboardChatMessage = {
   id: string;
@@ -378,38 +382,19 @@ function esAbonoTarjetaSospechoso(abono: AbonoTarjetaCredito) {
 }
 
 function GearIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-      <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06a1.8 1.8 0 0 0-1.17-1.64 1.8 1.8 0 0 0-1.89.38l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.9 15a1.8 1.8 0 0 0-1.65-1.08H2.1a2.1 2.1 0 0 1 0-4.2h.06A1.8 1.8 0 0 0 3.8 8.55a1.8 1.8 0 0 0-.38-1.89l-.04-.04a2.1 2.1 0 1 1 2.97-2.97l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.45 2.4V2.1a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.08h.06a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z" />
-    </svg>
-  );
+  return <Gear aria-hidden="true" className="size-5" weight="regular" />;
 }
 
-function ChatIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.6 8.6 0 0 1-7.7 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.1a8.4 8.4 0 0 1-.9-3.8 8.6 8.6 0 0 1 4.7-7.7 8.4 8.4 0 0 1 3.8-.9h.5A8.5 8.5 0 0 1 21 11v.5Z" />
-    </svg>
-  );
+function VirafIAMark({ className = 'size-5' }: { className?: string }) {
+  return <VirafiMark className={className} />;
 }
 
 function EditIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
+  return <PencilSimple aria-hidden="true" className="size-4" weight="regular" />;
 }
 
 function CloseIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
+  return <X aria-hidden="true" className="size-5" weight="regular" />;
 }
 
 function valorNumerico(...values: Array<number | string | null | undefined>) {
@@ -492,9 +477,7 @@ function crearAnalisisCliente(input: DashboardAnalysisFallbackInput): DashboardA
     input.tasaFuturo < 33
       ? `Acercar Futuro al 33%; hoy falta ${Math.round(Math.max(0, 33 - input.tasaFuturo))}%.`
       : 'Mantener Futuro separado de pagos ordinarios.',
-    input.deudaTdcEstimadaMes > 0
-      ? `Apartar ${formatoDineroCorto(input.deudaTdcEstimadaMes)} para tarjeta antes de distribuir excedentes.`
-      : 'Cerrar el periodo con revisión de bolsas fuera de rango.',
+    'Cerrar el periodo con revisión de bolsas fuera de rango.',
   ];
 
   const risks = [
@@ -542,12 +525,6 @@ function fondoObjetivo(fondo: FondoAcumulado) {
   return valorNumerico(fondo.objetivo, fondo.meta, fondo.monto_objetivo, fondo.meta_monto);
 }
 
-function esCuentaDemo(account: BankAccount) {
-  const label = `${account.name || ''} ${account.official_name || ''}`.toLowerCase();
-
-  return /\b(plaid|checking|savings|money market|sandbox|flight)\b/i.test(label);
-}
-
 export default function DashboardFinanciero() {
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
@@ -555,14 +532,20 @@ export default function DashboardFinanciero() {
   const [escuchandoVoz, setEscuchandoVoz] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<DashboardChatMessage[]>([]);
-  const [chatIncludesScreen, setChatIncludesScreen] = useState(true);
+  const [chatAttachments, setChatAttachments] = useState<File[]>([]);
+  const [balanceVisible, setBalanceVisible] = useState(true);
   const [deletingId, setDeletingId] = useState<string | number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<MovementEditForm | null>(null);
   const [goalEditForm, setGoalEditForm] = useState<GoalEditForm | null>(null);
   const [goalSaving, setGoalSaving] = useState(false);
+  const [goalContributionId, setGoalContributionId] = useState('');
+  const [goalContributionPanel, setGoalContributionPanel] = useState<GoalContributionPanel | null>(null);
+  const [goalContributionAmount, setGoalContributionAmount] = useState('');
+  const [goalContributionLoading, setGoalContributionLoading] = useState(false);
   const [manualExpenseOpen, setManualExpenseOpen] = useState(false);
+  const [financialImportOpen, setFinancialImportOpen] = useState(false);
   const [manualExpenseSaving, setManualExpenseSaving] = useState(false);
   const [manualExpenseForm, setManualExpenseForm] = useState<ManualExpenseForm>({
     concepto: '',
@@ -579,25 +562,21 @@ export default function DashboardFinanciero() {
   const [resumenMensual, setResumenMensual] = useState<ResumenMensual[]>([]);
   const [gastosAnuales, setGastosAnuales] = useState<Gasto[]>([]);
   const [fondosAcumulados, setFondosAcumulados] = useState<FondoAcumulado[]>([]);
+  const [goalCfoPlan, setGoalCfoPlan] = useState<GoalCfoPlan | null>(null);
   const [ultimosMovimientos, setUltimosMovimientos] = useState<Movimiento[]>([]);
   const [movimientosPage, setMovimientosPage] = useState(0);
   const [ingresosMensuales, setIngresosMensuales] = useState<Ingreso[]>([]);
   const [gastosMensuales, setGastosMensuales] = useState<Gasto[]>([]);
-  const [abonosTarjetaAnuales, setAbonosTarjetaAnuales] = useState<AbonoTarjetaCredito[]>([]);
   const [abonosTarjetaMensuales, setAbonosTarjetaMensuales] = useState<AbonoTarjetaCredito[]>([]);
-  const [abonosSospechososOcultos, setAbonosSospechososOcultos] = useState(0);
-  const [, setSantanderStatus] = useState<SantanderStatus | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [accountProfile, setAccountProfile] = useState<NonNullable<AccountStatus['profile']> | null>(null);
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(0);
-  const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [bankDisconnectingId, setBankDisconnectingId] = useState('');
-  const [bankSyncLoading, setBankSyncLoading] = useState(false);
-  const [lastBankRefreshAt, setLastBankRefreshAt] = useState<string | null>(null);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
   const [notificationTrayOpen, setNotificationTrayOpen] = useState(false);
   const [notificationsSeenAt, setNotificationsSeenAt] = useState(0);
   const [marketSnapshots, setMarketSnapshots] = useState<MarketSnapshot[]>([]);
+  const [marketBriefing, setMarketBriefing] = useState<MarketBriefingItem[]>([]);
+  const [marketExperience, setMarketExperience] = useState<'simple' | 'advanced'>('simple');
   const [marketSyncLoading, setMarketSyncLoading] = useState(false);
   const [riskProfile, setRiskProfile] = useState<InvestmentRiskProfile>({
     experienceLevel: 'beginner',
@@ -619,7 +598,6 @@ export default function DashboardFinanciero() {
   const [riskProfileLoading, setRiskProfileLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingAction, setBillingAction] = useState<'checkout' | 'portal' | null>(null);
-  const [cleanupLoading, setCleanupLoading] = useState(false);
   const [analysisScope, setAnalysisScope] = useState<'month' | 'year'>('month');
   const [analysis, setAnalysis] = useState<DashboardAnalysis | null>(null);
   const [analysisResultKey, setAnalysisResultKey] = useState('');
@@ -632,16 +610,12 @@ export default function DashboardFinanciero() {
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioStopTimeoutRef = useRef<number | null>(null);
   const statusTimeoutRef = useRef<number | null>(null);
+  const chatFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem('dashboard_notifications_seen_at_v2');
     queueMicrotask(() => setNotificationsSeenAt(stored ? Number(stored) || 0 : 0));
   }, []);
-
-  const cerrarSesion = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
-  };
 
   const descargarReportePdf = async () => {
     setReportDownloading(true);
@@ -664,7 +638,7 @@ export default function DashboardFinanciero() {
       pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(19);
-      pdf.text('Dashboard Financiero', margin, 15);
+      pdf.text('Virafi', margin, 15);
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'normal');
       pdf.text(periodTitle, margin, 24);
@@ -762,17 +736,20 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const fetchWithSessionRefresh = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await fetch(input, init);
+  const fetchWithSessionRefresh = useCallback(
+    (input: RequestInfo | URL, init?: RequestInit) => fetchWithSharedSessionRefresh(input, init),
+    []
+  );
 
-    if (response.status !== 401) return response;
-
-    const refreshResponse = await fetch('/api/auth/refresh', { method: 'POST' });
-
-    if (!refreshResponse.ok) return response;
-
-    return fetch(input, init);
-  }, []);
+  useEffect(() => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!timezone) return;
+    void fetchWithSessionRefresh('/api/account/daily-cfo', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timezone }),
+    }).catch((error) => console.error('No pude guardar la zona horaria del mentor diario:', error));
+  }, [fetchWithSessionRefresh]);
 
   const mostrarMensajeTemporal = useCallback((mensaje: string, ms = 7000) => {
     if (statusTimeoutRef.current) window.clearTimeout(statusTimeoutRef.current);
@@ -788,37 +765,6 @@ export default function DashboardFinanciero() {
     setMesActivo(nextMes);
     setMovimientosPage(0);
   }, []);
-
-  const desconectarBanco = useCallback(async (connection: BankConnection) => {
-    const institutionName = connection.institution_name || connection.provider || 'este banco';
-    const confirmation = window.confirm(`¿Eliminar ${institutionName} de tus conexiones bancarias?`);
-
-    if (!confirmation) return;
-
-    setBankDisconnectingId(connection.id);
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/bank/connections/${encodeURIComponent(connection.id)}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        mostrarMensajeTemporal(`No pude eliminar banco: ${formatActionError(data, 'respuesta inválida')}`);
-        return;
-      }
-
-      setBankConnections((current) => current.map((item) => (
-        item.id === connection.id ? { ...item, status: 'revoked', updated_at: new Date().toISOString() } : item
-      )));
-      setBankAccounts((current) => current.filter((account) => account.connection_id !== connection.id));
-      mostrarMensajeTemporal(`${institutionName} eliminado de tus conexiones.`);
-    } catch {
-      mostrarMensajeTemporal('No pude conectar con el servidor para eliminar el banco.');
-    } finally {
-      setBankDisconnectingId('');
-    }
-  }, [fetchWithSessionRefresh, mostrarMensajeTemporal]);
 
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     try {
@@ -841,8 +787,8 @@ export default function DashboardFinanciero() {
       const gastosTodoElAño = dashboardData.gastosAnuales || [];
       const abonosTarjetaTodoElAño = dashboardData.abonosTarjetaAnuales || [];
       setGastosAnuales(gastosTodoElAño);
-      setAbonosTarjetaAnuales(abonosTarjetaTodoElAño.filter((abono) => !esAbonoTarjetaSospechoso(abono)));
       setFondosAcumulados(dashboardData.fondosAcumulados || []);
+      setGoalCfoPlan(dashboardData.cfoPlan || null);
       const inicioMes = new Date(inicioMesISO(mesActivo)).getTime();
       const finMes = new Date(finMesISO(mesActivo)).getTime();
       const ingresosDelMes = ingresosTodoElAño.filter((ingreso) => {
@@ -853,17 +799,10 @@ export default function DashboardFinanciero() {
         const fecha = new Date(gasto.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
       });
-      const abonosTarjetaDelMesRaw = abonosTarjetaTodoElAño.filter((abono) => {
+      const abonosTarjetaDelMes = abonosTarjetaTodoElAño.filter((abono) => {
         const fecha = new Date(abono.fecha).getTime();
         return fecha >= inicioMes && fecha < finMes;
-      });
-      const abonosTarjetaDelMes = abonosTarjetaDelMesRaw.filter((abono) => !esAbonoTarjetaSospechoso(abono));
-      const movimientosBancariosDelMes = (dashboardData.movimientosBancarios || []).filter((movimiento) => {
-        const fecha = new Date(movimiento.authorized_at || movimiento.posted_at || '').getTime();
-        return Number.isFinite(fecha) && fecha >= inicioMes && fecha < finMes;
-      });
-      setAbonosSospechososOcultos(abonosTarjetaDelMesRaw.length - abonosTarjetaDelMes.length);
-
+      }).filter((abono) => !esAbonoTarjetaSospechoso(abono));
       const presupuesto = dashboardData.presupuesto;
       const ingresosMes = calcularIngresosMes(ingresosDelMes);
       const promedioIngresosUltimos3Meses = calcularPromedioIngresosUltimos3Meses({
@@ -886,7 +825,6 @@ export default function DashboardFinanciero() {
         ingresos: ingresosDelMes,
         gastos: gastosDelMes,
         abonosTarjeta: abonosTarjetaDelMes,
-        movimientosBancarios: movimientosBancariosDelMes,
       }));
 
       setResumen({
@@ -903,7 +841,6 @@ export default function DashboardFinanciero() {
           gastos: gastosTodoElAño,
         })
       );
-      setLastBankRefreshAt(new Date().toISOString());
     } catch (err) {
       console.error("Error cargando datos:", err);
     } finally {
@@ -917,7 +854,17 @@ export default function DashboardFinanciero() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('billing') !== 'success') return;
+    const billingResult = params.get('billing');
+
+    if (billingResult === 'cancelled') {
+      window.history.replaceState({}, '', '/dashboard');
+      void Promise.resolve().then(() => {
+        mostrarMensajeTemporal('Pago cancelado. No se realizó ningún cargo y tu plan no cambió.');
+      });
+      return;
+    }
+
+    if (billingResult !== 'success') return;
     const sessionId = params.get('session_id');
     if (!sessionId) return;
 
@@ -928,7 +875,7 @@ export default function DashboardFinanciero() {
     }).then(async (response) => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success) throw new Error('No pude confirmar tu plan.');
-      window.history.replaceState({}, '', '/');
+      window.history.replaceState({}, '', '/dashboard');
       window.location.reload();
     }).catch(() => mostrarMensajeTemporal('Tu pago fue recibido. Estamos terminando de activar el plan; actualiza en unos segundos.', 12_000));
   }, [fetchWithSessionRefresh, mostrarMensajeTemporal]);
@@ -946,45 +893,36 @@ export default function DashboardFinanciero() {
     };
   }, [fetchData]);
 
-  const sincronizarBancos = useCallback(async () => {
-    setBankSyncLoading(true);
-
-    try {
-      await fetchData({ silent: true });
-    } catch (error: unknown) {
-      mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude actualizar los movimientos bancarios.');
-    } finally {
-      setBankSyncLoading(false);
-    }
-  }, [fetchData, mostrarMensajeTemporal]);
-
   useEffect(() => {
     let mounted = true;
 
-    async function fetchAccountAndBankStatus() {
+    async function fetchAccountStatus() {
       try {
-        const [bankResult, accountResult, riskProfileResult, marketResult] = await Promise.allSettled([
-          fetchWithSessionRefresh('/api/email/santander'),
+        const [accountResult, riskProfileResult, marketResult, briefingResult] = await Promise.allSettled([
           fetchWithSessionRefresh('/api/account/status'),
           fetchWithSessionRefresh('/api/investments/risk-profile'),
           fetchWithSessionRefresh('/api/investments/market-sync'),
+          fetchWithSessionRefresh('/api/investments/market-briefing'),
         ]);
 
         if (mounted) {
-          const bankData = bankResult.status === 'fulfilled' ? await readJsonResponse(bankResult.value) : null;
-          if (bankData) {
-            setSantanderStatus(bankData);
-          } else {
-            setSantanderStatus({ error: 'No pude consultar estado bancario.' });
-          }
-
           const accountData = accountResult.status === 'fulfilled' ? await readJsonResponse<AccountStatus>(accountResult.value) : null;
           if (accountData) {
             if (accountData.billing) setBillingStatus(accountData.billing);
-            if (accountData.profile) setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
-            if (accountData.bankConnections) setBankConnections(accountData.bankConnections);
-            if (accountData.bankAccounts) setBankAccounts(accountData.bankAccounts);
+            if (accountData.profile) {
+              setAccountProfile(accountData.profile);
+              setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
+            }
             if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
+            if (accountData.virafiaMessages?.length) {
+              setChatMessages((current) => current.length ? current : accountData.virafiaMessages!.map((message) => ({
+                id: message.id,
+                role: message.role,
+                content: message.content,
+                createdAt: message.createdAt,
+                metadata: message.metadata,
+              })));
+            }
           }
 
           const riskProfileData = riskProfileResult.status === 'fulfilled' ? await readJsonResponse<{ riskProfile?: InvestmentRiskProfile; acceptedAt?: string | null; routePlan?: WealthRoutePlan | null; eligibility?: WealthEligibility; goals?: WealthGoalSummary[] }>(riskProfileResult.value) : null;
@@ -1002,16 +940,62 @@ export default function DashboardFinanciero() {
           if (marketResult.status === 'fulfilled' && marketResult.value.ok && marketData?.snapshots) {
             setMarketSnapshots(marketData.snapshots);
           }
+          const briefingData = briefingResult.status === 'fulfilled' ? await readJsonResponse<{ items?: MarketBriefingItem[] }>(briefingResult.value) : null;
+          if (briefingResult.status === 'fulfilled' && briefingResult.value.ok && briefingData?.items) setMarketBriefing(briefingData.items);
         }
-      } catch {
-        if (mounted) setSantanderStatus({ error: 'No pude consultar estado bancario.' });
+      } catch (error) {
+        console.error('No pude cargar el estado de la cuenta:', error);
       }
     }
 
-    void fetchAccountAndBankStatus();
+    void fetchAccountStatus();
 
     return () => {
       mounted = false;
+    };
+  }, [fetchWithSessionRefresh]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function refreshDailyMentor() {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const response = await fetchWithSessionRefresh('/api/account/status', { cache: 'no-store' });
+        const accountData = await readJsonResponse<AccountStatus>(response);
+        if (!mounted || !response.ok || !accountData) return;
+        if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
+        const proactive = (accountData.virafiaMessages || []).filter((message) => message.channel === 'proactive');
+        if (proactive.length) {
+          setChatMessages((current) => {
+            const additions = proactive.filter((message) => !current.some((existing) => (
+              existing.id === message.id ||
+              (existing.role === message.role && existing.content === message.content)
+            )));
+            return [...current, ...additions.map((message) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+              createdAt: message.createdAt,
+              metadata: message.metadata,
+            }))].slice(-30);
+          });
+        }
+      } catch (error) {
+        console.error('No pude actualizar el mensaje diario de VirafIA:', error);
+      }
+    }
+
+    const intervalId = window.setInterval(() => void refreshDailyMentor(), 5 * 60_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshDailyMentor();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [fetchWithSessionRefresh]);
 
@@ -1051,10 +1035,11 @@ export default function DashboardFinanciero() {
     setMensajeStatus('Actualizando información de mercado...');
 
     try {
-      const response = await fetchWithSessionRefresh('/api/investments/market-sync', {
-        method: 'POST',
-      });
-      const data = await response.json();
+      const [response, briefingResponse] = await Promise.all([
+        fetchWithSessionRefresh('/api/investments/market-sync', { method: 'POST' }),
+        fetchWithSessionRefresh('/api/investments/market-briefing', { cache: 'no-store' }),
+      ]);
+      const [data, briefingData] = await Promise.all([response.json(), readJsonResponse<{ items?: MarketBriefingItem[] }>(briefingResponse)]);
 
       if (!response.ok || !data.success) {
         setMensajeStatus(`No pude actualizar la información de mercado: ${formatActionError(data, 'Intenta nuevamente más tarde.')}`);
@@ -1062,9 +1047,9 @@ export default function DashboardFinanciero() {
       }
 
       setMarketSnapshots(data.snapshots || []);
-      const cryptoProvider = data.cryptoProvider === 'coinbase' ? 'Coinbase' : 'Binance';
+      if (briefingResponse.ok && briefingData?.items) setMarketBriefing(briefingData.items);
       const warnings = Array.isArray(data.warnings) && data.warnings.length > 0 ? ` Advertencia: ${data.warnings.join(' · ')}` : '';
-      setMensajeStatus(`${data.partial ? 'Mercado actualizado parcialmente' : 'Mercado actualizado'}: ${data.binance || 0} ${cryptoProvider} y ${data.polymarket || 0} Polymarket. Siguiente paso: generar tesis para decidir si vale simular algo.${warnings}`);
+      setMensajeStatus(`${data.partial ? 'Mercado actualizado parcialmente' : 'Mercado actualizado'}: ${data.binance || 0} Binance y ${data.polymarket || 0} Polymarket. Siguiente paso: generar tesis para decidir si vale simular algo.${warnings}`);
     } catch {
       setMensajeStatus('No pude conectar con market sync.');
     } finally {
@@ -1340,7 +1325,7 @@ export default function DashboardFinanciero() {
     setMensajeStatus(`Abriendo checkout ${plan === 'beta' ? 'Beta' : 'Premium'}...`);
 
     try {
-      const response = await fetch('/api/billing/checkout', {
+      const response = await fetchWithSessionRefresh('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan }),
@@ -1367,7 +1352,7 @@ export default function DashboardFinanciero() {
     setMensajeStatus('Abriendo portal de facturación...');
 
     try {
-      const response = await fetch('/api/billing/portal', { method: 'POST' });
+      const response = await fetchWithSessionRefresh('/api/billing/portal', { method: 'POST' });
       const data = await response.json();
 
       if (!response.ok || !data.success || !data.url) {
@@ -1437,36 +1422,6 @@ export default function DashboardFinanciero() {
       }
     } catch {
       setMensajeStatus('Ocurrió un error al eliminar el ingreso.');
-    } finally {
-      setDeletingId(null);
-      setTimeout(() => setMensajeStatus(''), 5000);
-    }
-  };
-
-  const eliminarMovimientoBancario = async (movimiento: Movimiento) => {
-    const confirmar = window.confirm(`¿Eliminar este movimiento?\n\n${movimiento.concepto} - $${formatearMonto(movimiento.monto)}`);
-
-    if (!confirmar) return;
-
-    const transactionId = movimiento.id.replace('banco-', '');
-    setDeletingId(movimiento.id);
-    setMensajeStatus('Eliminando movimiento...');
-
-    try {
-      const response = await fetchWithSessionRefresh(`/api/bank/transactions/${transactionId}`, {
-        method: 'DELETE',
-      });
-      const resultado = await response.json();
-
-      if (!response.ok || !resultado.success) {
-        setMensajeStatus(formatActionError(resultado, 'No pude eliminar el movimiento. Intenta nuevamente.'));
-        return;
-      }
-
-      setMensajeStatus('Movimiento eliminado correctamente.');
-      await fetchData();
-    } catch {
-      setMensajeStatus('No pude eliminar el movimiento. Intenta nuevamente.');
     } finally {
       setDeletingId(null);
       setTimeout(() => setMensajeStatus(''), 5000);
@@ -1650,30 +1605,46 @@ export default function DashboardFinanciero() {
     }
   };
 
-  const limpiarAbonosSospechosos = async () => {
-    setCleanupLoading(true);
-    setMensajeStatus('Limpiando abonos sospechosos...');
-
+  const cargarAportacionesMeta = async (goalId: string) => {
+    setGoalContributionId(goalId);
+    setGoalContributionLoading(true);
     try {
-      const response = await fetch('/api/account/cleanup-card-payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: `${mesActivo}-14`, minAmount: 100000, apply: true }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setMensajeStatus('El movimiento ya no aparece, pero no pude completar la eliminación. Intenta nuevamente más tarde.');
-        return;
-      }
-
-      setMensajeStatus(`Abonos sospechosos eliminados: ${data.deleted || 0}.`);
-      await fetchData();
-    } catch {
-      setMensajeStatus('No pude conectar con el limpiador. El abono sospechoso sigue oculto de la interfaz.');
+      const response = await fetchWithSessionRefresh(`/api/goals/${encodeURIComponent(goalId)}/contributions`, { cache: 'no-store' });
+      const data = await readJsonResponse<GoalContributionPanel & { success?: boolean; error?: string }>(response);
+      if (!response.ok || !data?.goal) throw new Error(formatActionError(data, 'No pude cargar las aportaciones.'));
+      setGoalContributionPanel(data);
+    } catch (error) {
+      mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude cargar las aportaciones.');
+      setGoalContributionId('');
     } finally {
-      setCleanupLoading(false);
-      setTimeout(() => setMensajeStatus(''), 6000);
+      setGoalContributionLoading(false);
+    }
+  };
+
+  const prepararAportacionRecomendada = (goalId: string, amount: number) => {
+    setGoalContributionAmount(String(amount));
+    void cargarAportacionesMeta(goalId);
+  };
+
+  const actualizarAportacionesMeta = async (payload: Record<string, unknown>) => {
+    if (!goalContributionId) return;
+    setGoalContributionLoading(true);
+    try {
+      const response = await fetchWithSessionRefresh(`/api/goals/${encodeURIComponent(goalContributionId)}/contributions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const data = await readJsonResponse<{ success?: boolean; error?: string; suggested?: number }>(response);
+      if (!response.ok || !data?.success) throw new Error(formatActionError(data, 'No pude actualizar las aportaciones.'));
+      if (payload.action === 'record_manual') setGoalContributionAmount('');
+      const refreshed = await fetchWithSessionRefresh(`/api/goals/${encodeURIComponent(goalContributionId)}/contributions`, { cache: 'no-store' });
+      const refreshedData = await readJsonResponse<GoalContributionPanel>(refreshed);
+      if (refreshed.ok && refreshedData?.goal) setGoalContributionPanel(refreshedData);
+      await fetchData({ silent: true });
+      mostrarMensajeTemporal('Aportación actualizada.');
+    } catch (error) {
+      mostrarMensajeTemporal(error instanceof Error ? error.message : 'No pude actualizar las aportaciones.');
+    } finally {
+      setGoalContributionLoading(false);
     }
   };
 
@@ -1687,11 +1658,7 @@ export default function DashboardFinanciero() {
     gastado: resumen.gastado,
   });
   const presupuestoPromedio = calcularPresupuestoTresTercios(resumen.promedioIngresosUltimos3Meses);
-  const cargosSantanderTdcMes = gastosMensuales
-    .filter((gasto) => gasto.origen === 'Santander_Email')
-    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
   const totalAbonosTarjetaMes = abonosTarjetaMensuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
-  const deudaTdcEstimadaMes = cargosSantanderTdcMes - totalAbonosTarjetaMes;
   const totalGastadoMes = resumen.gastado.Vida + resumen.gastado.Placeres + resumen.gastado.Futuro;
   const flujoNetoMes = resumen.ingresosMes - totalGastadoMes;
   const metaMensualActiva = monthlyIncomeTarget;
@@ -1712,10 +1679,9 @@ export default function DashboardFinanciero() {
     : billingStatus?.plan === 'beta'
       ? 'Beta'
       : 'Gratis';
-  const activeBankConnections = bankConnections.filter((connection) => connection.status === 'active').length;
-  const bankStatusLabel = activeBankConnections === 0
-    ? 'Sin bancos conectados'
-    : `${activeBankConnections} banco${activeBankConnections === 1 ? '' : 's'} conectado${activeBankConnections === 1 ? '' : 's'}`;
+  const accountName = accountProfile?.full_name?.trim() || 'Tu perfil';
+  const accountFirstName = accountName === 'Tu perfil' ? '' : accountName.split(/\s+/)[0];
+  const accountInitials = accountName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'V';
   const statusTone: StatusTone = mensajeStatus.startsWith('Error') || mensajeStatus.startsWith('No pude') || mensajeStatus.startsWith('Ocurrió')
     ? 'error'
     : mensajeStatus.startsWith('Falta') || mensajeStatus.includes('parcial') || mensajeStatus.includes('advertencia')
@@ -1755,10 +1721,6 @@ export default function DashboardFinanciero() {
     const fecha = new Date(gasto.fecha).getTime();
     return fecha >= new Date(inicioMesISO('2026-01')).getTime() && fecha < yearToDateEnd;
   });
-  const abonosTarjetaYearToDate = abonosTarjetaAnuales.filter((abono) => {
-    const fecha = new Date(abono.fecha).getTime();
-    return fecha >= new Date(inicioMesISO('2026-01')).getTime() && fecha < yearToDateEnd;
-  });
   const gastadoYearToDate = calcularGastadoPorBolsa(gastosYearToDate);
   const presupuestoYearToDate = ingresosYearToDate > 0
     ? calcularPresupuestoTresTercios(ingresosYearToDate)
@@ -1770,11 +1732,6 @@ export default function DashboardFinanciero() {
   const presupuestoYearToDateVida = presupuestoYearToDate.Vida;
   const presupuestoYearToDatePlaceres = presupuestoYearToDate.Placeres;
   const presupuestoYearToDateFuturo = presupuestoYearToDate.Futuro;
-  const cargosSantanderTdcYearToDate = gastosYearToDate
-    .filter((gasto) => gasto.origen === 'Santander_Email')
-    .reduce((total, gasto) => total + Number(gasto.monto || 0), 0);
-  const totalAbonosTarjetaYearToDate = abonosTarjetaYearToDate.reduce((total, abono) => total + Number(abono.monto || 0), 0);
-  const deudaTdcEstimadaYearToDate = cargosSantanderTdcYearToDate - totalAbonosTarjetaYearToDate;
   const tasaFuturoYearToDate = ingresosYearToDate > 0 ? (gastadoYearToDate.Futuro / ingresosYearToDate) * 100 : 0;
   const burnRateYearToDate = presupuestoYearToDateVida + presupuestoYearToDatePlaceres > 0
     ? ((gastadoYearToDate.Vida + gastadoYearToDate.Placeres) / (presupuestoYearToDateVida + presupuestoYearToDatePlaceres)) * 100
@@ -1843,13 +1800,6 @@ export default function DashboardFinanciero() {
       tone: 'amber',
       trend: tendencias.burnRate,
     },
-    {
-      label: 'Tarjeta',
-      value: `$${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}`,
-      detail: `Uso ${cargosSantanderTdcMes > 0 ? Math.min((deudaTdcEstimadaMes / cargosSantanderTdcMes) * 100, 100).toFixed(0) : 0}%`,
-      tone: 'cyan',
-      trend: `Abonos $${formatearMonto(totalAbonosTarjetaMes)}`,
-    },
   ];
   // The stable array is required by the analysis callback/effect to avoid duplicate AI requests.
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -1867,35 +1817,33 @@ export default function DashboardFinanciero() {
       used: resumen.gastado.Placeres,
       limit: resumen.presupuesto.Placeres,
       remaining: restantes.Placeres,
-      color: 'bg-blue-600',
-      tint: 'bg-blue-50 text-blue-700',
+      color: 'bg-orange-500',
+      tint: 'bg-orange-50 text-orange-700',
     },
     {
       label: 'Futuro',
       used: resumen.gastado.Futuro,
       limit: resumen.presupuesto.Futuro,
       remaining: restantes.Futuro,
-      color: 'bg-violet-600',
-      tint: 'bg-violet-50 text-violet-700',
+      color: 'bg-amber-500',
+      tint: 'bg-amber-50 text-amber-700',
     },
   ], [restantes.Futuro, restantes.Placeres, restantes.Vida, resumen.gastado.Futuro, resumen.gastado.Placeres, resumen.gastado.Vida, resumen.presupuesto.Futuro, resumen.presupuesto.Placeres, resumen.presupuesto.Vida]);
-  const desktopNavItems: Array<{ label: string; view: DashboardView; mark: string }> = [
-    { label: 'Resumen', view: 'resumen', mark: 'R' },
-    { label: 'Movimientos', view: 'movimientos', mark: 'M' },
-    { label: 'Presupuestos', view: 'presupuestos', mark: 'P' },
-    { label: 'Metas', view: 'metas', mark: 'G' },
-    { label: 'Análisis', view: 'analisis', mark: 'A' },
-    { label: 'Cuentas', view: 'cuentas', mark: 'C' },
-    { label: 'Wealth', view: 'wealth', mark: 'W' },
-    { label: 'Planes', view: 'planes', mark: 'P' },
-    { label: 'Reportes', view: 'reportes', mark: 'R' },
+  const desktopNavItems: Array<{ label: string; view: DashboardView; icon: React.ElementType }> = [
+    { label: 'Resumen', view: 'resumen', icon: House },
+    { label: 'Movimientos', view: 'movimientos', icon: ArrowsDownUp },
+    { label: 'Presupuestos', view: 'presupuestos', icon: ChartDonut },
+    { label: 'Metas', view: 'metas', icon: Target },
+    { label: 'Análisis', view: 'analisis', icon: ChartLineUp },
+    { label: 'Virafi Wealth', view: 'wealth', icon: Plant },
+    { label: 'Planes', view: 'planes', icon: CalendarBlank },
+    { label: 'Reportes', view: 'reportes', icon: FileText },
   ];
   const mobileNavItems = [
-    { label: 'Inicio', view: 'resumen' as const, mark: 'I' },
-    { label: 'Mov.', view: 'movimientos' as const, mark: 'M' },
-    { label: 'Metas', view: 'metas' as const, mark: 'G' },
-    { label: 'Cuentas', view: 'cuentas' as const, mark: 'C' },
-    { label: 'Wealth', view: 'wealth' as const, mark: 'W' },
+    { label: 'Inicio', view: 'resumen' as const, icon: House },
+    { label: 'Mov.', view: 'movimientos' as const, icon: ArrowsDownUp },
+    { label: 'Metas', view: 'metas' as const, icon: Target },
+    { label: 'Wealth', view: 'wealth' as const, icon: Plant },
   ];
   const activeNav = desktopNavItems.find((item) => item.view === vistaActiva) || desktopNavItems[0];
   const monthScopedViews: DashboardView[] = ['resumen', 'movimientos', 'presupuestos', 'analisis', 'reportes'];
@@ -1916,63 +1864,51 @@ export default function DashboardFinanciero() {
     setMovimientosPage((current) => Math.max(current - 1, 0));
   };
 
-  const crearContextoVisibleChat = () => ({
-    vista: activeNav.label,
-    mesActivo,
-    mes: `${selectedMonthName} 2026`,
-    resumen: {
-      ingresos: resumen.ingresosMes,
-      egresos: totalGastadoMes,
-      flujoNeto: flujoNetoMes,
-      presupuesto: resumen.presupuesto,
-      gastado: resumen.gastado,
-      restante: restantes,
-      metaMensualIngresos: metaMensualActiva,
-      progresoMetaMensualPct: avanceMetaMensual,
-      brechaMetaMensual,
-      promedioIngresosUltimos3Meses: resumen.promedioIngresosUltimos3Meses,
-    },
-    movimientosVisibles: ultimosMovimientos.slice(0, 10).map((movimiento) => ({
-      id: movimiento.id,
-      tipo: movimiento.tipo,
-      concepto: movimiento.concepto,
-      categoria: nombreBolsa(movimiento.categoria),
-      subcategoria: movimiento.subcategoria,
-      monto: Number(movimiento.monto || 0),
-      origen: nombreOrigen(movimiento.origen, movimiento.subcategoria),
-      fecha: movimiento.fecha,
-    })),
-  });
+  const agregarAdjuntosChat = (files: File[]) => {
+    const uniqueFiles = [...chatAttachments, ...files].filter((file, index, all) => (
+      all.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size) === index
+    )).slice(0, 4);
+    const oversized = uniqueFiles.find((file) => file.size > 10 * 1024 * 1024);
+    const totalBytes = uniqueFiles.reduce((total, file) => total + file.size, 0);
+
+    if (oversized) {
+      setMensajeStatus(`${oversized.name} supera el límite de 10 MB.`);
+      return;
+    }
+    if (totalBytes > 20 * 1024 * 1024) {
+      setMensajeStatus('Los archivos no pueden superar 20 MB en total.');
+      return;
+    }
+
+    setChatAttachments(uniqueFiles);
+  };
 
   const enviarMensajeChat = async (event: React.FormEvent) => {
     event.preventDefault();
     const texto = inputIA.trim();
+    const attachmentsToSend = [...chatAttachments];
 
-    if (!texto || procesando) return;
+    if ((!texto && attachmentsToSend.length === 0) || procesando) return;
 
     const userMessage: DashboardChatMessage = {
       id: createClientId('user'),
       role: 'user',
-      content: texto,
+      content: texto || `Analiza ${attachmentsToSend.length === 1 ? 'este archivo' : 'estos archivos'}: ${attachmentsToSend.map((file) => file.name).join(', ')}`,
       createdAt: new Date().toISOString(),
     };
     const nextMessages = [...chatMessages, userMessage].slice(-12);
 
     setChatMessages(nextMessages);
     setInputIA('');
+    setChatAttachments([]);
     setProcesando(true);
-    setMensajeStatus('Procesando con IA financiera...');
 
     try {
-      const response = await fetchWithSessionRefresh('/api/dashboard/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: texto,
-          messages: nextMessages,
-          screenContext: chatIncludesScreen ? crearContextoVisibleChat() : null,
-        }),
-      });
+      const payload = new FormData();
+      payload.set('text', texto);
+      payload.set('messages', JSON.stringify(nextMessages));
+      attachmentsToSend.forEach((file) => payload.append('attachments', file));
+      const response = await fetchWithSessionRefresh('/api/dashboard/chat', { method: 'POST', body: payload });
       const data = await response.json();
       const reply = typeof data.message === 'string' && data.message.trim()
         ? data.message.trim()
@@ -2000,6 +1936,7 @@ export default function DashboardFinanciero() {
         await fetchData();
       }
     } catch {
+      setChatAttachments(attachmentsToSend);
       setMensajeStatus('No pude conectar con el chat financiero.');
       const assistantMessage: DashboardChatMessage = {
         id: createClientId('assistant'),
@@ -2020,7 +1957,7 @@ export default function DashboardFinanciero() {
   const generarAnalisis = useCallback(async (scope: 'month' | 'year') => {
     setAnalysisScope(scope);
     setAnalysisLoading(true);
-    setMensajeStatus(scope === 'year' ? 'Generando análisis anual con IA...' : 'Generando análisis mensual con IA...');
+    setMensajeStatus(scope === 'year' ? 'VirafIA está generando tu análisis anual...' : 'VirafIA está generando tu análisis mensual...');
     const isYearScope = scope === 'year';
     const resultKey = `${scope}:${isYearScope ? yearToDateMonthKey : mesActivo}`;
     const analysisMonthLabel = isYearScope ? `enero a ${yearToDateMonthName.toLowerCase()}` : selectedMonthName;
@@ -2031,7 +1968,6 @@ export default function DashboardFinanciero() {
           flujoNetoMes: flujoNetoYearToDate,
           tasaFuturo: tasaFuturoYearToDate,
           burnRate: burnRateYearToDate,
-          deudaTdcEstimadaMes: deudaTdcEstimadaYearToDate,
         }
       : {
           ingresosMes: resumen.ingresosMes,
@@ -2039,7 +1975,6 @@ export default function DashboardFinanciero() {
           flujoNetoMes,
           tasaFuturo,
           burnRate,
-          deudaTdcEstimadaMes,
         };
     const analysisBuckets = isYearScope
       ? [
@@ -2079,7 +2014,6 @@ export default function DashboardFinanciero() {
       totalGastadoMes: summary.totalGastadoMes,
       flujoNetoMes: summary.flujoNetoMes,
       tasaFuturo: summary.tasaFuturo,
-      deudaTdcEstimadaMes: summary.deudaTdcEstimadaMes,
       buckets: analysisBuckets,
       monthlySeries: isYearScope ? yearToDateMonths : undefined,
     });
@@ -2136,7 +2070,7 @@ export default function DashboardFinanciero() {
       setAnalysisLoading(false);
       setTimeout(() => setMensajeStatus(''), 4000);
     }
-  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, deudaTdcEstimadaMes, deudaTdcEstimadaYearToDate, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, tercioMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
+  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, tercioMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const currentAnalysisKey = `${analysisScope}:${analysisScope === 'year' ? yearToDateMonthKey : mesActivo}`;
@@ -2178,11 +2112,19 @@ export default function DashboardFinanciero() {
   }, {});
   const bolsaMasPresionada = [...budgetBuckets]
     .sort((a, b) => calcularPorcentaje(b.used, b.limit) - calcularPorcentaje(a.used, a.limit))[0] || null;
-  const cuentasReales = bankAccounts.filter((account) => !esCuentaDemo(account));
-  const saldoCuentas = cuentasReales.reduce((total, account) => total + valorNumerico(account.current_balance), 0);
-  const cuentasActivas = bankConnections.filter((connection) => connection.status === 'active').length;
+  const presupuestoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.limit, 0);
+  const gastoPresupuestadoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.used, 0);
+  const presupuestoUtilizado = presupuestoTotal > 0 ? Math.min((gastoPresupuestadoTotal / presupuestoTotal) * 100, 100) : 0;
+  const recomendacionResumen = flujoNetoMes > 0
+    ? `Con tu flujo actual, podrías dirigir ${formatoDineroCorto(Math.max(flujoNetoMes * 0.25, 0))} extra a tu meta prioritaria este mes.`
+    : flujoNetoMes < 0
+      ? `Tu flujo está ${formatoDineroCorto(Math.abs(flujoNetoMes))} por debajo de cero. Conviene ajustar primero la bolsa con más presión.`
+      : 'Tu flujo está en equilibrio. El siguiente paso es registrar ingresos y gastos para que Virafi pueda recomendarte un movimiento concreto.';
+  const recomendacionDetalle = bolsaMasPresionada && calcularPorcentaje(bolsaMasPresionada.used, bolsaMasPresionada.limit) > avanceMes
+    ? `${bolsaMasPresionada.label} va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes; revisa sus movimientos antes de aumentar aportaciones.`
+    : 'Tu ritmo de gasto está alineado con el avance del mes. Mantén los límites y revisa de nuevo en una semana.';
   const openAgentTasks = agentTasks.filter((task) => ['open', 'in_progress', 'waiting_user'].includes(task.status));
-  const taskNotifications = openAgentTasks.filter((task) => task.agent_key === 'movement_monitor');
+  const taskNotifications = openAgentTasks.filter((task) => ['movement_monitor', 'daily_cfo_mentor'].includes(task.agent_key));
   const movementNotifications = ultimosMovimientos.slice(0, 20).map((movement) => ({
     id: `movement-${movement.tipo}-${movement.id}`,
     title: movement.tipo === 'ingreso'
@@ -2221,22 +2163,22 @@ export default function DashboardFinanciero() {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para probar el asistente financiero 33/33/33.',
-      features: ['Registro manual', '30 dias de historial', 'Sin banco directo', 'IA muy limitada'],
+      description: 'Para probar a VirafIA con el metodo 33/33/33.',
+      features: ['Registro manual', '30 días de historial', 'Presupuesto 33/33/33', 'VirafIA limitada'],
     },
     {
       name: 'Beta',
       price: '$15',
       plan: 'beta',
-      description: 'Para usar el asistente financiero personal con automatizacion progresiva.',
-      features: ['Telegram incluido', 'Hasta 2 bancos', '12 meses de historial', 'Analisis mensual con IA'],
+      description: 'Para usar a VirafIA con automatizacion progresiva.',
+      features: ['Telegram incluido', '12 meses de historial', 'Metas personalizadas', 'Análisis mensual con VirafIA'],
     },
     {
       name: 'Premium',
       price: '$29',
       plan: 'premium',
       description: 'Para seguimiento avanzado con mas analisis y soporte.',
-      features: ['Hasta 5 bancos', '12 meses de historial', 'Analisis mensual/anual con IA', 'Soporte prioritario'],
+      features: ['Historial ampliado', 'Wealth y escenarios', 'Análisis mensual/anual con VirafIA', 'Soporte prioritario'],
     },
   ];
   const manualExpenseModal = manualExpenseOpen ? (
@@ -2448,7 +2390,7 @@ export default function DashboardFinanciero() {
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1 text-sm font-bold text-slate-700">Ahorrado actualmente
-            <input type="number" min="0" step="0.01" value={goalEditForm.current} onChange={(event) => setGoalEditForm((current) => current ? { ...current, current: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-violet-500" />
+            <input type="number" min="0" step="0.01" value={goalEditForm.current} disabled={/^[0-9a-f-]{36}$/i.test(goalEditForm.id)} onChange={(event) => setGoalEditForm((current) => current ? { ...current, current: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 outline-none focus:border-violet-500 disabled:text-slate-500" />
           </label>
           <label className="grid gap-1 text-sm font-bold text-slate-700">Monto objetivo
             <input type="number" min="0" step="0.01" value={goalEditForm.target} onChange={(event) => setGoalEditForm((current) => current ? { ...current, target: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-violet-500" />
@@ -2457,7 +2399,7 @@ export default function DashboardFinanciero() {
             <input type="date" value={goalEditForm.targetDate} onChange={(event) => setGoalEditForm((current) => current ? { ...current, targetDate: event.target.value } : current)} className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-violet-500" />
           </label>
         </div>
-        <p className="mt-4 text-sm text-slate-500">Con estos datos calcularemos avance, monto restante y ritmo mensual necesario.</p>
+        <p className="mt-4 text-sm text-slate-500">El monto objetivo y la fecha definen el plan. El ahorro actual se calcula desde el historial de aportaciones confirmadas.</p>
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" onClick={() => setGoalEditForm(null)} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700">Cancelar</button>
           <button type="submit" disabled={goalSaving} className="h-10 rounded-lg bg-violet-600 px-4 text-sm font-bold text-white disabled:opacity-60">{goalSaving ? 'Guardando...' : 'Guardar meta'}</button>
@@ -2472,11 +2414,11 @@ export default function DashboardFinanciero() {
         <section className="w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-950 px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-600">
-                <ChatIcon />
+              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                <VirafIAMark className="size-6" />
               </div>
               <div className="min-w-0">
-                <h2 className="truncate text-sm font-black">Asistente financiero</h2>
+                <h2 className="truncate text-sm font-black">VirafIA</h2>
                 <p className="truncate text-xs text-slate-300">{selectedMonthName.toLowerCase()} 2026 · {activeNav.label}</p>
               </div>
             </div>
@@ -2491,12 +2433,20 @@ export default function DashboardFinanciero() {
           </div>
           <div className="max-h-[46vh] space-y-3 overflow-y-auto bg-slate-50 p-4">
             {chatMessages.length === 0 && !procesando ? (
-              <div className="rounded-lg bg-white p-3 text-sm text-slate-600 shadow-sm">
-                Háblame normal: registra movimientos, pregúntame de dónde sale un número o corrige el último gasto.
+              <div className="flex items-start gap-2.5 rounded-lg bg-white p-3 text-sm text-slate-600 shadow-sm">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-blue-600 text-white" aria-hidden="true">
+                  <VirafIAMark className="size-4" />
+                </span>
+                <span>Hola, soy VirafIA. Pregúntame por tus movimientos, cuentas, metas, patrimonio o inversiones. También puedo analizar imágenes y documentos.</span>
               </div>
             ) : (
               chatMessages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={message.id} className={`flex items-start gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {message.role === 'assistant' ? (
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-blue-600 text-white" aria-label="VirafIA">
+                      <VirafIAMark className="size-4" />
+                    </span>
+                  ) : null}
                   <div className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm shadow-sm ${
                     message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700'
                   }`}>
@@ -2506,10 +2456,10 @@ export default function DashboardFinanciero() {
               ))
             )}
             {procesando ? (
-              <div className="flex justify-start" role="status" aria-live="polite" aria-label="El asistente está escribiendo">
+              <div className="flex justify-start" role="status" aria-live="polite" aria-label="VirafIA está escribiendo">
                 <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 shadow-sm">
-                  <span className="grid size-6 place-items-center rounded-full bg-blue-600 text-[9px] font-black text-white" aria-hidden="true">
-                    IA
+                  <span className="grid size-6 place-items-center rounded-full bg-blue-600 text-white" aria-hidden="true">
+                    <VirafIAMark className="size-3.5" />
                   </span>
                   <span className="flex h-4 items-center gap-1" aria-hidden="true">
                     {[0, 1, 2].map((dot) => (
@@ -2520,32 +2470,49 @@ export default function DashboardFinanciero() {
                       />
                     ))}
                   </span>
-                  <span className="sr-only">El asistente está escribiendo</span>
+                  <span className="sr-only">VirafIA está escribiendo</span>
                 </div>
               </div>
             ) : null}
           </div>
           <form onSubmit={enviarMensajeChat} className="border-t border-slate-100 bg-white p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <input
-                  type="checkbox"
-                  checked={chatIncludesScreen}
-                  onChange={(event) => setChatIncludesScreen(event.target.checked)}
-                  className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                Usar esta vista
-              </label>
+            {chatAttachments.length > 0 ? (
+              <div className="mb-2 flex flex-wrap gap-2" aria-label="Archivos adjuntos">
+                {chatAttachments.map((file) => (
+                  <span key={`${file.name}-${file.size}`} className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700">
+                    <FileText aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="max-w-44 truncate">{file.name}</span>
+                    <button type="button" onClick={() => setChatAttachments((current) => current.filter((item) => item !== file))} aria-label={`Quitar ${file.name}`} className="grid size-5 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700">
+                      <X aria-hidden="true" className="size-3.5" weight="bold" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <input
+              ref={chatFileInputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf,text/plain,text/csv,text/markdown,text/html,application/json,.pdf,.txt,.csv,.md,.json"
+              onChange={(event) => {
+                agregarAdjuntosChat(Array.from(event.target.files || []));
+                event.target.value = '';
+              }}
+              aria-hidden="true"
+              className="sr-only"
+              tabIndex={-1}
+            />
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-2">
               <button
                 type="button"
-                onClick={alternarDictadoMovimiento}
+                onClick={() => chatFileInputRef.current?.click()}
                 disabled={procesando}
-                className={`h-8 rounded-lg px-3 text-xs font-black transition-colors disabled:opacity-60 ${escuchandoVoz ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'}`}
+                aria-label="Adjuntar documentos o imágenes"
+                title="Adjuntar documentos o imágenes"
+                className="grid size-11 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
               >
-                {escuchandoVoz ? 'Detener' : 'Hablar'}
+                <Paperclip aria-hidden="true" className="size-5" weight="bold" />
               </button>
-            </div>
-            <div className="grid grid-cols-[1fr_auto] gap-2">
               <input
                 type="text"
                 value={inputIA}
@@ -2555,8 +2522,18 @@ export default function DashboardFinanciero() {
                 className="h-11 min-w-0 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
               />
               <button
+                type="button"
+                onClick={alternarDictadoMovimiento}
+                disabled={procesando}
+                aria-label={escuchandoVoz ? 'Detener grabación' : 'Hablar con VirafIA'}
+                title={escuchandoVoz ? 'Detener grabación' : 'Hablar con VirafIA'}
+                className={`grid size-11 place-items-center rounded-lg border transition disabled:opacity-50 ${escuchandoVoz ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'}`}
+              >
+                <Microphone aria-hidden="true" className="size-5" weight={escuchandoVoz ? 'fill' : 'bold'} />
+              </button>
+              <button
                 type="submit"
-                disabled={procesando || !inputIA.trim()}
+                disabled={procesando || (!inputIA.trim() && chatAttachments.length === 0)}
                 className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {procesando ? 'Pensando' : 'Enviar'}
@@ -2570,15 +2547,15 @@ export default function DashboardFinanciero() {
           onClick={() => setChatOpen(true)}
           className="flex h-14 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-black text-white shadow-xl transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
         >
-          <ChatIcon />
-          IA
+          <VirafIAMark className="size-7" />
+          VirafIA
         </button>
       )}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-950">
+    <div className="min-h-screen bg-[var(--brand-cream)] text-slate-950">
       {billingAction && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-5 text-center shadow-xl">
@@ -2592,69 +2569,68 @@ export default function DashboardFinanciero() {
           </div>
         </div>
       )}
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[220px_1fr]">
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_1fr]">
         <aside className="hidden border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-          <div className="flex h-16 items-center gap-3 px-5">
-            <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-            <div>
-              <p className="text-sm font-bold leading-tight">Dashboard</p>
-              <p className="text-sm font-bold leading-tight">Financiero</p>
-            </div>
+          <div className="border-b border-slate-100 px-6 pb-5 pt-6">
+            <VirafiBrand />
+            <p className="mt-4 text-sm leading-5 text-slate-500">Tu CFO personal, todos los días.</p>
           </div>
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5 text-sm font-medium text-slate-500" aria-label="Secciones del dashboard">
-            {desktopNavItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => setVistaActiva(item.view)}
-                aria-current={vistaActiva === item.view ? 'page' : undefined}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                  vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <span aria-hidden="true" className={`grid size-7 place-items-center rounded-lg text-xs font-black ${
-                  vistaActiva === item.view ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
-                }`}>
-                  {item.mark}
-                </span>
-                {item.label}
-              </button>
-            ))}
+          <nav className="flex-1 overflow-y-auto px-3 py-4 text-sm font-semibold text-slate-600" aria-label="Secciones del dashboard">
+            {desktopNavItems.map((item, index) => {
+              const Icon = item.icon;
+
+              return (
+                <React.Fragment key={item.label}>
+                  {index === 5 && <div className="my-3 border-t border-slate-100" aria-hidden="true" />}
+                  <button
+                    type="button"
+                    onClick={() => setVistaActiva(item.view)}
+                    aria-current={vistaActiva === item.view ? 'page' : undefined}
+                    className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <Icon aria-hidden="true" className="size-5 shrink-0" weight={vistaActiva === item.view ? 'duotone' : 'regular'} />
+                    <span>{item.label}</span>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+            <button type="button" onClick={() => setChatOpen(true)} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+              <VirafIAMark className="size-5 shrink-0 text-blue-700" />
+              <span className="flex-1">VirafIA</span>
+              <span className="text-xs font-bold text-blue-700">Nuevo</span>
+            </button>
+            <button type="button" onClick={toggleNotificationTray} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+              <Bell aria-hidden="true" className="size-5" weight="regular" />
+              <span className="flex-1">Notificaciones</span>
+              {unreadNotifications.length > 0 && <span className="grid min-w-6 place-items-center rounded-full bg-blue-600 px-1 text-xs font-black leading-6 text-white">{Math.min(unreadNotifications.length, 99)}</span>}
+            </button>
           </nav>
           <div className="border-t border-slate-100 px-4 pb-4 pt-3">
             <Link href="/onboarding" aria-label="Configuración" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <GearIcon />
               <span>Configuración</span>
             </Link>
-            <Link href="/fiscal" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-              <span className="grid size-5 place-items-center text-xs font-black text-blue-700">SAT</span>
-              <span>Centro fiscal</span>
-            </Link>
-            <button type="button" onClick={cerrarSesion} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50">
-              Salir
-            </button>
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <Link href="/onboarding?tab=profile" className="mt-3 block rounded-lg border border-slate-200 bg-[var(--brand-cream)] p-3 transition-colors hover:border-blue-200 hover:bg-blue-50" aria-label="Abrir mi perfil">
               <div className="flex items-center gap-3">
-                <div className="grid size-9 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">DM</div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Diego Martínez</p>
+                <div className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-blue-600 text-sm font-bold text-white">{accountProfile?.avatarUrl ? <Image src={accountProfile.avatarUrl} alt={`Foto de ${accountName}`} fill sizes="36px" unoptimized className="object-cover" /> : accountInitials}</div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{accountName}</p>
                   <p className="text-xs text-slate-500">Plan {planLabel}</p>
                 </div>
               </div>
-            </div>
+            </Link>
           </div>
         </aside>
 
         <main className="min-w-0 pb-24 lg:pb-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-            <div className="flex min-h-16 flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+            <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between lg:px-8">
               <div className="relative flex items-center justify-between gap-3 md:hidden">
                 <div className="flex items-center gap-3">
-                  <div className="grid size-9 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-                  <div>
-                    <p className="text-sm font-bold leading-tight">Dashboard Financiero</p>
-                    <p className="text-xs font-medium text-slate-500">Plan {planLabel}</p>
-                  </div>
+                  <VirafiBrand compact />
+                  <p className="text-xs font-medium text-slate-500">Plan {planLabel}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={toggleNotificationTray} aria-label={`Notificaciones${unreadNotifications.length ? `, ${unreadNotifications.length} nuevas` : ''}`} className="relative grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm">
@@ -2671,8 +2647,8 @@ export default function DashboardFinanciero() {
                 )}
               </div>
               <div className="hidden min-w-0 flex-1 md:block">
-                <p className="text-xs font-semibold uppercase text-slate-400">Vista actual</p>
-                <p className="truncate text-base font-bold text-slate-950">{activeNav.label}</p>
+                <p className="font-brand truncate text-2xl text-slate-950">{vistaActiva === 'resumen' ? `Hola${accountFirstName ? `, ${accountFirstName}` : ''}.` : activeNav.label}</p>
+                {vistaActiva !== 'resumen' && <p className="mt-0.5 text-xs font-semibold text-slate-400">Virafi · {selectedMonthName} 2026</p>}
               </div>
               <div className="hidden items-center gap-2 md:flex">
                 <div className="relative">
@@ -2694,7 +2670,7 @@ export default function DashboardFinanciero() {
                     <div className="absolute right-0 top-12 z-50 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
                       <div className="border-b border-slate-100 px-4 py-3">
                         <p className="font-black text-slate-950">Notificaciones</p>
-                        <p className="text-xs text-slate-500">Movimientos detectados por tus conexiones.</p>
+                        <p className="text-xs text-slate-500">Movimientos y acciones que requieren tu atención.</p>
                       </div>
                       <div className="max-h-96 overflow-y-auto p-2">
                         {inboxNotifications.length === 0 ? (
@@ -2727,33 +2703,32 @@ export default function DashboardFinanciero() {
                     {premiumActive ? 'Facturación' : 'Mejorar plan'}
                   </button>
                 )}
-                <span className={`hidden rounded-lg px-3 py-2 text-sm font-semibold md:inline-flex ${
-                  premiumActive ? 'bg-violet-50 text-violet-700' : 'bg-emerald-50 text-emerald-700'
-                }`}>
-                  {planLabel}
-                </span>
+                <div className="hidden min-w-28 border-l border-slate-200 pl-4 md:block">
+                  <p className="text-sm font-bold text-slate-950">Plan {planLabel}</p>
+                  <p className="text-xs font-bold text-emerald-700">{billingStatus?.active ? 'Activo' : 'Disponible'}</p>
+                </div>
+                <Link href="/onboarding?tab=profile" className="relative grid size-10 place-items-center overflow-hidden rounded-full bg-slate-950 text-sm font-bold text-white" aria-label={`Abrir perfil de ${accountName}`}>{accountProfile?.avatarUrl ? <Image src={accountProfile.avatarUrl} alt={`Foto de ${accountName}`} fill sizes="40px" unoptimized className="object-cover" /> : accountInitials}</Link>
               </div>
             </div>
           </header>
 
-          <div className="space-y-5 p-3 sm:p-4 md:p-6 lg:p-8">
+          <div className="mx-auto max-w-[1800px] space-y-5 p-3 sm:p-4 md:p-6 lg:p-7">
             {mensajeStatus && (
               <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${statusToneClass[statusTone]}`}>
                 {mensajeStatus}
               </div>
             )}
 
-            <section key={vistaActiva} className={`${vistaActiva === 'wealth' ? 'hidden' : 'dashboard-view-panel'} rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5`}>
+            <section key={vistaActiva} className={`${['wealth', 'resumen'].includes(vistaActiva) ? 'hidden' : 'dashboard-view-panel'} rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5`}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-sm font-bold text-blue-700">{activeNav.label}</p>
                   <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
-                    {vistaActiva === 'resumen' ? 'Tu tablero financiero' :
+                    {vistaActiva === 'resumen' ? 'Tu rumbo financiero' :
                       vistaActiva === 'movimientos' ? 'Movimientos del mes' :
                       vistaActiva === 'presupuestos' ? 'Presupuestos y bolsas' :
                       vistaActiva === 'metas' ? 'Metas financieras' :
                       vistaActiva === 'analisis' ? 'Análisis de comportamiento' :
-                      vistaActiva === 'cuentas' ? 'Cuentas conectadas' :
                       vistaActiva === 'wealth' ? 'Wealth cockpit' :
                       vistaActiva === 'planes' ? 'Plan y facturación' : 'Reportes'}
                   </h1>
@@ -2761,7 +2736,6 @@ export default function DashboardFinanciero() {
                     {loading ? 'Actualizando datos...' : showMonthSelector
                       ? `Vista de ${selectedMonthName.toLowerCase()} 2026.`
                       : vistaActiva === 'metas' ? 'Objetivos creados desde tu experiencia financiera.'
-                      : vistaActiva === 'cuentas' ? 'Administra tus conexiones financieras.'
                       : vistaActiva === 'planes' ? 'Elige o administra tu suscripción.'
                       : 'Información de tu cuenta.'}
                   </p>
@@ -2785,10 +2759,122 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section id="resumen" className={`${vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden'} scroll-mt-28 gap-4 xl:grid-cols-[1.4fr_1fr]`}>
+            <section id="resumen" className={(vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden') + ' scroll-mt-28 gap-4 xl:grid-cols-[minmax(270px,0.82fr)_minmax(420px,1.28fr)_minmax(350px,1fr)]'}>
+              <article className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl text-slate-950">Balance mensual</h2>
+                  <button type="button" onClick={() => setBalanceVisible((visible) => !visible)} aria-label={balanceVisible ? 'Ocultar saldos' : 'Mostrar saldos'} className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-950">
+                    {balanceVisible
+                      ? <Eye aria-hidden="true" className="size-5" weight="regular" />
+                      : <EyeSlash aria-hidden="true" className="size-5" weight="regular" />}
+                  </button>
+                </div>
+                <div className="mt-8">
+                  <p className="text-sm font-semibold text-slate-500">Flujo neto del mes</p>
+                  <p className="mt-1 break-words font-brand text-[clamp(2.25rem,4vw,3.35rem)] leading-none tracking-tight text-slate-950">{balanceVisible ? formatoDineroCorto(flujoNetoMes) : '••••••'}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-500">Calculado exclusivamente con los ingresos y gastos que registras en Virafi.</p>
+                </div>
+                <div className="mt-7 grid gap-3 rounded-xl bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-600">Ingresos</span>
+                    <strong className="text-emerald-700">{balanceVisible ? formatoDineroCorto(resumen.ingresosMes) : '••••'}</strong>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-600">Gastos</span>
+                    <strong className="text-slate-950">{balanceVisible ? formatoDineroCorto(totalGastadoMes) : '••••'}</strong>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setVistaActiva('analisis')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-5 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ver detalle <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+
+              <article className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl text-slate-950">Resumen del mes</h2>
+                    <p className="mt-1 text-sm text-slate-500">Ingresos, gastos y flujo real</p>
+                  </div>
+                  <select aria-label="Mes del resumen" value={mesActivo} onChange={(event) => changeMesActivo(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500">
+                    {meses2026.map((mes) => (
+                      <option key={mes.etiqueta} value={'2026-' + String(mes.indice + 1).padStart(2, '0')}>{mes.etiqueta} 2026</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-7">
+                  <p className="text-sm font-semibold text-slate-500">Flujo mensual</p>
+                  <p className={'mt-1 font-brand text-4xl leading-none ' + (flujoNetoMes < 0 ? 'text-rose-600' : 'text-emerald-700')}>{formatoDineroCorto(flujoNetoMes)}</p>
+                </div>
+                <div className="relative mt-6 flex h-32 items-end gap-2 border-b border-slate-200 pb-5">
+                  {!hasMonthlyData && <p className="absolute inset-x-0 top-8 text-center text-xs font-semibold text-slate-400">Sin historial suficiente</p>}
+                  {resumenMensual.slice(0, 12).map((mes, index) => {
+                    const fallbackHeight = 18 + ((index % 4) * 11);
+                    const resultado = mes.resultado;
+                    const height = hasMonthlyData ? Math.max((Math.abs(resultado) / maxMonthlyBar) * 88, resultado ? 8 : 2) : fallbackHeight;
+                    return (
+                      <div key={mes.mes} className="flex min-w-4 flex-1 flex-col items-center justify-end gap-2">
+                        <span
+                          className={'w-full max-w-3 rounded-t-sm ' + (hasMonthlyData ? resultado >= 0 ? 'bg-blue-600' : 'bg-slate-300' : index % 3 === 0 ? 'bg-blue-200' : 'bg-slate-200')}
+                          style={{ height: height + 'px' }}
+                          title={mes.mes + ': ' + formatoDineroCorto(resultado)}
+                        />
+                        <span className={'text-[10px] font-bold ' + (mes.mes === selectedMonthName ? 'text-blue-700' : 'text-slate-400')}>{mes.mes.slice(0, 1)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => setVistaActiva('analisis')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ver análisis completo <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+
+              <article id="presupuesto" className="flex min-h-[342px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl text-slate-950">Presupuesto por categoría</h2>
+                    <p className="mt-1 text-sm text-slate-500">{presupuestoUtilizado.toFixed(0)}% utilizado</p>
+                  </div>
+                  <span className="text-base font-black text-blue-700">33/33/33</span>
+                </div>
+                <div className="mt-6 grid items-center gap-6 sm:grid-cols-[150px_1fr] xl:grid-cols-1 2xl:grid-cols-[160px_1fr]">
+                  <div
+                    className="relative mx-auto grid size-40 place-items-center rounded-full"
+                    style={{ background: 'conic-gradient(var(--brand-future) 0 33.333%, var(--brand-business) 33.333% 66.666%, var(--brand-wealth) 66.666% 100%)' }}
+                    role="img"
+                    aria-label="Distribución equilibrada del presupuesto en Vida, Placeres y Futuro"
+                  >
+                    <div className="grid size-24 place-items-center rounded-full bg-white text-center">
+                      <div>
+                        <p className="font-brand text-xl leading-none text-slate-950">{formatoDineroCorto(gastoPresupuestadoTotal)}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Gasto total</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {budgetBuckets.map((bucket) => (
+                      <div key={bucket.label} className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className={'size-3 shrink-0 rounded-full ' + bucket.color} />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-950">{bucket.label}</p>
+                            <p className="text-xs text-slate-500">33% · {formatoDineroCorto(bucket.limit)}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">{formatoDineroCorto(bucket.used)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button type="button" onClick={() => setVistaActiva('presupuestos')} className="mt-auto inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ver presupuestos <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+            </section>
+
+            <section aria-hidden="true" className="hidden">
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Hola, Diego.</h1>
+                    <h1 className="text-2xl tracking-tight text-slate-950 md:text-3xl">Hola{accountFirstName ? `, ${accountFirstName}` : ''}.</h1>
                   <p className="mt-1 text-sm text-slate-500">
                     {loading ? 'Actualizando datos...' : `Resumen de ${selectedMonthName.toLowerCase()} 2026 con regla 33/33/33.`}
                   </p>
@@ -2841,8 +2927,8 @@ export default function DashboardFinanciero() {
                       )}
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-semibold text-slate-500">Bancos conectados</p>
-                      <p className="mt-2 text-lg font-bold text-slate-950">{bankStatusLabel}</p>
+                      <p className="text-sm font-semibold text-slate-500">Fuente de movimientos</p>
+                      <p className="mt-2 text-lg font-bold text-slate-950">Registro manual y Telegram</p>
                     </div>
                   </div>
                 </div>
@@ -2974,7 +3060,7 @@ export default function DashboardFinanciero() {
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Tus objetivos financieros</h2>
-                    <p className="mt-1 text-sm text-slate-500">Aquí aparecen automáticamente las metas que definiste al personalizar tu experiencia financiera.</p>
+                    <p className="mt-1 max-w-3xl text-sm text-slate-500">Tus valores orientan el plan; aquí sólo aparecen resultados concretos que requieren dinero, monto y fecha.</p>
                   </div>
                   {metasFinancieras.length > 0 ? (
                     <button type="button" onClick={() => setGoalsInterviewOpen(true)} className="shrink-0 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">
@@ -2982,6 +3068,22 @@ export default function DashboardFinanciero() {
                     </button>
                   ) : null}
                 </div>
+                {goalCfoPlan ? (
+                  <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-sm font-black text-blue-950">Plan mensual recomendado</p>
+                    <p className="mt-1 text-sm leading-6 text-blue-900">{goalCfoPlan.summary}</p>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {goalCfoPlan.allocations.map((allocation) => (
+                        <div key={allocation.key} className="rounded-lg bg-white p-3 shadow-sm">
+                          <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold text-slate-700">{allocation.label}</p><span className="text-xs font-black text-blue-700">{allocation.percent}%</span></div>
+                          <p className="mt-1 text-lg font-black text-slate-950">${formatearMonto(allocation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/mes</span></p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">{allocation.purpose}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-blue-900">Es una distribución provisional y explicable. Virafi no asumirá que moviste el dinero: cada aportación requiere tu confirmación.</p>
+                  </div>
+                ) : null}
                 <div className="space-y-3">
                   {metasFinancieras.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
@@ -2989,7 +3091,9 @@ export default function DashboardFinanciero() {
                       <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">Completa la breve entrevista de personalización. Con tus respuestas crearemos aquí tus metas reales, sin objetivos genéricos.</p>
                       <button type="button" onClick={() => setGoalsInterviewOpen(true)} className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Comenzar entrevista</button>
                     </div>
-                  ) : metasFinancieras.map((meta) => (
+                  ) : metasFinancieras.map((meta) => {
+                    const recommendation = goalCfoPlan?.goals.find((goal) => goal.id === String(meta.id));
+                    return (
                     <div key={meta.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -2997,22 +3101,41 @@ export default function DashboardFinanciero() {
                           <p className="text-sm text-slate-500">{meta.fechaObjetivo ? `Fecha objetivo: ${formatearFecha(meta.fechaObjetivo)}` : 'Fecha objetivo pendiente de configurar'}</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <p className="text-sm font-bold text-slate-900">${formatearMonto(meta.actual)} / ${formatearMonto(meta.objetivo)}</p>
-                          <button type="button" onClick={() => setGoalEditForm({ id: String(meta.id), name: meta.nombre, current: String(meta.actual), target: String(meta.objetivo), targetDate: meta.fechaObjetivo ? meta.fechaObjetivo.slice(0, 10) : '' })} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">Ajustar</button>
+                          <p className="text-sm font-bold text-slate-900">{recommendation?.needsDiscovery ? 'Monto por investigar' : meta.objetivo > 0 ? `$${formatearMonto(meta.actual)} / $${formatearMonto(meta.objetivo)}` : 'Monto por definir'}</p>
+                          {/^[0-9a-f-]{36}$/i.test(String(meta.id)) && <button type="button" onClick={() => void cargarAportacionesMeta(String(meta.id))} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Aportaciones</button>}
+                          <button type="button" onClick={() => setGoalEditForm({ id: String(meta.id), name: meta.nombre, current: String(meta.actual), target: String(meta.objetivo), targetDate: meta.fechaObjetivo ? meta.fechaObjetivo.slice(0, 10) : '' })} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-50">{meta.objetivo > 0 ? 'Ajustar' : 'Definir'}</button>
                         </div>
                       </div>
                       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
                         <div className="h-full rounded-full bg-violet-600" style={{ width: `${meta.progreso}%` }} />
                       </div>
+                      {recommendation ? (
+                        <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 lg:grid-cols-[1fr_1fr_auto]">
+                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Qué significa esta meta</p><p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.rationale}</p>{recommendation.targetIssue ? <p className="mt-2 text-xs font-bold text-amber-700">{recommendation.targetIssue}</p> : null}</div>
+                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Siguiente definición</p><p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.nextQuestion}</p><p className="mt-2 text-xs text-slate-500">Primeros hitos: {recommendation.milestones.join(' · ')}</p></div>
+                          <div className="min-w-44 rounded-lg bg-white p-3"><p className="text-xs font-bold text-slate-500">Apartado sugerido</p><p className="mt-1 text-xl font-black text-slate-950">${formatearMonto(recommendation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/mes</span></p>{recommendation.monthlyAmount > 0 && /^[0-9a-f-]{36}$/i.test(String(meta.id)) ? <button type="button" onClick={() => prepararAportacionRecomendada(String(meta.id), recommendation.monthlyAmount)} className="mt-3 w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white hover:bg-violet-700">Registrar si ya lo aparté</button> : null}</div>
+                        </div>
+                      ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </section>
 
+            {goalContributionId && (
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Aportaciones de la meta">
+                <div className="mx-auto max-w-3xl rounded-xl bg-white p-5 shadow-2xl sm:p-7">
+                  <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-blue-700">Seguimiento auditable</p><h2 className="mt-1 text-2xl font-black">{goalContributionPanel?.goal.name || 'Aportaciones de la meta'}</h2><p className="mt-2 text-sm leading-6 text-slate-500">El avance no se calcula desde todos tus movimientos. Sólo suma aportaciones confirmadas y vinculadas a esta meta.</p></div><button type="button" onClick={() => { setGoalContributionId(''); setGoalContributionPanel(null); }} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold">Cerrar</button></div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]"><label className="grid gap-2 text-sm font-bold text-slate-700">Registrar una aportación manual<input type="number" min="0" step="100" value={goalContributionAmount} onChange={(event) => setGoalContributionAmount(event.target.value)} placeholder="Ej. 2,000" className="h-11 rounded-lg border border-slate-200 px-3 outline-none focus:border-blue-500" /></label><button type="button" disabled={goalContributionLoading || Number(goalContributionAmount) <= 0} onClick={() => void actualizarAportacionesMeta({ action: 'record_manual', amount: Number(goalContributionAmount) })} className="self-end h-11 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white disabled:opacity-50">Registrar</button></div>
+                  <div className="mt-6 space-y-3">{goalContributionLoading && !goalContributionPanel ? <p className="text-sm text-slate-500">Cargando...</p> : (goalContributionPanel?.contributions || []).length === 0 ? <div className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">Todavía no hay aportaciones. Registra la primera manualmente.</div> : goalContributionPanel?.contributions.map((contribution) => <div key={contribution.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-black">${formatearMonto(Number(contribution.amount))} MXN</p><p className="mt-1 text-xs text-slate-500">{formatearFecha(contribution.contributed_at)} · {contribution.source === 'manual' ? 'Registro manual' : 'Aportación registrada'}{contribution.note ? ` · ${contribution.note}` : ''}</p></div>{contribution.status === 'suggested' ? <div className="flex gap-2"><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'reject' })} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">No corresponde</button><button type="button" disabled={goalContributionLoading} onClick={() => void actualizarAportacionesMeta({ action: 'review', contributionId: contribution.id, decision: 'confirm' })} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Confirmar</button></div> : <span className={`w-fit rounded-lg px-3 py-2 text-xs font-bold ${contribution.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{contribution.status === 'confirmed' ? 'Confirmada' : 'Descartada'}</span>}</div>)}</div>
+                </div>
+              </div>
+            )}
+
             {goalsInterviewOpen && (
               <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Entrevista de personalización financiera">
-                <div className="mx-auto max-w-6xl rounded-xl bg-[#f5f7fb] p-3 shadow-2xl sm:p-5">
+                <div className="mx-auto max-w-6xl rounded-xl bg-[var(--brand-cream)] p-3 shadow-2xl sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-4 px-2">
                     <div>
                       <p className="text-sm font-bold text-blue-700">Metas</p>
@@ -3044,7 +3167,108 @@ export default function DashboardFinanciero() {
               </div>
             )}
 
-            <section className={`${vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden'} gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-6`}>
+            <section className={(vistaActiva === 'resumen' ? 'dashboard-view-panel grid' : 'hidden') + ' gap-4 xl:grid-cols-[1.14fr_0.9fr_1.06fr]'}>
+              <article className="flex min-h-[390px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl text-slate-950">Movimientos recientes</h2>
+                  <button type="button" onClick={() => setVistaActiva('movimientos')} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Ver todos <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </button>
+                </div>
+                <div className="mt-4 divide-y divide-slate-100">
+                  {ultimosMovimientos.length === 0 ? (
+                    <div className="grid min-h-56 place-items-center rounded-xl bg-slate-50 p-6 text-center">
+                      <div>
+                        <ArrowsDownUp aria-hidden="true" className="mx-auto size-8 text-slate-400" weight="regular" />
+                        <p className="mt-3 font-bold text-slate-950">Aún no hay movimientos</p>
+                        <p className="mt-1 text-sm text-slate-500">Registra tu primer ingreso o gasto.</p>
+                      </div>
+                    </div>
+                  ) : ultimosMovimientos.slice(0, 5).map((movimiento) => {
+                    const MovementIcon = movimiento.tipo === 'ingreso' ? Wallet : movimiento.tipo === 'abono_tarjeta' ? CreditCard : Receipt;
+                    const tone = movimiento.tipo === 'ingreso'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : nombreBolsa(movimiento.categoria) === 'Futuro'
+                        ? 'bg-amber-50 text-amber-700'
+                        : nombreBolsa(movimiento.categoria) === 'Placeres'
+                          ? 'bg-orange-50 text-orange-700'
+                          : 'bg-blue-50 text-blue-700';
+
+                    return (
+                      <div key={movimiento.id} className="flex items-center gap-3 py-3">
+                        <span className={'grid size-10 shrink-0 place-items-center rounded-full ' + tone}>
+                          <MovementIcon aria-hidden="true" className="size-5" weight="regular" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-950">{movimiento.concepto}</p>
+                          <p className="truncate text-xs text-slate-500">{movimiento.subcategoria || nombreBolsa(movimiento.categoria)}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className={'text-sm font-bold ' + (movimiento.tipo === 'ingreso' ? 'text-emerald-700' : 'text-slate-950')}>
+                            {movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}{formatoDineroCorto(Number(movimiento.monto))}
+                          </p>
+                          <p className="text-xs text-slate-400">{formatearFecha(movimiento.fecha)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={abrirGastoManual} className="mt-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                  Agregar movimiento
+                </button>
+              </article>
+
+              <article className="flex min-h-[390px] flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-xl text-slate-950">VirafIA sugiere</h2>
+                <div className="mt-5 flex flex-1 flex-col rounded-xl bg-slate-50 p-5">
+                  <span className="grid size-11 place-items-center rounded-full bg-blue-600 text-white">
+                    <Sparkle aria-hidden="true" className="size-5" weight="fill" />
+                  </span>
+                  <p className="mt-6 font-brand text-2xl leading-8 text-slate-950">{recomendacionResumen}</p>
+                  <p className="mt-5 text-sm leading-6 text-slate-600">{recomendacionDetalle}</p>
+                  <div className="mt-auto pt-6">
+                    <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-500">
+                      <span>Meta mensual</span>
+                      <span>{avanceMetaMensual.toFixed(0)}%</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+                      <div className="h-full rounded-full bg-blue-600" style={{ width: avanceMetaMensual + '%' }} />
+                    </div>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setChatOpen(true)} className="inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
+                  Ir a asesoría personalizada <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                </button>
+              </article>
+
+              <div className="grid gap-4">
+                <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-xl text-slate-950">Registro simple y privado</h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-500">Virafi no solicita credenciales bancarias ni sincroniza cuentas. Registra tus movimientos desde el dashboard o por Telegram.</p>
+                  <button type="button" onClick={abrirGastoManual} className="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Agregar movimiento <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </button>
+                </article>
+
+                <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-xl text-slate-950">Ruta hacia tus metas</h2>
+                  <div className="mt-4 flex items-start gap-3">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">
+                      <Target aria-hidden="true" className="size-6" weight="duotone" />
+                    </span>
+                    <div>
+                      <p className="font-bold text-blue-700">{metasFinancieras.length > 0 ? `${metasFinancieras.length} meta${metasFinancieras.length === 1 ? '' : 's'} en seguimiento` : 'Define tu primera meta'}</p>
+                      <p className="mt-1 text-sm leading-5 text-slate-500">VirafIA relaciona tu flujo, capacidad de aportación y horizonte para proponerte el siguiente paso.</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setVistaActiva('metas')} className="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-800">
+                    Ver metas <ArrowRight aria-hidden="true" className="size-4" weight="bold" />
+                  </button>
+                </article>
+              </div>
+            </section>
+
+            <section className="hidden">
               {kpiCards.map((card) => (
                 <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -3073,7 +3297,7 @@ export default function DashboardFinanciero() {
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-950">Comparativo del año</h2>
-                    <p className="text-sm text-slate-500">Datos por mes; la interpretación aparece una sola vez en Análisis IA.</p>
+                    <p className="text-sm text-slate-500">Datos por mes; la interpretación aparece una sola vez en Análisis VirafIA.</p>
                   </div>
                   <span className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600">2026</span>
                 </div>
@@ -3133,7 +3357,7 @@ export default function DashboardFinanciero() {
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-950">Análisis IA</h2>
+                    <h2 className="text-lg font-bold text-slate-950">Análisis VirafIA</h2>
                     <p className="mt-1 text-sm text-slate-500">Lectura accionable del mes o del año completo.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm font-bold">
@@ -3204,91 +3428,6 @@ export default function DashboardFinanciero() {
                 >
                   {analysisLoading ? 'Analizando...' : 'Actualizar análisis'}
                 </button>
-              </div>
-            </section>
-
-            <section className={`${vistaActiva === 'cuentas' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-[360px_1fr]`}>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <p className="text-sm font-semibold text-slate-500">Saldo visible</p>
-                <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">${formatearMonto(saldoCuentas)}</p>
-                <p className="mt-1 text-sm text-slate-500">{cuentasReales.length} cuentas reales · {cuentasActivas} conexiones activas</p>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void sincronizarBancos()}
-                    disabled={bankSyncLoading}
-                    className="inline-flex h-10 items-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-                  >
-                    {bankSyncLoading ? 'Actualizando...' : 'Actualizar movimientos'}
-                  </button>
-                  <Link href="/onboarding" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">{cuentasActivas > 0 ? 'Administrar conexión' : 'Conectar cuenta'}</Link>
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  {lastBankRefreshAt ? `Dashboard revisado ${new Date(lastBankRefreshAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}.` : 'Preparando actualización bancaria...'}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <h2 className="text-lg font-bold text-slate-950">Cuentas bancarias</h2>
-                <div className="mt-4 space-y-3">
-                  {cuentasReales.length === 0 ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      No hay cuentas reales sincronizadas. Conecta una institución bancaria real desde Configuración.
-                    </div>
-                  ) : cuentasReales.map((account) => (
-                    <div key={account.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-bold text-slate-950">{account.name || account.official_name || 'Cuenta bancaria'}</p>
-                          <p className="text-sm text-slate-500">{bankConnections.find((connection) => connection.id === account.connection_id)?.institution_name || 'Institución bancaria'} · {account.type || 'Cuenta'} · {account.subtype || 'sin subtipo'}</p>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <p className="font-bold text-slate-950">${formatearMonto(valorNumerico(account.current_balance))}</p>
-                          <p className="text-xs text-slate-500">{account.currency || 'MXN'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-5 border-t border-slate-100 pt-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-950">Bancos conectados</h3>
-                      <p className="text-xs text-slate-500">Plan {planLabel}: {activeBankConnections}/{billingStatus?.limits?.bankConnections ?? 0}</p>
-                    </div>
-                    <Link
-                      href="/onboarding"
-                      className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700"
-                    >
-                      Agregar banco
-                    </Link>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {bankConnections.filter((connection) => connection.status === 'active').length === 0 ? (
-                      <p className="text-sm text-slate-500">Sin bancos conectados todavía.</p>
-                    ) : bankConnections
-                        .filter((connection) => connection.status === 'active')
-                        .map((connection) => (
-                          <div key={connection.id} className="rounded-lg bg-slate-50 p-3 text-sm">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="font-bold text-slate-900">{connection.institution_name || connection.provider}</p>
-                                <p className="text-slate-500">
-                                  Actualización automática · {connection.last_sync_at ? formatearFecha(connection.last_sync_at) : 'pendiente'}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void desconectarBanco(connection)}
-                                disabled={bankDisconnectingId === connection.id}
-                                className="rounded-lg border border-rose-200 px-2 py-1 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                              >
-                                {bankDisconnectingId === connection.id ? 'Eliminando...' : 'Eliminar'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                  </div>
-                </div>
               </div>
             </section>
 
@@ -3403,19 +3542,26 @@ export default function DashboardFinanciero() {
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-sm font-bold text-blue-700">Dónde hacerlo</p>
-                  <h2 className="mt-1 text-xl font-black">Completa la inversión en una plataforma</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">Aquí preparas la decisión. El dinero permanece en tu banco o plataforma de inversión y tú completas la operación.</p>
+                  <h2 className="mt-1 text-xl font-black">Tutorial para hacer tu primera inversión</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">Virafi te explica la operación paso a paso. Por ahora tú confirmas y ejecutas en una plataforma regulada; nunca se mueve dinero sin tu autorización.</p>
                   <div className="mt-5 space-y-3">{[
-                    ['Base y liquidez', 'CETESDirecto', 'Para reserva y objetivos de corto plazo.', 'https://www.cetesdirecto.com/'],
-                    ['Fondos y acciones', 'Alpaca', 'Para investigar ETFs y acciones de Estados Unidos.', 'https://app.alpaca.markets/signup'],
-                    ['Criptomonedas', 'Binance', 'Solo para la parte pequeña asignada a cripto.', 'https://www.binance.com/en/markets/overview'],
-                  ].map(([title, platform, detail, url]) => <div key={title} className="rounded-xl border border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black">{title}</p><p className="mt-1 text-xs font-bold text-blue-700">{platform}</p></div><a href={url} target="_blank" rel="noreferrer" className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Ir a plataforma</a></div>
-                    <p className="mt-2 text-sm text-slate-500">{detail}</p>
-                  </div>)}</div>
+                    ['1', 'Protege tu base', 'Antes de invertir, conserva gastos próximos y fondo de emergencia en un instrumento líquido.'],
+                    ['2', 'Elige el objetivo', 'Selecciona la meta, revisa cuánto corresponde este mes y confirma que el plazo permita asumir ese riesgo.'],
+                    ['3', 'Revisa el instrumento', 'Entiende qué compras, comisiones, liquidez, moneda, diversificación y cuánto podrías perder temporalmente.'],
+                    ['4', 'Compra y vincula', 'Ejecuta en la plataforma y vincula la aportación con la meta; Virafi actualizará el avance desde el movimiento confirmado.'],
+                  ].map(([number, title, detail]) => <div key={number} className="flex gap-3 rounded-xl bg-slate-50 p-4"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-blue-600 text-xs font-black text-white">{number}</span><div><p className="text-sm font-black">{title}</p><p className="mt-1 text-sm leading-6 text-slate-600">{detail}</p></div></div>)}</div>
+                  <details className="mt-4 rounded-xl border border-slate-200 p-4">
+                    <summary className="cursor-pointer text-sm font-black text-slate-950">Comparar plataformas y abrir instrucciones</summary>
+                    <div className="mt-4 space-y-3">{[
+                      ['CETESDirecto', 'Liquidez y deuda gubernamental en México', 'https://www.cetesdirecto.com/'],
+                      ['Alpaca', 'Acciones y ETFs; requiere disponibilidad y cuenta elegible', 'https://app.alpaca.markets/signup'],
+                      ['Coinbase', 'Criptoactivos y datos de mercado', 'https://www.coinbase.com/'],
+                      ['Binance', 'Mercado cripto, sujeto a disponibilidad regional', 'https://www.binance.com/en/markets/overview'],
+                    ].map(([platform, detail, url]) => <div key={platform} className="flex items-start justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-sm font-black">{platform}</p><p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p></div><a href={url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">Abrir</a></div>)}</div>
+                  </details>
                   <div className="mt-5 flex gap-3 rounded-xl bg-emerald-50 p-4">
                     <ShieldCheck className="size-6 shrink-0 text-emerald-700" weight="regular" aria-hidden="true" />
-                    <p className="text-sm leading-6 text-emerald-900">Dashboard Financiero no recibe ni guarda tu dinero. Antes de salir verás cuánto corresponde a esa inversión y qué debes revisar.</p>
+                    <p className="text-sm leading-6 text-emerald-900">Virafi no recibe ni guarda tu dinero. Antes de salir verás cuánto corresponde a esa inversión y qué debes revisar.</p>
                   </div>
                 </div>
               </div>}
@@ -3423,31 +3569,15 @@ export default function DashboardFinanciero() {
               {wealthRoutePlan && <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm font-bold text-blue-700">Contexto para decidir</p>
-                    <h2 className="mt-1 text-xl font-black text-slate-950">Qué está pasando en el mercado</h2>
-                    <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Los precios ayudan a entender el momento, pero tu aportación se programa según tu presupuesto; no depende de intentar adivinar el precio perfecto.</p>
+                    <p className="text-sm font-bold text-blue-700">Briefing fundamental</p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950">Qué está moviendo al mundo y por qué importa</h2>
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Hechos recientes de fuentes seleccionadas, explicados según tu experiencia. Precio, noticia y escenario son cosas distintas.</p>
                   </div>
-                  <button type="button" onClick={sincronizarMercado} disabled={marketSyncLoading} className="h-10 shrink-0 rounded-lg border border-blue-200 px-4 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60">{marketSyncLoading ? 'Actualizando...' : 'Actualizar contexto'}</button>
+                  <div className="flex gap-2"><div className="flex rounded-lg bg-slate-100 p-1"><button type="button" onClick={() => setMarketExperience('simple')} className={`rounded-md px-3 py-2 text-xs font-bold ${marketExperience === 'simple' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Explícame fácil</button><button type="button" onClick={() => setMarketExperience('advanced')} className={`rounded-md px-3 py-2 text-xs font-bold ${marketExperience === 'advanced' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Más detalle</button></div><button type="button" onClick={sincronizarMercado} disabled={marketSyncLoading} className="h-10 shrink-0 rounded-lg border border-blue-200 px-4 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60">{marketSyncLoading ? 'Actualizando...' : 'Actualizar'}</button></div>
                 </div>
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {marketSnapshots.length === 0 ? <div className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">Actualiza el contexto para consultar precios recientes antes de revisar una opción.</div> : marketSnapshots.slice(0, 6).map((snapshot) => {
-                    const isPrediction = snapshot.provider === 'polymarket';
-                    const currentPrice = valorNumerico(snapshot.price);
-                    return <div key={snapshot.id} className="rounded-xl border border-slate-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-black text-slate-950">{snapshot.asset?.symbol || snapshot.asset?.name || 'Mercado'}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{snapshot.asset?.name || (isPrediction ? 'Probabilidad estimada por el mercado' : 'Precio observado')}</p></div>
-                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{isPrediction ? 'Contexto' : 'Precio'}</span>
-                      </div>
-                      <p className="mt-4 text-xl font-black text-slate-950">{isPrediction ? `${(currentPrice * 100).toFixed(1)}%` : `$${formatearMonto(currentPrice)}`}</p>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">{isPrediction ? 'No es una recomendación de inversión; úsalo para entender expectativas del mercado.' : 'Compara este dato con tu aportación asignada, comisiones y horizonte antes de comprar.'}</p>
-                    </div>;
-                  })}
-                </div>
-                <div className="mt-5 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-xl bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Cuánto</p><p className="mt-1 text-sm leading-6 text-blue-900">Respeta los montos mensuales de tu distribución; no uses dinero de Vida ni de tu reserva.</p></div>
-                  <div className="rounded-xl bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Cuándo</p><p className="mt-1 text-sm leading-6 text-blue-900">Aporta aproximadamente {formatearMonto(wealthRoutePlan.weeklyContribution)} MXN por semana para reducir decisiones impulsivas.</p></div>
-                  <div className="rounded-xl bg-blue-50 p-4"><p className="text-sm font-black text-blue-950">Qué revisar</p><p className="mt-1 text-sm leading-6 text-blue-900">Costos, liquidez, diversificación, riesgo y noticias que cambien la razón original para invertir.</p></div>
-                </div>
+                <div className="mt-5 grid gap-3 lg:grid-cols-2">{marketBriefing.length === 0 ? <div className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">No hay titulares verificados disponibles en este momento. Los precios se muestran por separado.</div> : marketBriefing.slice(0, 8).map((item) => <article key={item.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{item.topicLabel}</span><span className="text-xs font-semibold text-slate-400">{item.source}</span></div><a href={item.url} target="_blank" rel="noreferrer" className="mt-3 block font-black leading-6 text-slate-950 hover:text-blue-700">{item.headline}</a><div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="text-xs font-black uppercase tracking-wide text-slate-500">{marketExperience === 'simple' ? 'En palabras simples' : 'Impacto fundamental'}</p><p className="mt-1 text-sm leading-6 text-slate-700">{marketExperience === 'simple' ? item.beginnerContext : item.whyItMatters}</p></div>{marketExperience === 'advanced' && <p className="mt-3 text-xs leading-5 text-slate-500"><strong>Vigilar después:</strong> {item.watchNext}</p>}</article>)}</div>
+                <div className="mt-6"><h3 className="text-sm font-black text-slate-950">Precios y lectura técnica básica</h3><p className="mt-1 text-xs text-slate-500">Dato observado, no pronóstico. Nadie puede saber con certeza cuánto subirá Bitcoin.</p><div className="mt-3 grid gap-3 md:grid-cols-3">{marketSnapshots.filter((snapshot) => snapshot.provider !== 'polymarket').slice(0, 3).map((snapshot) => { const change24h = Number(snapshot.raw?.priceChangePercent); return <div key={snapshot.id} className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-500">{snapshot.asset?.exchange || snapshot.provider}</p><p className="mt-1 font-black text-slate-950">{snapshot.asset?.symbol || snapshot.asset?.name}</p><p className="mt-2 text-xl font-black">${formatearMonto(valorNumerico(snapshot.price))}</p>{Number.isFinite(change24h) && <p className={`mt-2 text-xs font-bold ${change24h >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}% en 24 h</p>}<p className="mt-2 text-xs leading-5 text-slate-500">El movimiento de 24 h describe impulso reciente; no demuestra valor fundamental ni anticipa el siguiente movimiento.</p></div>; })}</div></div>
+                {marketSnapshots.some((snapshot) => snapshot.provider === 'polymarket') && <details className="mt-5 rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-black">Señales secundarias de mercados predictivos</summary><p className="mt-2 text-xs leading-5 text-slate-500">Son expectativas agregadas y pueden equivocarse. No sustituyen noticias, datos económicos ni análisis fundamental.</p></details>}
               </div>}
               {wealthEligibility.ready && <p className="px-1 text-xs text-slate-500">Esta ruta parte de tus metas y es educativa. Tú mantienes el control de cada decisión.</p>}
             </section>
@@ -3539,10 +3669,10 @@ export default function DashboardFinanciero() {
                     <header className="bg-blue-600 px-6 py-6 text-white sm:px-10">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <p className="text-sm font-bold text-blue-100">Dashboard Financiero</p>
+                          <p className="font-brand text-lg font-medium italic text-blue-100">Virafi</p>
                           <h3 className="mt-1 text-2xl font-black">{reportScope === 'year' ? 'Reporte anual 2026' : `Reporte mensual · ${selectedMonthName} 2026`}</h3>
                         </div>
-                        <p className="text-sm text-blue-100">Diego Martínez · MXN</p>
+                        <p className="text-sm text-blue-100">{accountName} · MXN</p>
                       </div>
                     </header>
 
@@ -3738,24 +3868,6 @@ export default function DashboardFinanciero() {
                     </div>
                   </div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <h2 className="text-lg font-bold text-slate-950">Tarjeta del mes</h2>
-                  <p className="mt-3 text-3xl font-bold text-slate-950">${formatearMonto(Math.max(deudaTdcEstimadaMes, 0))}</p>
-                  <p className="mt-1 text-sm text-slate-500">Cargos ${formatearMonto(cargosSantanderTdcMes)} · Abonos ${formatearMonto(totalAbonosTarjetaMes)}</p>
-                  <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-                    El cálculo cambia con el mes seleccionado y solo usa movimientos TDC de ese periodo.
-                  </div>
-                  {abonosSospechososOcultos > 0 && (
-                    <button
-                      type="button"
-                      onClick={limpiarAbonosSospechosos}
-                      disabled={cleanupLoading}
-                      className="mt-4 h-10 rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
-                    >
-                      {cleanupLoading ? 'Limpiando...' : 'Borrar abonos sospechosos'}
-                    </button>
-                  )}
-                </div>
               </div>
             </section>
 
@@ -3763,9 +3875,17 @@ export default function DashboardFinanciero() {
               <div className="flex flex-col gap-2 border-b border-slate-200 p-5 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Movimientos recientes</h2>
-                  <p className="text-sm text-slate-500">Aquí aparecen todos tus movimientos bancarios, incluso mientras terminamos de clasificarlos.</p>
+                  <p className="text-sm text-slate-500">Aquí aparecen los movimientos que registras manualmente, por Telegram o desde un archivo.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setFinancialImportOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-700 hover:bg-blue-100"
+                  >
+                    <FileText className="size-4" weight="duotone" />
+                    Importar archivo
+                  </button>
                   <button
                     type="button"
                     onClick={abrirGastoManual}
@@ -3812,15 +3932,6 @@ export default function DashboardFinanciero() {
                         <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-slate-950">{movimiento.concepto}</p>
                         <p className="mt-1 text-xs text-slate-500">{formatearFecha(movimiento.fecha)} · {nombreOrigen(movimiento.origen, movimiento.subcategoria)}</p>
-                        {movimiento.bankStatus && (
-                          <p className="mt-1 text-xs font-semibold text-amber-700">
-                            {movimiento.bankStatus === 'failed'
-                              ? 'Necesita revisión'
-                              : movimiento.bankStatus === 'ignored'
-                                ? 'Transferencia/contrapartida · no afecta ingresos ni gastos'
-                                : 'Movimiento bancario guardado · clasificando'}
-                          </p>
-                        )}
                         </div>
                         <p className={`shrink-0 text-sm font-black ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-950'}`}>
                           {movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}${formatearMonto(movimiento.monto)}
@@ -3836,15 +3947,6 @@ export default function DashboardFinanciero() {
                         </span>
                         {movimiento.tipo === 'abono_tarjeta' ? (
                           <span className="text-xs font-bold text-violet-700">No cuenta como gasto</span>
-                        ) : movimiento.readOnly ? (
-                          <button
-                            type="button"
-                            onClick={() => void eliminarMovimientoBancario(movimiento)}
-                            disabled={deletingId === movimiento.id}
-                            className="min-h-9 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
-                          </button>
                         ) : <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -3909,15 +4011,6 @@ export default function DashboardFinanciero() {
                           <td className="px-5 py-3">
                             <p className="font-semibold text-slate-900">{movimiento.concepto}</p>
                             <p className="text-xs text-slate-500">{movimiento.subcategoria || 'Sin subcategoría'}</p>
-                            {movimiento.bankStatus && (
-                              <p className="mt-1 text-xs font-semibold text-amber-700">
-                                {movimiento.bankStatus === 'failed'
-                                  ? 'Necesita revisión'
-                                  : movimiento.bankStatus === 'ignored'
-                                    ? 'Transferencia/contrapartida · no afecta totales'
-                                    : 'Clasificando movimiento'}
-                              </p>
-                            )}
                           </td>
                           <td className="px-5 py-3">
                             <span className={`rounded-md px-2 py-1 text-xs font-bold ${
@@ -3935,15 +4028,6 @@ export default function DashboardFinanciero() {
                           <td className="px-5 py-3 text-right">
                             {movimiento.tipo === 'abono_tarjeta' ? (
                               <span className="text-xs font-bold text-violet-700">No afecta gastos</span>
-                            ) : movimiento.readOnly ? (
-                              <button
-                                type="button"
-                                onClick={() => void eliminarMovimientoBancario(movimiento)}
-                                disabled={deletingId === movimiento.id}
-                                className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                              >
-                                {deletingId === movimiento.id ? 'Eliminando' : 'Eliminar'}
-                              </button>
                             ) : <div className="flex justify-end gap-2">
                               <button
                                 type="button"
@@ -3997,7 +4081,7 @@ export default function DashboardFinanciero() {
               </div>
             </section>
 
-            <section className={`${['movimientos', 'cuentas'].includes(vistaActiva) ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-2`}>
+            <section className={`${vistaActiva === 'movimientos' ? 'dashboard-view-panel grid' : 'hidden'} gap-4 xl:grid-cols-2`}>
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-950">Ingresos del mes</h2>
@@ -4050,28 +4134,38 @@ export default function DashboardFinanciero() {
       {manualExpenseModal}
       {editModal}
       {goalEditModal}
+      {financialImportOpen ? <FinancialImportModal
+        open={financialImportOpen}
+        onClose={() => setFinancialImportOpen(false)}
+        onImported={async (message) => {
+          await fetchData({ silent: true });
+          mostrarMensajeTemporal(message, 9_000);
+        }}
+      /> : null}
       {chatAssistant}
       <nav
         aria-label="Navegación móvil"
         className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden"
       >
         <div className="grid grid-cols-5 gap-2">
-          {mobileNavItems.map((item) => (
-            <button
-              key={item.view}
-              type="button"
-              onClick={() => setVistaActiva(item.view)}
-              aria-current={vistaActiva === item.view ? 'page' : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-blue-700'
-              }`}
-            >
-              <span aria-hidden="true" className={`grid size-7 place-items-center rounded-lg text-[11px] ${
-                vistaActiva === item.view ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-              }`}>{item.mark}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
+          {mobileNavItems.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <button
+                key={item.view}
+                type="button"
+                onClick={() => setVistaActiva(item.view)}
+                aria-current={vistaActiva === item.view ? 'page' : undefined}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  vistaActiva === item.view ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-blue-700'
+                }`}
+              >
+                <Icon aria-hidden="true" className="size-6" weight={vistaActiva === item.view ? 'duotone' : 'regular'} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
       <style jsx global>{`

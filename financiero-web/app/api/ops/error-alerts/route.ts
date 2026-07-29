@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server';
+import {
+  formatOpsAlertMessage,
+  isRecursiveTelegramAlertFailure,
+  validateTelegramAlertTarget,
+} from '@/lib/ops-error-alerts';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 
@@ -32,28 +37,6 @@ function isAuthorizedOpsRequest(request: Request) {
   return getBearerToken(request) === cronSecret;
 }
 
-function formatAlertMessage(events: ErrorEventRow[]) {
-  const critical = events.filter((event) => event.severity === 'critical').length;
-  const errors = events.filter((event) => event.severity === 'error').length;
-  const lines = [
-    'Alerta Dashboard Financiero',
-    `${events.length} errores nuevos sin resolver. Critical: ${critical}. Error: ${errors}.`,
-    '',
-    ...events.slice(0, 8).map((event) => {
-      const action = event.action || 'sin accion';
-      const path = event.request_path || 'sin ruta';
-      const code = event.code ? ` [${event.code}]` : '';
-      return `- ${event.severity.toUpperCase()} ${action}${code}: ${event.message.slice(0, 140)} (${path})`;
-    }),
-  ];
-
-  if (events.length > 8) {
-    lines.push(`...y ${events.length - 8} mas.`);
-  }
-
-  return lines.join('\n');
-}
-
 function isNonActionableProviderEvent(event: ErrorEventRow) {
   const action = event.action || '';
   const message = event.message || '';
@@ -69,26 +52,35 @@ function isNonActionableProviderEvent(event: ErrorEventRow) {
 async function sendTelegramAlert(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
   const chatId = process.env.TELEGRAM_NOTIFY_CHAT_ID || '';
+  const target = validateTelegramAlertTarget(botToken, chatId);
 
-  if (!botToken || !chatId) {
+  if (!target.valid && target.reason === 'telegram_not_configured') {
     return { sent: false, reason: 'telegram_not_configured' };
   }
+  if (!target.valid) throw new TelegramAlertDeliveryError(target.reason);
 
   const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      chat_id: chatId,
+      chat_id: target.chatId,
       text,
     }),
   });
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Telegram alert failed: ${response.status} ${body}`);
+    throw new TelegramAlertDeliveryError(`Telegram alert failed: ${response.status} ${body}`);
   }
 
   return { sent: true, reason: null };
+}
+
+class TelegramAlertDeliveryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TelegramAlertDeliveryError';
+  }
 }
 
 export async function GET(request: Request) {
@@ -117,8 +109,12 @@ export async function GET(request: Request) {
     }
 
     const events = (data || []) as ErrorEventRow[];
-    const suppressedEvents = events.filter(isNonActionableProviderEvent);
-    const alertableEvents = events.filter((event) => !isNonActionableProviderEvent(event));
+    const suppressedEvents = events.filter((event) =>
+      isNonActionableProviderEvent(event) || isRecursiveTelegramAlertFailure(event)
+    );
+    const alertableEvents = events.filter((event) =>
+      !isNonActionableProviderEvent(event) && !isRecursiveTelegramAlertFailure(event)
+    );
 
     if (suppressedEvents.length > 0) {
       const suppressedIds = suppressedEvents.map((event) => event.id);
@@ -135,7 +131,10 @@ export async function GET(request: Request) {
         request,
         action: 'ops.error_alerts.suppressed',
         metadata: {
-          reason: 'non_actionable_provider_unavailable',
+          reasons: {
+            nonActionableProvider: suppressedEvents.filter(isNonActionableProviderEvent).length,
+            recursiveTelegramAlertFailure: suppressedEvents.filter(isRecursiveTelegramAlertFailure).length,
+          },
           count: suppressedIds.length,
           eventIds: suppressedIds,
         },
@@ -153,7 +152,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, alerted: false, count: 0, suppressed: suppressedEvents.length });
     }
 
-    const telegram = await sendTelegramAlert(formatAlertMessage(alertableEvents));
+    const telegram = await sendTelegramAlert(formatOpsAlertMessage(alertableEvents));
     const eventIds = alertableEvents.map((event) => event.id);
 
     if (telegram.sent) {
@@ -185,14 +184,24 @@ export async function GET(request: Request) {
       suppressed: suppressedEvents.length,
     });
   } catch (error: unknown) {
-    await logErrorEvent({
-      supabase,
-      request,
-      action: 'ops.error_alerts',
-      error,
-      code: 'ops_error_alerts_failed',
-      severity: 'critical',
-    });
+    if (error instanceof TelegramAlertDeliveryError) {
+      console.error('[ops.error_alerts] Telegram delivery failed without recursive error logging:', error.message);
+      await logAuditEvent({
+        supabase,
+        request,
+        action: 'ops.error_alerts.delivery_failed',
+        metadata: { reason: error.message.slice(0, 300) },
+      });
+    } else {
+      await logErrorEvent({
+        supabase,
+        request,
+        action: 'ops.error_alerts',
+        error,
+        code: 'ops_error_alerts_failed',
+        severity: 'critical',
+      });
+    }
     const message = error instanceof Error ? error.message : 'No pude revisar alertas.';
 
     return NextResponse.json({ success: false, error: message }, { status: 500 });

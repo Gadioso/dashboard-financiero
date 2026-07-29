@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
-import { generateText } from 'ai';
 import { extraerJson, generateGeminiText } from '@/lib/gemini';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { getAiModels, getAiOutputLimit } from '@/lib/ai-policy';
-import { recordAiUsage } from '@/lib/ai-usage';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,18 +56,6 @@ function getGoogleApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 }
 
-function getOpenRouterApiKey() {
-  return process.env.OPENROUTER_API_KEY || '';
-}
-
-function getVercelAiGatewayModels() {
-  return getAiModels('dashboard-analysis', 'gateway');
-}
-
-function getOpenRouterModels() {
-  return getAiModels('dashboard-analysis', 'openrouter');
-}
-
 function providerInCooldown(provider: string) {
   const unavailableUntil = providerUnavailableUntil.get(provider) || 0;
 
@@ -84,105 +69,6 @@ function providerInCooldown(provider: string) {
 
 function markProviderCooldown(provider: string) {
   providerUnavailableUntil.set(provider, Date.now() + providerCooldownMs);
-}
-
-async function generateVercelGatewayText(prompt: string) {
-  if (providerInCooldown('vercel-ai-gateway')) {
-    throw new Error('Vercel AI Gateway en cooldown temporal.');
-  }
-
-  let lastError: unknown;
-
-  for (const model of getVercelAiGatewayModels()) {
-    const startedAt = Date.now();
-    try {
-      const result = await generateText({
-        model,
-        prompt,
-        temperature: 0.2,
-        maxOutputTokens: getAiOutputLimit('dashboard-analysis'),
-        providerOptions: {
-          gateway: {
-            tags: ['feature:dashboard-analysis'],
-          },
-        },
-      });
-
-      if (!result.text) {
-        throw new Error('Vercel AI Gateway no devolvió texto.');
-      }
-
-      recordAiUsage({ feature: 'dashboard-analysis', provider: 'vercel-ai-gateway', model, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, totalTokens: result.usage.totalTokens, latencyMs: Date.now() - startedAt, success: true });
-      return result.text;
-    } catch (error) {
-      recordAiUsage({ feature: 'dashboard-analysis', provider: 'vercel-ai-gateway', model, latencyMs: Date.now() - startedAt, success: false });
-      lastError = error;
-    }
-  }
-
-  markProviderCooldown('vercel-ai-gateway');
-  throw lastError;
-}
-
-async function generateOpenRouterText(prompt: string) {
-  const apiKey = getOpenRouterApiKey();
-
-  if (!apiKey) {
-    throw new Error('Falta OPENROUTER_API_KEY para OpenRouter.');
-  }
-
-  if (providerInCooldown('openrouter')) {
-    throw new Error('OpenRouter en cooldown temporal.');
-  }
-
-  let lastError: unknown;
-
-  for (const model of getOpenRouterModels()) {
-    const startedAt = Date.now();
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app',
-          'X-OpenRouter-Title': 'Dashboard Financiero',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-          stream: false,
-          max_tokens: getAiOutputLimit('dashboard-analysis'),
-        }),
-      });
-      const payload = await response.json().catch(() => ({})) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        error?: { message?: string };
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number };
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error?.message || `OpenRouter respondió ${response.status}.`);
-      }
-
-      const text = payload.choices?.[0]?.message?.content;
-
-      if (!text) {
-        throw new Error('OpenRouter no devolvió texto.');
-      }
-
-      const usage = payload.usage || {};
-      recordAiUsage({ feature: 'dashboard-analysis', provider: 'openrouter', model, inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens, totalTokens: usage.total_tokens, costUsd: usage.cost, latencyMs: Date.now() - startedAt, success: true });
-      return text;
-    } catch (error) {
-      recordAiUsage({ feature: 'dashboard-analysis', provider: 'openrouter', model, latencyMs: Date.now() - startedAt, success: false });
-      lastError = error;
-    }
-  }
-
-  markProviderCooldown('openrouter');
-  throw lastError;
 }
 
 function asRecord(value: unknown) {
@@ -215,7 +101,6 @@ function getSummary(body: AnalysisBody) {
     flujoNetoMes: toNumber(summary.flujoNetoMes),
     tasaFuturo: toNumber(summary.tasaFuturo),
     burnRate: toNumber(summary.burnRate),
-    deudaTdcEstimadaMes: toNumber(summary.deudaTdcEstimadaMes),
   };
 }
 
@@ -330,9 +215,6 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
   if (pressuredBucket) {
     diagnosisParts.push(`${pressuredBucket.label} es la bolsa con mayor presión: lleva ${formatPercent(pressuredBucket.percent)} usado y le quedan ${formatMoney(pressuredBucket.remaining)}.`);
   }
-  if (summary.deudaTdcEstimadaMes > 0) {
-    diagnosisParts.push(`La deuda estimada de tarjeta es ${formatMoney(summary.deudaTdcEstimadaMes)}, así que conviene separarla de gasto ordinario para no distorsionar Futuro.`);
-  }
   if (summary.tasaFuturo > 0) {
     diagnosisParts.push(`La asignación a Futuro va en ${formatPercent(summary.tasaFuturo)}, contra una meta operativa de 33%.`);
   }
@@ -361,9 +243,6 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
     actions.push(`Separar hasta ${formatMoney(goal.targetPerBucket || summary.ingresosMes / 3)} para Futuro conforme entre ingreso; hoy faltan ${formatPercent(Math.max(0, 33 - summary.tasaFuturo))} puntos para el ritmo objetivo.`);
   } else {
     actions.push('Mantener Futuro separado de pagos ordinarios para conservar limpia la regla 33/33/33.');
-  }
-  if (summary.deudaTdcEstimadaMes > 0) {
-    actions.push(`Apartar ${formatMoney(summary.deudaTdcEstimadaMes)} para tarjeta antes de distribuir excedentes.`);
   }
   actions.push('Cerrar el periodo con una revisión de ingresos, egresos, flujo neto y bolsas fuera de rango.');
 
@@ -471,7 +350,7 @@ Reglas:
 - Explica cuánto debe provenir de mejorar ingresos, cuánto de controlar gasto y cuánto puede dirigirse a Futuro/inversión; recortar gasto no cuenta como crear ingresos.
 - Prioriza máximo 3 acciones, ordenadas por impacto, cada una con monto, frecuencia y criterio verificable de cumplimiento.
 - Distingue inversión patrimonial de herramientas o gasto productivo; no presentes software como rendimiento de inversión.
-- Si el alcance es mensual, analiza exclusivamente el mes seleccionado: movimientos, presupuesto consumido, flujo, tarjeta y acciones ejecutables antes del cierre de ese mes. No hagas proyecciones anuales salvo que sean indispensables.
+- Si el alcance es mensual, analiza exclusivamente el mes seleccionado: movimientos, presupuesto consumido, flujo y acciones ejecutables antes del cierre de ese mes. No hagas proyecciones anuales salvo que sean indispensables.
 - Si el alcance es anual, analiza desde enero hasta el último mes transcurrido. Compara meses, identifica tendencia, consistencia, mejor y peor mes, promedios mensuales, acumulado y proyección de cierre. No redactes el anual como si fuera un solo mes grande.
 - En el anual, aclara que la proyección es una estimación basada en los meses transcurridos y no un resultado garantizado.
 - Mantén máximo 5 acciones y 4 riesgos.
@@ -483,26 +362,6 @@ Reglas:
   "risks": ["riesgo 1"]
 }
 `;
-
-  try {
-    const raw = await generateVercelGatewayText(prompt);
-    const analysis = normalizeAnalysis(JSON.parse(extraerJson(raw)), scope, monthLabel, body);
-
-    await saveAnalysis(tenant.profileId, scope, periodKey, analysis, 'vercel-ai-gateway');
-
-    return NextResponse.json({ success: true, generatedBy: 'vercel-ai-gateway', analysis });
-  } catch {
-  }
-
-  try {
-    const raw = await generateOpenRouterText(prompt);
-    const analysis = normalizeAnalysis(JSON.parse(extraerJson(raw)), scope, monthLabel, body);
-
-    await saveAnalysis(tenant.profileId, scope, periodKey, analysis, 'openrouter');
-
-    return NextResponse.json({ success: true, generatedBy: 'openrouter', analysis });
-  } catch {
-  }
 
   if (!googleApiKey || providerInCooldown('gemini')) {
     const analysis = ruleBasedAnalysis(scope, monthLabel, body);

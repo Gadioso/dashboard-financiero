@@ -1,18 +1,11 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 const envGroups = {
-  core: ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'DASHBOARD_ACCESS_TOKEN'],
+  core: ['NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'],
+  ai: ['GEMINI_API_KEY'],
+  scheduler: ['CRON_SECRET'],
   telegram: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_NOTIFY_CHAT_ID'],
-  voicePreferred: ['OPENROUTER_API_KEY', 'OPENROUTER_TRANSCRIPTION_MODEL'],
-  voiceFallback: ['OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-  aiAnalysis: ['AI_GATEWAY_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   billing: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_PREMIUM_MONTHLY'],
-  observability: ['SENTRY_DSN', 'SENTRY_AUTH_TOKEN', 'CRON_SECRET'],
-  email: ['EMAIL_INGEST_SECRET', 'GOOGLE_GMAIL_CLIENT_ID', 'GOOGLE_GMAIL_CLIENT_SECRET', 'GOOGLE_GMAIL_REDIRECT_URI'],
-  banking: ['PLAID_CLIENT_ID', 'PLAID_SECRET', 'PROMETEO_API_KEY', 'BANK_TOKEN_ENCRYPTION_KEY'],
-  satOpenFiscal: ['SYNCFY_API_KEY', 'SYNCFY_WEBHOOK_SECRET'],
-  satStamping: ['SYNCFY_STAMPING_PRODUCT_ENABLED', 'SYNCFY_STAMPING_CSD_CONFIGURED', 'SYNCFY_STAMPING_API_KEY', 'SYNCFY_STAMPING_BASE_URL', 'SYNCFY_STAMPING_ISSUE_PATH', 'SYNCFY_STAMPING_CANCEL_PATH'],
 };
 
 function readEnvFile(file) {
@@ -26,95 +19,35 @@ function readEnvFile(file) {
       .map((line) => {
         const index = line.indexOf('=');
         const key = line.slice(0, index).replace(/^export\s+/, '').trim();
-        let value = line.slice(index + 1).trim();
-        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1);
-        }
+        const value = line.slice(index + 1).trim().replace(/^["']|["']$/g, '');
         return value ? key : null;
       })
       .filter(Boolean)
   );
 }
 
-function localEnvKeys() {
-  return new Set([
-    ...Object.keys(process.env),
-    ...readEnvFile('.env.local'),
-    ...readEnvFile('.env'),
-    ...readEnvFile('../.env'),
-  ]);
-}
+const keys = new Set([
+  ...Object.keys(process.env),
+  ...readEnvFile('.env.local'),
+  ...readEnvFile('.env'),
+  ...readEnvFile('../.env'),
+]);
 
-function vercelEnvKeys() {
-  try {
-    const output = execFileSync('npx', ['vercel', 'env', 'ls'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    const keys = new Set();
+const groups = Object.fromEntries(Object.entries(envGroups).map(([name, required]) => {
+  const present = required.filter((key) => keys.has(key));
+  const missing = required.filter((key) => !keys.has(key));
+  return [name, { present, missing, complete: missing.length === 0 }];
+}));
 
-    for (const line of output.split(/\r?\n/)) {
-      const match = line.match(/^\s*([A-Z0-9_]+)\s+Encrypted\s+/);
-      if (match) keys.add(match[1]);
-    }
-
-    return { ok: true, keys, error: null };
-  } catch (error) {
-    return { ok: false, keys: new Set(), error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-function groupStatus(keys, groupKeys) {
-  const present = groupKeys.filter((key) => keys.has(key));
-  const missing = groupKeys.filter((key) => !keys.has(key));
-
-  return { present, missing, complete: missing.length === 0 };
-}
-
-function capabilityStatus(keys) {
-  const hasTelegram = envGroups.telegram.every((key) => keys.has(key));
-  const hasGemini = keys.has('GEMINI_API_KEY') || keys.has('GOOGLE_API_KEY');
-  const hasOpenRouter = keys.has('OPENROUTER_API_KEY');
-  const hasOpenAI = keys.has('OPENAI_API_KEY');
-  const hasOpenFiscal = envGroups.satOpenFiscal.every((key) => keys.has(key));
-  const hasStamping = envGroups.satStamping.every((key) => keys.has(key));
-
-  return {
-    telegramText: hasTelegram,
-    telegramVoice: hasTelegram && (hasOpenRouter || hasOpenAI || hasGemini),
-    voicePreferredProvider: hasOpenRouter ? 'openrouter' : hasOpenAI ? 'openai' : hasGemini ? 'gemini' : null,
-    aiAnalysis: keys.has('AI_GATEWAY_API_KEY') || hasOpenRouter || hasGemini,
-    satOpenFiscal: hasOpenFiscal,
-    satStamping: hasStamping,
-    gaps: [
-      ...(!hasOpenRouter ? ['OPENROUTER_API_KEY falta para que voz use OpenRouter como proveedor preferente.'] : []),
-      ...(!hasOpenAI ? ['OPENAI_API_KEY falta como respaldo opcional de voz.'] : []),
-      ...(hasTelegram && !hasOpenRouter && !hasOpenAI && !hasGemini ? ['No hay proveedor de transcripción de voz configurado.'] : []),
-    ],
-  };
-}
-
-function auditSource(name, keys, sourceError = null) {
-  const groups = Object.fromEntries(
-    Object.entries(envGroups).map(([groupName, groupKeys]) => [groupName, groupStatus(keys, groupKeys)])
-  );
-
-  return {
-    source: name,
-    readable: !sourceError,
-    error: sourceError,
-    capabilities: capabilityStatus(keys),
-    groups,
-  };
-}
-
-const localKeys = localEnvKeys();
-const vercel = vercelEnvKeys();
-const result = {
+console.log(JSON.stringify({
   generatedAt: new Date().toISOString(),
-  local: auditSource('local', localKeys),
-  vercel: auditSource('vercel', vercel.keys, vercel.error),
-};
+  deploymentTarget: 'railway',
+  groups,
+  capabilities: {
+    ai: groups.ai.complete,
+    telegram: groups.telegram.complete,
+    billing: groups.billing.complete,
+  },
+}, null, 2));
 
-console.log(JSON.stringify(result, null, 2));
-
-if (vercel.ok && !result.vercel.capabilities.telegramVoice) {
-  process.exitCode = 1;
-}
+if (!groups.core.complete || !groups.ai.complete || !groups.scheduler.complete) process.exitCode = 1;

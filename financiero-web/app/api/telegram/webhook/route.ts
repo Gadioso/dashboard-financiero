@@ -3,25 +3,27 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { transcribirAudioFinanciero } from '@/lib/audio-transcription';
 import { esAbonoTarjetaCredito, extraerMontoAbonoTarjeta } from '@/lib/card-payment-intent';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto } from '@/lib/financial-core';
+import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto, resolverFechaMovimiento } from '@/lib/financial-core';
 import { logErrorEvent } from '@/lib/operational-events';
 import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { getAppMembershipStatus, revokeTelegramAccess } from '@/lib/telegram-access';
 import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib/tenant-context';
+import { appendVirafiaExchange } from '@/lib/virafia-conversation';
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const googleApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const openRouterApiKey = process.env.OPENROUTER_API_KEY || '';
-const conversationApiKey = openRouterApiKey || googleApiKey;
-const openAiApiKey = process.env.OPENAI_API_KEY || '';
+const conversationApiKey = googleApiKey;
 
 type TelegramMessage = {
   message_id?: number;
   chat?: {
     id?: number;
+    type?: 'private' | 'group' | 'supergroup' | 'channel';
   };
   from?: {
+    is_bot?: boolean;
     username?: string;
     first_name?: string;
     last_name?: string;
@@ -84,17 +86,11 @@ function alreadyReceivedUpdate(updateId?: number) {
 }
 
 function fechaMovimientoDesdeClasificacion(fechaMovimiento: string | undefined, texto: string) {
-  const fechaClasificada = fechaMovimiento ? new Date(fechaMovimiento) : null;
-
-  if (fechaClasificada && !Number.isNaN(fechaClasificada.getTime())) {
-    return fechaClasificada;
-  }
-
-  return extraerFechaMovimiento(texto) || new Date();
+  return resolverFechaMovimiento(texto, fechaMovimiento);
 }
 
 function extractTelegramLinkCode(texto?: string | null) {
-  const match = texto?.trim().match(/(?:^\/start\s+|^)(DF-[A-F0-9]{8})\b/i);
+  const match = texto?.trim().match(/\b(DF-[A-F0-9]{8})\b/i);
 
   return match?.[1]?.toUpperCase() || null;
 }
@@ -125,29 +121,65 @@ async function claimTelegramLinkCode({
   code: string;
   username?: string | null;
 }) {
-  if (!chatId) return { success: false, message: 'No pude detectar tu chat_id para vincular Telegram.' };
+  if (!chatId) return { success: false, message: null };
 
-  const { data: linkCode, error: codeError } = await supabase
+  const now = new Date().toISOString();
+  const existingResult = await supabase
     .from('telegram_link_codes')
     .select('code, profile_id, status, expires_at')
     .eq('code', code)
     .maybeSingle();
 
+  if (existingResult.error) {
+    throw new Error(`No pude revisar el código de Telegram: ${existingResult.error.message}`);
+  }
+
+  const existingCode = existingResult.data;
+  if (!existingCode || existingCode.status !== 'pending') {
+    return { success: false, message: null };
+  }
+
+  if (new Date(existingCode.expires_at).getTime() < Date.now()) {
+    await supabase
+      .from('telegram_link_codes')
+      .update({ status: 'expired' })
+      .eq('code', code)
+      .eq('status', 'pending');
+
+    return {
+      success: false,
+      message: '🔒 Esta llave expiró. Vuelve a Virafi, genera una nueva y reintenta.',
+    };
+  }
+
+  const membership = await getAppMembershipStatus({
+    supabase,
+    profileId: existingCode.profile_id,
+  });
+
+  if (membership !== 'active') {
+    return { success: false, message: null };
+  }
+
+  const { data: linkCode, error: codeError } = await supabase
+    .from('telegram_link_codes')
+    .update({
+      status: 'claimed',
+      claimed_chat_id: String(chatId),
+      claimed_at: now,
+    })
+    .eq('code', code)
+    .eq('status', 'pending')
+    .gt('expires_at', now)
+    .select('code, profile_id, expires_at')
+    .maybeSingle();
+
   if (codeError) {
-    throw new Error(`No pude revisar el código de Telegram: ${codeError.message}`);
+    throw new Error(`No pude reclamar el código de Telegram: ${codeError.message}`);
   }
 
-  if (!linkCode || linkCode.status !== 'pending') {
-    return { success: false, message: 'Ese código de Telegram no existe o ya fue usado. Genera uno nuevo en Onboarding.' };
-  }
+  if (!linkCode) return { success: false, message: null };
 
-  if (new Date(linkCode.expires_at).getTime() < Date.now()) {
-    await supabase.from('telegram_link_codes').update({ status: 'expired' }).eq('code', code);
-
-    return { success: false, message: 'Ese código de Telegram expiró. Genera uno nuevo en Onboarding.' };
-  }
-
-  const now = new Date().toISOString();
   const { error: upsertError } = await supabase
     .from('telegram_accounts')
     .upsert(
@@ -161,19 +193,22 @@ async function claimTelegramLinkCode({
     );
 
   if (upsertError) {
+    await supabase
+      .from('telegram_link_codes')
+      .update({ status: 'pending', claimed_chat_id: null, claimed_at: null })
+      .eq('code', code)
+      .eq('claimed_chat_id', String(chatId));
     throw new Error(`No pude vincular Telegram: ${upsertError.message}`);
   }
 
-  await supabase
-    .from('telegram_link_codes')
-    .update({
-      status: 'claimed',
-      claimed_chat_id: String(chatId),
-      claimed_at: now,
-    })
-    .eq('code', code);
-
-  return { success: true, message: 'Listo. Telegram quedó conectado a tu dashboard financiero.' };
+  return {
+    success: true,
+    message: [
+      '🔐 Conexión segura completada.',
+      'Este Telegram ya está vinculado a tu cuenta de Virafi.',
+      'Puedes escribirme o mandarme una nota de voz, por ejemplo: “pagué 250 de gasolina”.',
+    ].join('\n'),
+  };
 }
 
 async function responderTelegram(chatId: number | undefined, texto: string) {
@@ -340,11 +375,8 @@ async function transcribirAudioTelegram(message?: TelegramMessage) {
 
   return transcribirAudioFinanciero({
     geminiApiKey: googleApiKey,
-    openRouterApiKey,
-    openAiApiKey,
     audio: audioBuffer,
     mimeType: audio.mimeType,
-    fileName: file.file_path.split('/').pop() || undefined,
   });
 }
 
@@ -445,19 +477,33 @@ async function guardarMemoriaChat({
       },
       { onConflict: 'chat_id' }
     );
+
+  if (profileId) {
+    await appendVirafiaExchange({
+      supabase,
+      profileId,
+      userText,
+      assistantText,
+      channel: 'telegram',
+      assistantMetadata: lastExpenseId ? { lastExpenseId: String(lastExpenseId) } : {},
+    }).catch((error) => console.error('[virafia-conversation] no pude persistir el intercambio de Telegram', error));
+  }
 }
 
 export async function POST(request: Request) {
   let update: TelegramUpdate | null = null;
   let chatId: number | undefined;
+  let authorizedToReply = false;
 
   try {
-    if (telegramWebhookSecret) {
-      const receivedSecret = request.headers.get('x-telegram-bot-api-secret-token');
+    if (!telegramWebhookSecret) {
+      return NextResponse.json({ success: false, error: 'Webhook de Telegram no configurado.' }, { status: 503 });
+    }
 
-      if (receivedSecret !== telegramWebhookSecret) {
-        return NextResponse.json({ success: false, error: 'Webhook no autorizado.' }, { status: 401 });
-      }
+    const receivedSecret = request.headers.get('x-telegram-bot-api-secret-token');
+
+    if (receivedSecret !== telegramWebhookSecret) {
+      return NextResponse.json({ success: false, error: 'Webhook no autorizado.' }, { status: 401 });
     }
 
     const supabase = getSupabaseServiceClient();
@@ -470,6 +516,12 @@ export async function POST(request: Request) {
     }
 
     update = (await request.json()) as TelegramUpdate;
+    if (update.message?.chat?.type && update.message.chat.type !== 'private') {
+      return NextResponse.json({ success: true, ignored: true, action: 'non-private-chat' });
+    }
+    if (update.message?.from?.is_bot) {
+      return NextResponse.json({ success: true, ignored: true, action: 'bot-sender' });
+    }
     if (alreadyReceivedUpdate(update.update_id)) {
       return NextResponse.json({ success: true, duplicate: true });
     }
@@ -487,21 +539,30 @@ export async function POST(request: Request) {
         username: telegramDisplayName(update.message),
       });
 
-      await responderTelegram(chatId, result.message);
-      return NextResponse.json({ success: result.success, action: 'claim-telegram', message: result.message });
+      authorizedToReply = Boolean(result.message);
+      if (result.message) await responderTelegram(chatId, result.message);
+      return NextResponse.json({ success: result.success, ignored: !result.message, action: 'claim-telegram' });
     }
 
     const tenant = await getTelegramTenantContext({ supabase, chatId });
 
     if (!tenant.profileId) {
-      await responderTelegram(
-        chatId,
-        chatId
-          ? `Necesito vincular este Telegram antes de registrar movimientos. Tu chat_id es: ${chatId}`
-          : 'No pude detectar tu chat_id para vincular Telegram.'
-      );
+      return NextResponse.json({ success: true, ignored: true, action: 'unauthorized-chat' });
+    }
 
-      return NextResponse.json({ success: true, ignored: true, action: 'link-telegram' });
+    const membership = await getAppMembershipStatus({ supabase, profileId: tenant.profileId });
+    if (membership !== 'active') {
+      if (membership === 'inactive') {
+        await revokeTelegramAccess({ supabase, profileId: tenant.profileId, chatId });
+      }
+      return NextResponse.json({ success: true, ignored: true, action: 'inactive-app-user' });
+    }
+    authorizedToReply = true;
+
+    if (/^\/?(?:start|estado|status)$/i.test(texto || '')) {
+      const message = '🔐 VirafIA está conectada a tu cuenta activa de Virafi.';
+      await responderTelegram(chatId, message);
+      return NextResponse.json({ success: true, action: 'telegram-access-status' });
     }
 
     if (!texto) {
@@ -684,7 +745,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data, message });
   } catch (error: unknown) {
     console.error('Error en webhook de Telegram:', error);
-    await responderTelegram(chatId, mensajeErrorTelegram(error));
+    if (authorizedToReply) await responderTelegram(chatId, mensajeErrorTelegram(error));
     const message = error instanceof Error ? error.message : 'Error desconocido.';
     return NextResponse.json({ success: false, acknowledged: true, error: message }, { status: 200 });
   }

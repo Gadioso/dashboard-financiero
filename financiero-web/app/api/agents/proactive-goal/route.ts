@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { extraerJson, generateGeminiText, getConfiguredLlmKey } from '@/lib/gemini';
 import { logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
+import { getAuthorizedTelegramChatId } from '@/lib/telegram-access';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
@@ -63,7 +64,7 @@ function fallbackAnalysis(context: Record<string, number>): GoalAnalysis {
     risk: context.averageIncome3Months < context.monthlyTarget
       ? `El promedio mensual de 3 meses está ${money(context.monthlyTarget - context.averageIncome3Months)} por debajo de la meta; la brecha es estructural, no solo de este mes.`
       : 'El principal riesgo es perder el ritmo de captura y seguimiento semanal.',
-    notification: `CFO proactivo: llevas ${money(context.currentIncome)} de ${money(context.monthlyTarget)} (${context.progressPct.toFixed(0)}%). Faltan ${money(context.goalGap)}. Objetivo inmediato: ${money(weeklyGap)} por semana.`,
+    notification: `VirafIA: llevas ${money(context.currentIncome)} de ${money(context.monthlyTarget)} (${context.progressPct.toFixed(0)}%). Faltan ${money(context.goalGap)}. Objetivo inmediato: ${money(weeklyGap)} por semana.`,
   };
 }
 
@@ -72,7 +73,7 @@ async function improveAnalysis(context: Record<string, number>, fallback: GoalAn
   if (!apiKey) return fallback;
 
   const prompt = `
-Eres el CFO personal proactivo de Diego. Tu objetivo rector es ayudarlo a alcanzar su meta mensual de ingresos con acciones medibles, usando organización financiera e inversión responsable.
+Eres VirafIA, la asistente financiera proactiva de Diego. Tu objetivo rector es ayudarlo a alcanzar su meta mensual de ingresos con acciones medibles, usando organización financiera e inversión responsable.
 
 Contexto cuantitativo:
 ${JSON.stringify(context, null, 2)}
@@ -139,10 +140,10 @@ async function runForProfile(supabase: SupabaseClient, profile: ProfileRow, forc
     if (existing?.length) return { profileId: profile.id, skipped: 'already-ran-today' };
   }
 
-  const [incomeResult, expenseResult, telegramResult] = await Promise.all([
+  const [incomeResult, expenseResult, telegramChatId] = await Promise.all([
     supabase.from('ingresos').select('monto, fecha').eq('profile_id', profile.id).gte('fecha', ranges.historyStart).lt('fecha', ranges.currentEnd),
     supabase.from('gastos').select('monto, categoria, fecha').eq('profile_id', profile.id).gte('fecha', ranges.currentStart).lt('fecha', ranges.currentEnd),
-    supabase.from('telegram_accounts').select('chat_id').eq('profile_id', profile.id).order('last_seen_at', { ascending: false }).limit(1).maybeSingle(),
+    getAuthorizedTelegramChatId({ supabase, profileId: profile.id }),
   ]);
 
   if (incomeResult.error) throw new Error(`No pude leer ingresos del perfil ${profile.id}: ${incomeResult.error.message}`);
@@ -206,8 +207,8 @@ async function runForProfile(supabase: SupabaseClient, profile: ProfileRow, forc
   if (findingResult.error) throw new Error(`No pude guardar análisis proactivo: ${findingResult.error.message}`);
   if (taskResult.error) throw new Error(`No pude guardar tarea proactiva: ${taskResult.error.message}`);
 
-  const telegramSent = telegramResult.data?.chat_id
-    ? await sendTelegram(String(telegramResult.data.chat_id), `${analysis.notification}\n\nSiguiente acción: ${analysis.actions[0]}`)
+  const telegramSent = telegramChatId
+    ? await sendTelegram(telegramChatId, `${analysis.notification}\n\nSiguiente acción: ${analysis.actions[0]}`)
     : false;
 
   return { profileId: profile.id, analysis, finding: findingResult.data, task: taskResult.data, telegramSent };

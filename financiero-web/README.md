@@ -1,113 +1,37 @@
-# Dashboard Financiero
+# Virafi Web
 
-Dashboard personal para aplicar la regla 33/33/33 con captura por Web, Telegram y agente financiero.
+Next.js 16 application deployed as a standalone Node.js container on Railway.
 
-## Stack Actual
-
-- Next.js 16 + React 19 para el dashboard y API routes.
-- Supabase PostgreSQL para gastos, ingresos y presupuestos.
-- Mastra para el agente financiero en `http://localhost:4111`.
-- Telegram directo por webhook de Next, sin n8n.
-
-## Servidores Locales
+## Local setup
 
 ```bash
-npm run dev -- -H 127.0.0.1 -p 3002
-```
-
-Dashboard:
-
-```text
-http://127.0.0.1:3002
-```
-
-Mastra Studio se corre desde la carpeta raíz del proyecto:
-
-```bash
+npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Mastra:
-
-```text
-http://localhost:4111
-```
-
-## Variables de Entorno
-
-Crear `.env.local` con:
+## Verification
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL="https://..."
-SUPABASE_SERVICE_ROLE_KEY="..."
-DASHBOARD_ACCESS_TOKEN="..."
-
-GOOGLE_API_KEY="..."
-GEMINI_API_KEY="..."
-GEMINI_MODEL="gemini-2.5-flash-lite"
-AI_GATEWAY_FINANCIAL_CHAT_MODELS="openai/gpt-5-mini"
-AI_GATEWAY_STRUCTURED_MODELS="google/gemini-2.5-flash-lite,openai/gpt-5-mini"
-OPENROUTER_API_KEY="..."
-OPENROUTER_FINANCIAL_AGENT_MODELS="openai/gpt-5-mini"
-OPENROUTER_TRANSCRIPTION_MODEL="openai/whisper-large-v3"
-
-TELEGRAM_BOT_TOKEN="..."
-TELEGRAM_WEBHOOK_SECRET="..."
-CRON_SECRET="..."
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run security:secrets
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` es obligatoria para operaciones servidor como dashboard, webhooks, registros y borrados. El frontend no debe leer tablas de Supabase con anon key.
+## Production architecture
 
-`DASHBOARD_ACCESS_TOKEN` protege el dashboard y las APIs internas con una cookie `httpOnly`. En producción debe existir en Vercel; Telegram y el webhook de Santander siguen usando sus propios secretos.
+- Railway: container runtime, deployments, networking and logs.
+- Supabase: Postgres, Auth, Storage, RLS and Cron.
+- Google Gemini: chat, tool agent, structured analysis, documents and audio transcription.
+- Stripe: subscriptions and payments.
+- Telegram: optional user and operations channel.
 
-El análisis financiero intenta proveedores en este orden: Vercel AI Gateway, OpenRouter, Gemini y, si todos fallan, un motor financiero interno con los datos del dashboard. En Vercel, AI Gateway usa OIDC automáticamente. El router separa tareas estructuradas, conversación y agente; usa modelos económicos por defecto y sólo habilita fallbacks premium con `AI_ALLOW_PREMIUM_FALLBACK=true`. Consulta `docs/cost-optimization.md`.
+Virafi does not connect to bank accounts. Users register movements manually or through Telegram.
 
-La transcripción de voz en Telegram intenta proveedores en este orden: OpenRouter (`OPENROUTER_API_KEY`), OpenAI (`OPENAI_API_KEY`) y Gemini (`GEMINI_API_KEY` o `GOOGLE_API_KEY`). `OPENROUTER_TRANSCRIPTION_MODEL` permite fijar el modelo de voz; el valor por defecto es `openai/whisper-large-v3`.
+The maintained service inventory is in [`docs/third-party-inventory.md`](docs/third-party-inventory.md).
 
-El CFO proactivo ejecuta `GET /api/agents/proactive-goal` diariamente a las 14:00 UTC. Vercel lo autentica con `Authorization: Bearer $CRON_SECRET`; el agente compara la meta mensual contra ingresos, ritmo del mes y promedio de tres meses, guarda una tarea y un hallazgo en el dashboard, y envía el siguiente paso por Telegram cuando existe una cuenta vinculada.
+`railway.json` configures the Docker build and `/api/health` deployment check. Set this directory as the Railway service Root Directory.
 
-## Telegram
-
-Endpoint local:
-
-```text
-POST /api/telegram/webhook
-```
-
-El bot es conversacional. Puedes pedir resumen, saludar o registrar movimientos en lenguaje natural:
-
-```text
-pagué 250 de gasolina
-150 tacos
-metí 1000 a cetes
-500 fondo emergencia
-cómo voy este mes
-hola
-150 taxi placeres
-350 super vida
-1000 cetes futuro
-```
-
-Aliases soportados:
-
-```text
-vida, v, fijo -> Vida
-placer, placeres, p, salida -> Placeres
-ahorro, inv, inversion, inversiones, futuro -> Futuro
-```
-
-Gemini clasifica categoría y subcategoría automáticamente cuando no incluyes una categoría explícita. Para casos comunes como café, tacos, CETES, emergencia, seguros, gasolina o renta, hay reglas locales para no depender siempre de cuota de IA.
-
-Para Telegram real se necesita una URL publica. En local usa un tunel como ngrok o cloudflared y registra el webhook con Telegram usando `TELEGRAM_WEBHOOK_SECRET`.
-
-## Arquitectura Sin n8n
-
-El flujo queda directo:
-
-```text
-Telegram -> Next API Route -> Supabase -> Dashboard Realtime
-Web IA -> Next API Route -> Gemini -> Supabase -> Dashboard Realtime
-Mastra -> Supabase tools -> Dashboard Realtime
-```
-
-La logica compartida vive en `lib/financial-core.ts`.
+Supabase Cron calls the stable `https://virafi.com` domain. Do not create a second scheduler in Railway.

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { authCookieName, clearAuthCookies, getSafeNext, setSupabaseSessionCookies, upsertAuthProfile } from '@/lib/auth-session';
+import { authCookieName, clearAuthCookies, getPostAuthNext, getSafeNext, setSupabaseSessionCookies, upsertAuthProfile } from '@/lib/auth-session';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { getSupabaseAnonClient, getSupabaseServiceClient } from '@/lib/supabase-server';
@@ -88,8 +88,9 @@ export async function POST(request: Request) {
   }
 
   await upsertAuthProfile(data.user, String(email || '').trim().toLowerCase());
+  const postAuthNext = await getPostAuthNext(data.user.id, safeNext);
 
-  const response = NextResponse.json({ success: true, next: safeNext, mode: 'supabase-auth' });
+  const response = NextResponse.json({ success: true, next: postAuthNext, mode: 'supabase-auth' });
   clearAuthCookies(response);
   setSupabaseSessionCookies(response, data.session.access_token, data.session.refresh_token);
 

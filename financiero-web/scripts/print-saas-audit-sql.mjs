@@ -4,13 +4,12 @@ const financialTables = [
   'presupuestos_mensuales',
   'fondos_acumulados',
   'telegram_memoria',
-  'santander_ingest_logs',
   'classification_preferences',
   'abonos_tarjeta_credito',
 ];
 
 const tableListSql = financialTables.map((table) => `'${table}'`).join(', ');
-const allTenantTables = ['profiles', 'telegram_accounts', 'gmail_integrations', ...financialTables];
+const allTenantTables = ['profiles', 'telegram_accounts', ...financialTables];
 const allTenantTablesSql = allTenantTables.map((table) => `'${table}'`).join(', ');
 
 const output = `
@@ -22,7 +21,6 @@ WITH expected_tables(table_name) AS (
   VALUES
     ('profiles'),
     ('telegram_accounts'),
-    ('gmail_integrations'),
     ${financialTables.map((table) => `('${table}')`).join(',\n    ')}
 )
 SELECT
@@ -48,7 +46,7 @@ SELECT
   rowsecurity
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('profiles', 'telegram_accounts', 'gmail_integrations', ${tableListSql})
+  AND tablename IN ('profiles', 'telegram_accounts', ${tableListSql})
 ORDER BY tablename;
 
 SELECT
@@ -60,7 +58,7 @@ SELECT
   with_check
 FROM pg_policies
 WHERE schemaname = 'public'
-  AND tablename IN ('profiles', 'telegram_accounts', 'gmail_integrations', ${tableListSql})
+  AND tablename IN ('profiles', 'telegram_accounts', ${tableListSql})
 ORDER BY tablename, policyname;
 
 CREATE TEMP TABLE IF NOT EXISTS saas_profile_id_audit (

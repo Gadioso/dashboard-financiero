@@ -26,6 +26,16 @@ DF-03D5D113
 
 También funciona con `/start DF-03D5D113`.
 
+La llave temporal es la única puerta de entrada desde Telegram: solo puede generarla una sesión autenticada de Virafi, dura 15 minutos y se consume una sola vez. Los mensajes de chats no vinculados, grupos, canales, otros bots y llaves inexistentes se confirman al API de Telegram sin enviar ninguna respuesta al remitente.
+
+Para comprobar el acceso desde un chat ya vinculado:
+
+```text
+/estado
+```
+
+El bot vuelve a validar que el perfil y el usuario de Supabase Auth sigan activos en cada conversación y antes de cada notificación financiera. Si el usuario fue eliminado, bloqueado o desactivado, elimina el vínculo y la memoria de Telegram y deja de responder y notificar.
+
 Para revocar la conexión desde Telegram:
 
 ```text
@@ -102,18 +112,33 @@ Si hay varios candidatos, el bot muestra opciones y no borra nada hasta recibir 
 
 ## Requisitos para funcionar fuera de local
 
-Telegram no puede llamar a `localhost`. El endpoint `/api/telegram/webhook` necesita una URL pública en Vercel, Cloudflare o un túnel temporal.
+Telegram no puede llamar a `localhost`. El endpoint `/api/telegram/webhook` necesita el dominio público de Railway o un túnel temporal.
 
 Variables requeridas:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET`
+- `TELEGRAM_BOT_USERNAME` sin `@`.
+- `TELEGRAM_BOT_DISPLAY_NAME`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` recomendado para evitar bloqueos por RLS.
-- `OPENROUTER_API_KEY` recomendado para transcribir notas de voz con OpenRouter.
-- `OPENROUTER_TRANSCRIPTION_MODEL` opcional; por defecto usa `openai/whisper-large-v3`.
-- `OPENAI_API_KEY` opcional como segundo proveedor de transcripción.
+- `GEMINI_API_KEY` para conversación y transcripción de notas de voz.
+- `GEMINI_STRUCTURED_MODEL` permite elegir el modelo económico usado para audio y extracción estructurada.
 - `GOOGLE_API_KEY` o `GEMINI_API_KEY` para clasificación con IA cuando las reglas locales no alcanzan.
 - `GOOGLE_API_KEY` o `GEMINI_API_KEY` para conversación abierta con contexto financiero.
-- Para voz, el orden de proveedores es OpenRouter, OpenAI y Gemini; si todos fallan, el bot debe responder y pedir el movimiento por texto.
+- Para voz se usa Gemini; si falla, el bot debe responder y pedir el movimiento por texto.
+
+## Configuración recomendada en BotFather
+
+- Desactivar grupos con `/setjoingroups` porque VirafIA solo acepta chats privados.
+- Configurar con `/setcommands`:
+
+```text
+start - Comprobar o completar la conexión con Virafi
+estado - Verificar que este Telegram sigue autorizado
+mi_id - Mostrar el identificador del chat vinculado
+desconectar - Revocar el acceso de este Telegram
+```
+
+- Registrar el webhook con `allowed_updates=["message"]` y el mismo `TELEGRAM_WEBHOOK_SECRET` configurado en Railway.

@@ -330,7 +330,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: false,
         error: 'Falta aplicar la migración agentic foundation.',
-        migration: '20260630_agentic_business_wealth_foundation.sql',
+        migration: '20260630000100_agentic_business_wealth_foundation.sql',
       }, { status: 409 });
     }
 

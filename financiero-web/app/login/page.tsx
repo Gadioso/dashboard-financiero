@@ -2,10 +2,13 @@
 
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
+import { FaApple } from 'react-icons/fa6';
+import { FcGoogle } from 'react-icons/fc';
+import VirafiBrand from '@/app/Components/VirafiBrand';
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/';
+  const next = searchParams.get('next') || '/dashboard';
   const routeError = searchParams.get('error') || '';
   const [mode, setMode] = useState<'account' | 'private'>('account');
   const [accountAction, setAccountAction] = useState<'login' | 'signup'>('login');
@@ -54,7 +57,7 @@ function LoginForm() {
         return;
       }
 
-      window.location.href = result.next || '/';
+      window.location.href = result.next || '/dashboard';
     } catch {
       setError('No pude conectar con el servidor.');
     } finally {
@@ -68,6 +71,32 @@ function LoginForm() {
     window.location.href = `/api/auth/oauth?provider=${provider}&next=${encodeURIComponent(next)}`;
   }
 
+  async function requestRecovery() {
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch('/api/auth/recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const result = await response.json().catch(() => null) as { message?: string; error?: string } | null;
+
+      if (!response.ok) {
+        setError(result?.error || 'No pudimos iniciar la recuperación.');
+        return;
+      }
+
+      setMessage(result?.message || 'Si la cuenta existe, recibirás instrucciones para recuperar el acceso.');
+    } catch {
+      setError('No pude conectar con el servidor.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function chooseMode(nextMode: 'account' | 'private') {
     setMode(nextMode);
     setError('');
@@ -75,28 +104,22 @@ function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-screen bg-[#f5f7fb] text-slate-950 lg:grid-cols-[1fr_480px]">
-      <section className="hidden border-r border-slate-200 bg-white p-10 lg:flex lg:flex-col lg:justify-between">
+    <main className="grid min-h-screen bg-[var(--brand-cream)] text-slate-950 lg:grid-cols-[1fr_480px]">
+      <section className="hidden border-r border-slate-200 bg-[var(--brand-ink)] p-10 text-[var(--brand-cream)] lg:flex lg:flex-col lg:justify-between">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-            <div>
-              <p className="text-base font-bold leading-tight">Dashboard</p>
-              <p className="text-base font-bold leading-tight">Financiero</p>
-            </div>
-          </div>
+          <VirafiBrand inverse showTagline />
           <div className="mt-20 max-w-xl">
-            <h1 className="text-5xl font-bold tracking-tight text-slate-950">Control financiero claro para todos tus movimientos.</h1>
-            <p className="mt-5 text-base leading-7 text-slate-500">
-              Entra para ver tu balance, registrar movimientos con IA y mantener separadas tus bolsas Vida, Placeres y Futuro.
+            <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">Virafi te ayuda a ver con claridad hacia dónde va tu patrimonio.</h1>
+            <p className="mt-5 max-w-lg text-base leading-7 text-white/60">
+              Conecta cuentas, movimientos, metas, ahorro e inversión en un solo rumbo.
             </p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {['33/33/33', 'Banco', 'IA'].map((item) => (
-            <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-bold text-slate-900">{item}</p>
-              <p className="mt-1 text-xs text-slate-500">Activo</p>
+          {['Claridad', 'Rumbo', 'Progreso'].map((item) => (
+            <div key={item} className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <p className="text-sm font-semibold text-[var(--brand-cream)]">{item}</p>
+              <p className="mt-1 text-xs text-white/45">A tu ritmo</p>
             </div>
           ))}
         </div>
@@ -105,14 +128,10 @@ function LoginForm() {
       <section className="flex min-h-screen items-center justify-center px-4 py-10">
       <form onSubmit={(event) => submit(mode === 'account' ? accountAction : 'login', event)} className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3 lg:hidden">
-          <div className="grid size-10 place-items-center rounded-lg bg-blue-600 text-lg font-black text-white">D</div>
-          <div>
-            <p className="font-bold leading-tight">Dashboard</p>
-            <p className="font-bold leading-tight">Financiero</p>
-          </div>
+          <VirafiBrand compact />
         </div>
-        <p className="text-sm font-semibold text-blue-700">Acceso financiero</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Iniciar sesión</h1>
+        <p className="text-sm font-semibold text-blue-700">Tu rumbo financiero</p>
+        <h1 className="mt-3 text-3xl tracking-tight text-slate-950">Iniciar sesión</h1>
         <p className="mt-2 text-sm text-slate-500">
           Entra con tu cuenta para consultar únicamente tu información financiera.
         </p>
@@ -174,6 +193,16 @@ function LoginForm() {
                 placeholder="Mínimo 8 caracteres"
               />
             </label>
+            {accountAction === 'login' ? (
+              <button
+                type="button"
+                onClick={requestRecovery}
+                disabled={loading || !email.trim()}
+                className="text-left text-sm font-semibold text-blue-700 hover:text-blue-800 disabled:opacity-50"
+              >
+                Olvidé mi contraseña
+              </button>
+            ) : null}
             {accountAction === 'signup' && (
               <label className="block text-sm font-medium text-slate-600">
                 Nombre completo
@@ -217,17 +246,21 @@ function LoginForm() {
                 type="button"
                 onClick={() => startOAuth('google')}
                 disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Continuar con Google"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Google
+                <FcGoogle aria-hidden="true" className="size-5 shrink-0" />
+                <span>Google</span>
               </button>
               <button
                 type="button"
                 onClick={() => startOAuth('apple')}
                 disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Continuar con Apple"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-slate-950 bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Apple
+                <FaApple aria-hidden="true" className="size-5 shrink-0" />
+                <span>Apple</span>
               </button>
             </div>
           </>
@@ -254,8 +287,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb] px-4 text-slate-950">
-          <p className="text-sm text-slate-500">Cargando acceso...</p>
+        <main className="flex min-h-screen items-center justify-center bg-[var(--brand-cream)] px-4 text-slate-950">
+          <VirafiBrand showTagline />
         </main>
       }
     >

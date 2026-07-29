@@ -9,11 +9,6 @@ export const dynamic = 'force-dynamic';
 const confirmationPhrase = 'BORRAR MIS DATOS';
 
 const dataTables = [
-  'bank_transactions_raw',
-  'bank_accounts',
-  'bank_sync_runs',
-  'bank_connections',
-  'santander_ingest_logs',
   'abonos_tarjeta_credito',
   'gastos',
   'ingresos',
@@ -22,7 +17,6 @@ const dataTables = [
   'classification_preferences',
   'telegram_memoria',
   'telegram_accounts',
-  'gmail_integrations',
   'billing_subscriptions',
   'billing_customers',
   'audit_events',

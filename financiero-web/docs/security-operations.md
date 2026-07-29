@@ -25,7 +25,7 @@ Se registran eventos como:
 
 - `auth.login`, `auth.signup`, `auth.logout`
 - `movement.create_ai`, `expense.delete`, `income.delete`
-- `gmail.link`, `gmail.oauth.connected`, `telegram.link`
+- `telegram.link`
 - `bank.connection.created`, `bank.connection.updated`, `bank.sync`
 - `billing.checkout.created`, `billing.portal.opened`, `billing.webhook.processed`
 - `account.export`, `account.delete_data.requested`
@@ -56,18 +56,26 @@ GET /api/ops/error-alerts
 Authorization: Bearer <CRON_SECRET>
 ```
 
-Tambien puede correr desde Vercel Cron. Revisa errores `error` y `critical` sin `resolved_at` y sin `alerted_at`. Si hay eventos nuevos, manda resumen a Telegram usando:
+Supabase Cron ejecuta este endpoint. Revisa errores `error` y `critical` sin `resolved_at` y sin `alerted_at`. Si hay eventos nuevos, manda resumen a Telegram usando:
 
 ```bash
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_NOTIFY_CHAT_ID=...
 ```
 
+`TELEGRAM_NOTIFY_CHAT_ID` debe ser el `chat_id` del usuario o grupo receptor, no el
+identificador del bot que devuelve `getMe`. El comando `/mi_id` enviado por el usuario
+al bot muestra el valor correcto. El endpoint rechaza explícitamente el ID del propio
+bot para evitar el error 403 `the bot can't send messages to the bot`.
+
 Cuando Telegram responde OK, marca esos eventos con `alerted_at` para evitar avisos repetidos.
+Los fallos del propio transporte de alertas no se vuelven a insertar en `error_events`;
+eso evita que el monitor se alerte a sí mismo en cada ejecución. Los fallos históricos
+de ese tipo se cierran como eventos recursivos al siguiente ciclo.
 
-Vercel Cron debe enviar `Authorization: Bearer <CRON_SECRET>`. No se confia en `user-agent` para autorizar tareas programadas.
+Supabase Cron debe enviar `Authorization: Bearer <CRON_SECRET>`. No se confia en `user-agent` para autorizar tareas programadas.
 
-Siguiente mejora recomendada: conectar Sentry o Vercel Log Drains para stack traces y alertas fuera de la base de datos.
+Los stack traces técnicos quedan en Railway y los eventos de negocio en Supabase.
 
 ## Exportacion de datos
 
@@ -120,7 +128,7 @@ Ultimo simulacro:
 Checklist por secret:
 
 1. Crear el secret nuevo en el proveedor.
-2. Agregarlo en Vercel Production, Preview y Development si aplica.
+2. Agregarlo en Railway Production y Staging si aplica.
 3. Redeploy.
 4. Probar health, login y flujo afectado.
 5. Revocar el secret viejo.
@@ -132,12 +140,8 @@ Secrets principales:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: actualizar si Supabase lo rota.
 - `DASHBOARD_PRIVATE_TOKEN`: token de emergencia; mantenerlo solo como fallback.
 - `TELEGRAM_BOT_TOKEN` y webhook secret: probar `/api/telegram/webhook`.
-- `GOOGLE_GMAIL_CLIENT_SECRET`: no rompe tokens ya emitidos normalmente, pero prueba reconexion.
-- `GMAIL_TOKEN_ENCRYPTION_KEY`: si cambia sin migracion de re-cifrado, los usuarios deben reconectar Gmail.
-- `BANK_TOKEN_ENCRYPTION_KEY`: si cambia sin migracion de re-cifrado, los usuarios deben reconectar bancos.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BETA_MONTHLY`, `STRIPE_PRICE_PREMIUM_MONTHLY`: probar checkout, portal y webhook.
 - `CRON_SECRET`: actualizar cualquier job externo que lo use.
-- `EMAIL_INGEST_SECRET`: mantener solo para compatibilidad mientras se retira el flujo viejo.
 
 ## Criterio de listo
 
@@ -148,4 +152,4 @@ Paso 7 queda en base operativa cuando:
 - Exportacion y borrado responden solo con sesion autenticada.
 - Hay checklist de backup/restore y rotacion documentado.
 - Hay monitor de errores automatico en `/api/ops/error-alerts`.
-- Sentry recibe eventos reales de produccion y el restore drill tiene una ejecucion exitosa documentada.
+- Railway recibe logs reales de producción y el restore drill tiene una ejecución exitosa documentada.

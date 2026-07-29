@@ -87,11 +87,6 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
   const presupuesto = presupuestosMes[0];
   const totalIngresos = money(ingresosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
   const totalGastos = money(gastosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
-  const totalSantanderTdc = money(
-    gastosMes
-      .filter((row) => row.origen === 'Santander_Email')
-      .reduce((sum, row) => sum + Number(row.monto || 0), 0)
-  );
   const totalAbonosTdc = money(abonosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
   const expectedTercio = money(totalIngresos / 3);
   const presupuestoActual = presupuesto
@@ -144,9 +139,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
     ingresos: totalIngresos,
     gastos: totalGastos,
     resultado: money(totalIngresos - totalGastos),
-    gastosSantanderTdc: totalSantanderTdc,
     abonosTdc: totalAbonosTdc,
-    deudaTdcEstimadaMes: money(Math.max(totalSantanderTdc - totalAbonosTdc, 0)),
     tercioEsperado: expectedTercio,
     presupuestoActual,
     budgetIssues,

@@ -10,10 +10,6 @@ const expectedTables = [
   'fondos_acumulados',
   'abonos_tarjeta_credito',
   'telegram_accounts',
-  'gmail_integrations',
-  'bank_connections',
-  'bank_accounts',
-  'bank_transactions_raw',
   'audit_events',
   'error_events',
 ];

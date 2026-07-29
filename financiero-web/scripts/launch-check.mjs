@@ -2,7 +2,8 @@ import fs from 'node:fs';
 
 const baseUrl = process.env.LAUNCH_CHECK_BASE_URL || 'http://127.0.0.1:3000';
 const dashboardToken = process.env.DASHBOARD_ACCESS_TOKEN || process.env.LAUNCH_CHECK_DASHBOARD_TOKEN || '';
-const healthcheckSecret = process.env.HEALTHCHECK_SECRET || process.env.CRON_SECRET || '';
+const healthcheckSecret = process.env.HEALTHCHECK_SECRET || '';
+const cronSecret = process.env.CRON_SECRET || '';
 const checksLocalEnv = process.env.CHECK_LOCAL_ENV === 'true' || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(baseUrl);
 const requiredEnvKeys = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -12,13 +13,6 @@ const requiredEnvKeys = [
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_WEBHOOK_SECRET',
   'TELEGRAM_NOTIFY_CHAT_ID',
-  'EMAIL_INGEST_SECRET',
-];
-const optionalCapabilityEnvKeys = [
-  'OPENROUTER_API_KEY',
-  'OPENAI_API_KEY',
-  'GEMINI_API_KEY',
-  'GOOGLE_API_KEY',
 ];
 
 function readEnvLocal() {
@@ -79,22 +73,17 @@ async function main() {
   }
 
   const aiCapabilities = {
-    openrouter: Boolean(process.env.OPENROUTER_API_KEY || envLocal.OPENROUTER_API_KEY),
-    openai: Boolean(process.env.OPENAI_API_KEY || envLocal.OPENAI_API_KEY),
     gemini: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || envLocal.GEMINI_API_KEY || envLocal.GOOGLE_API_KEY),
   };
-  const hasAnyTranscriptionProvider = aiCapabilities.openrouter || aiCapabilities.openai || aiCapabilities.gemini;
+  const hasAnyTranscriptionProvider = aiCapabilities.gemini;
 
-  for (const key of optionalCapabilityEnvKeys) {
-    const configured = Boolean(process.env[key] || envLocal[key]);
-    checks.push({
-      status: configured ? 'pass' : 'warn',
-      message: `Capacidad IA opcional: ${key}`,
-      details: configured
-        ? 'Disponible para analisis/transcripcion segun el flujo.'
-        : 'No configurada; se usaran proveedores alternos si existen.',
-    });
-  }
+  checks.push({
+    status: aiCapabilities.gemini ? 'pass' : 'warn',
+    message: 'Capacidad IA: Gemini',
+    details: aiCapabilities.gemini
+      ? 'Disponible para análisis, agente financiero y transcripción.'
+      : 'No configurada; las funciones de IA no estarán disponibles.',
+  });
 
   checks.push(
     checksLocalEnv
@@ -112,19 +101,11 @@ async function main() {
         }
   );
 
-  checks.push({
-    status: aiCapabilities.openrouter ? 'pass' : 'warn',
-    message: 'OpenRouter configurado como proveedor preferente de voz',
-    details: aiCapabilities.openrouter
-      ? 'OPENROUTER_API_KEY disponible.'
-      : 'Falta OPENROUTER_API_KEY; la voz cae a OpenAI/Gemini si estan configurados.',
-  });
-
   const root = await request('/');
   checks.push(
     assertCheck(
-      root.response.status === 307 || root.response.status === 308 || root.response.url.includes('/login'),
-      'Dashboard raíz redirige a login sin cookie',
+      root.response.status === 200 || root.response.status === 307 || root.response.status === 308,
+      'Página raíz pública responde sin cookie',
       `status=${root.response.status} location=${root.response.headers.get('location') || ''}`
     )
   );
@@ -138,10 +119,12 @@ async function main() {
     )
   );
 
-  if (healthcheckSecret) {
+  if (healthcheckSecret || cronSecret) {
     const detailedHealth = await request('/api/health', {
       headers: {
-        Authorization: `Bearer ${healthcheckSecret}`,
+        ...(healthcheckSecret
+          ? { 'x-healthcheck-secret': healthcheckSecret }
+          : { Authorization: `Bearer ${cronSecret}` }),
       },
     });
     let healthPayload = null;
@@ -169,11 +152,13 @@ async function main() {
         )
       );
 
-      checks.push({
-        status: healthPayload.capabilities.transcriptionProviders?.openrouter ? 'pass' : 'warn',
-        message: 'Production usa OpenRouter como proveedor preferente de voz',
-        details: JSON.stringify(healthPayload.capabilities.transcriptionProviders || {}),
-      });
+      checks.push(
+        assertCheck(
+          healthPayload.capabilities.transcriptionProviders?.preferred === 'gemini',
+          'Production usa Gemini como proveedor de voz',
+          JSON.stringify(healthPayload.capabilities.transcriptionProviders || {})
+        )
+      );
     }
   } else {
     checks.push({
@@ -189,15 +174,6 @@ async function main() {
       blockedDashboard.response.status === 401,
       'API dashboard rechaza acceso sin cookie',
       `status=${blockedDashboard.response.status} body=${blockedDashboard.text.slice(0, 160)}`
-    )
-  );
-
-  const blockedSantanderStatus = await request('/api/email/santander');
-  checks.push(
-    assertCheck(
-      blockedSantanderStatus.response.status === 401,
-      'Estado Santander interno rechaza acceso sin cookie',
-      `status=${blockedSantanderStatus.response.status}`
     )
   );
 
@@ -228,38 +204,6 @@ async function main() {
         )
       );
 
-      const santanderStatus = await request('/api/email/santander', {
-        headers: { Cookie: cookie },
-      });
-      let santanderStatusPayload = null;
-      try {
-        santanderStatusPayload = JSON.parse(santanderStatus.text);
-      } catch {
-        santanderStatusPayload = null;
-      }
-      checks.push(
-        assertCheck(
-          santanderStatus.response.status === 200 && santanderStatus.text.includes('"success":true'),
-          'Estado Santander responde con cookie válida',
-          `status=${santanderStatus.response.status}`
-        )
-      );
-      if (santanderStatusPayload?.supabaseSchema) {
-        checks.push(
-          assertCheck(
-            santanderStatusPayload.supabaseSchema.migrationRequired === false,
-            'Migraciones launch aplicadas',
-            JSON.stringify(santanderStatusPayload.supabaseSchema)
-          )
-        );
-        checks.push(
-          assertCheck(
-            santanderStatusPayload.supabaseSchema.publicWritesBlocked === true,
-            'Escrituras públicas anon bloqueadas en Supabase',
-            santanderStatusPayload.supabaseSchema.publicWritesReason || ''
-          )
-        );
-      }
     }
   } else {
     checks.push({

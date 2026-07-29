@@ -12,6 +12,15 @@ const categoriasValidas = ['Vida', 'Placeres', 'Futuro'];
 const tiposValidos = ['gasto', 'ingreso'];
 const herramientaProductivaRegex =
   /\b(openai|chatgpt|codex|twilio|fiverr|opus|google|google cloud|gcp|aws|azure|cloud|vercel|github|software|saas|notion|zoom|airtable|figma|canva|slack|discord|anthropic|claude|cursor|windsurf|replit|midjourney|runway|elevenlabs|perplexity|lovable|supabase|firebase|cloudflare|digitalocean|railway|render|heroku|zapier|make|linear|asana|trello|jira|microsoft|adobe|heygen|capcut|gemini)\b/;
+const senalIngresoRegex =
+  /(?<![\p{L}\p{N}])(?:gan[eé]|gener[eé]|ingres[eé]|me\s+pagaron|pagaron|cobr[eé]|recib[ií]|depositaron|dep[oó]sito|sueldo|salario|n[oó]mina|quincena|bono|freelance|ingresos?|utilidad|comisi[oó]n|cashback|reembolso|devoluci[oó]n)(?![\p{L}\p{N}])/u;
+
+export class MovementInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MovementInputError';
+  }
+}
 
 function validarClasificacion(valor: unknown): ClasificacionMovimiento {
   const data = valor as Partial<ClasificacionMovimiento>;
@@ -57,7 +66,7 @@ function limpiarConcepto(texto: string) {
     .replace(/\$?\s*\d+(?:[,.]\d{1,2})?\s*k\b/gi, '')
     .replace(/\$?\d+(?:[,.]\d{1,2})?/g, '')
     .replace(/\b(?:pesos?|mxn|m\.?n\.?)\b/gi, ' ')
-    .replace(/\b(reg[ií]strame|registrame|registra|registrar|ingresos?|concepto|quincena|efectivo|tuve|tengo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|con|a|al|la|el|un|una|por|para)\b/gi, ' ')
+    .replace(/(?<![\p{L}\p{N}])(reg[ií]strame|registrame|registra|registrar|ingresos?|ingres[eé]|concepto|quincena|efectivo|tuve|tengo|pagu[eé]|pague|gast[eé]|gaste|gan[eé]|gane|gener[eé]|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|transfer[ií]|transferi|transferencia|spei|mand[eé]|mande|envi[eé]|envie|hice|met[ií]|meti|invert[ií]|inverti|aport[eé]|aporte|ayer|hoy|anoche|antier|anteayer|de|en|con|a|al|la|el|un|una|por|para)(?![\p{L}\p{N}])/giu, ' ')
     .replace(/\b(?:vida|placeres?|futuro)\b\s*$/gi, ' ')
     .replace(/[:"'“”‘’]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -116,7 +125,7 @@ function clasificarPorReglas(texto: string): ClasificacionMovimiento | null {
   const fechaDetectada = extraerFechaMovimiento(texto);
   const fechaMovimiento = fechaDetectada ? fechaDetectada.toISOString() : undefined;
 
-  if (/\b(reg[ií]strame|registrame|registra|registrar|gan[eé]|gane|me pagaron|pagaron|cobr[eé]|cobre|recib[ií]|recibi|depositaron|dep[oó]sito|deposito|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance|ingreso|ingresos|utilidad|comisi[oó]n|comision)\b/.test(normalizado) && /\b(ingreso|ingresos|gan[eé]|gane|cobr[eé]|cobre|recib[ií]|recibi|pagaron|depositaron|sueldo|salario|n[oó]mina|nomina|quincena|bono|freelance)\b/.test(normalizado)) {
+  if (senalIngresoRegex.test(normalizado)) {
     return {
       concepto,
       monto,
@@ -274,12 +283,17 @@ export async function clasificarMovimientoFinanciero(
   context: { supabase?: SupabaseClient | null; profileId?: string | null } = {},
 ): Promise<ClasificacionMovimiento> {
   if (esComandoAyuda(texto)) {
-    throw new Error(
-      'Listo para registrar movimientos. Puedes escribir: pagué 250 de gasolina, 150 tacos, metí 1000 a cetes, o 500 fondo emergencia.'
+    throw new MovementInputError(
+      'Aquí estoy. Cuéntame qué quieres entender o hacer con tus finanzas y partimos de ahí.'
     );
   }
 
   const criteriosPersonales = await obtenerCriteriosPersonales(context.supabase, context.profileId);
+
+  const ingresoLocal = clasificarPorReglas(texto);
+  if (ingresoLocal?.tipo === 'ingreso') {
+    return ingresoLocal;
+  }
 
   const estructurado = parsearMovimientoEstructurado(texto);
 
@@ -324,9 +338,17 @@ export async function clasificarMovimientoFinanciero(
     throw new Error('Falta configurar GOOGLE_API_KEY o GEMINI_API_KEY para clasificar con IA.');
   }
 
+  const fechaActualMexico = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
   const prompt = `
 {
   "role": "financial_transaction_classifier",
+  "current_date_mexico": ${JSON.stringify(fechaActualMexico)},
   "language_policy": {
     "instructions_language": "English",
     "output_language": "Spanish",
@@ -355,7 +377,7 @@ export async function clasificarMovimientoFinanciero(
   "classification_rules": [
     "Personal criteria override generic examples. Use recurring_life_costs for Vida, valued_pleasures for Placeres, and recurring_investments or work_essential_costs for Futuro.",
     "The same merchant can mean different things for different owners. Classify from owner_context and transaction concept, never from another user's preferences.",
-    "If the message mentions salary, payroll, bonus, freelance, commission, 'gané', 'me pagaron', 'cobré', 'recibí' or income, set tipo='ingreso'.",
+    "If the message mentions salary, payroll, bonus, freelance, commission, cashback, refund, 'gané', 'generé', 'ingresé', 'me pagaron', 'cobré', 'recibí' or income, set tipo='ingreso'.",
     "If it mentions CETES, GBM, inversión, invertí, stocks, ETF, crypto or patrimonial allocation, classify as Futuro/Inversion.",
     "If it mentions emergency fund, classify as Futuro/Emergencia.",
     "If it mentions insurance, classify as Futuro/Seguros.",
@@ -363,6 +385,7 @@ export async function clasificarMovimientoFinanciero(
     "Default an expense to Placeres/Otros Placeres only when owner_context does not identify it as essential living, productive work, savings, protection, or investment.",
     "If there is no clear amount, use 0. Do not invent an amount.",
     "If the user says hoy, ayer, anoche, antier, anteayer, or gives an explicit date such as 21 de junio, include fechaMovimiento as an ISO date for that date in America/Mexico_City.",
+    "When the user gives a day and month but omits the year, always use the year from current_date_mexico. Never guess a different year.",
     "Do not include relative date words such as ayer or hoy in concepto.",
     "If tipo is income, categoria may be Futuro and subcategoria should be Ingreso.",
     "Return only valid raw JSON matching the output_schema."

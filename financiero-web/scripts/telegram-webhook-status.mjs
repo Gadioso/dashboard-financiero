@@ -53,6 +53,13 @@ async function telegram(method, body) {
 }
 
 const expectedUrl = appUrl ? `${appUrl}/api/telegram/webhook` : '';
+const expectedUsername = (env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
+
+const bot = await telegram('getMe');
+
+if (expectedUsername && bot.username?.toLowerCase() !== expectedUsername.toLowerCase()) {
+  throw new Error(`El token pertenece a @${bot.username || 'desconocido'}, no a @${expectedUsername}.`);
+}
 
 if (shouldRepair) {
   if (!expectedUrl) {
@@ -71,6 +78,8 @@ if (shouldRepair) {
 const status = await telegram('getWebhookInfo');
 
 console.log(JSON.stringify({
+  botUsername: bot.username ? `@${bot.username}` : null,
+  usernameMatches: expectedUsername ? bot.username?.toLowerCase() === expectedUsername.toLowerCase() : null,
   expectedUrl: expectedUrl || null,
   actualUrl: status.url || null,
   urlMatches: expectedUrl ? status.url === expectedUrl : null,

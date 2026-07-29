@@ -11,7 +11,7 @@ export function getStripeClient() {
   return new Stripe(secretKey, {
     apiVersion: stripeApiVersion,
     appInfo: {
-      name: 'Dashboard Financiero',
+      name: 'Virafi',
     },
   });
 }
@@ -33,8 +33,8 @@ export function getStripePriceIdForPlan(plan: BillingPlan) {
 }
 
 const planCatalog: Record<Exclude<BillingPlan, 'free'>, { name: string; unitAmount: number; lookupKey: string }> = {
-  beta: { name: 'Dashboard Financiero Beta', unitAmount: 1500, lookupKey: 'dashboard_financiero_beta_monthly' },
-  premium: { name: 'Dashboard Financiero Premium', unitAmount: 2900, lookupKey: 'dashboard_financiero_premium_monthly' },
+  beta: { name: 'Virafi Beta', unitAmount: 1500, lookupKey: 'dashboard_financiero_beta_monthly' },
+  premium: { name: 'Virafi Premium', unitAmount: 2900, lookupKey: 'dashboard_financiero_premium_monthly' },
 };
 
 export async function getOrCreateStripePriceForPlan(plan: Exclude<BillingPlan, 'free'>) {
@@ -76,9 +76,9 @@ export async function getOrCreateBillingPortalConfiguration() {
 
   const configuration = await stripe.billingPortal.configurations.create({
     business_profile: {
-      headline: 'Administra tu plan de Dashboard Financiero',
-      privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app'}/privacy`,
-      terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard-financiero-chi.vercel.app'}/terms`,
+      headline: 'Administra tu plan de Virafi',
+      privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://virafi.com'}/privacy`,
+      terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://virafi.com'}/terms`,
     },
     features: {
       invoice_history: { enabled: true },

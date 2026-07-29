@@ -1,41 +1,263 @@
-# Design QA — Wealth opción 1
+# Virafi dashboard design QA
 
-- Source visual truth: `/Users/diegomartinezgayoso/.codex/generated_images/019f4d3d-5ec1-7610-aab6-d673b7ee44be/exec-1fcc67df-e41f-471d-8f4d-64b6f3e45960.png`
-- Implementation screenshot: `/Users/diegomartinezgayoso/Desktop/Claude Apuntes/dashboard-financiero/Dashboard Financiero/financiero-web/wealth-option-one-final.png`
-- Viewport: 1728 × 947 desktop, matching the reference
-- State: authenticated user, Wealth selected, first route step visible
+## Evidence
 
-## Full-view comparison
+- Source reference: `/var/folders/jv/9dlx6_gx68b8v1vnsj3m1frr0000gn/T/TemporaryItems/NSIRD_screencaptureui_YyFcX6/Captura de pantalla 2026-07-16 a la(s) 4.16.54 p.m..png` (2296 × 1424)
+- Desktop implementation: `/private/tmp/virafi-dashboard-desktop.png` (viewport 1440 × 1000, summary with live local data)
+- Mobile implementation: `/private/tmp/virafi-dashboard-mobile-viewport.png` (viewport 390 × 844, summary with live local data)
+- Combined comparison: `/private/tmp/virafi-dashboard-comparison.png`
 
-Reference and implementation were opened together at the same viewport. The implementation now follows the selected option 1 composition: single primary white route surface, title and goal context, horizontal five-step progress, three equal experience cards with line icons, contribution control, primary CTA, protective-goal side panel, and quiet educational footer.
+## Visual comparison
 
-The existing Dashboard Financiero shell, sidebar, typography, blue/slate palette, radii, and responsive behavior are preserved. Operational research, fiscal, and paper-trading controls remain below the guided route rather than competing above the fold.
+- Layout: matched the reference's persistent left navigation, compact account header, three-module first row, and three-column decision-support second row.
+- Typography: retained Virafi's Newsreader/Figtree pairing, using the serif for greetings and financial hierarchy and the sans serif for controls and dense data.
+- Color and surfaces: matched the warm cream canvas, thin warm borders, restrained elevation, violet navigation accent, and semantic emerald/orange/amber areas.
+- Content: replaced the reference's fictional balances and bank brands with the dashboard's real financial data, current plan, actual movements, connected accounts, goals and investment context.
+- Icons: replaced letter badges and legacy inline drawings with a consistent Phosphor outline/duotone family.
+- Responsive behavior: at 390 px, the sidebar becomes the existing bottom navigation, cards stack without horizontal overflow, controls remain tappable, and the floating assistant remains reachable.
 
-## Interaction verification
+## Interaction and accessibility checks
 
-- Wealth navigation opens the redesigned surface.
-- Each experience card is a real button and updates the selected state.
-- Monthly contribution remains editable.
-- “Crear mi ruta” / “Actualizar mi ruta” remains connected to profile persistence.
-- Advanced risk settings and technical data remain collapsed below the main route.
-- Browser DOM contained meaningful content and no framework error overlay.
+- `Ver todos` opens the Movimientos view.
+- `Resumen` returns to the summary dashboard.
+- `Ir a asesoría personalizada` opens the existing financial assistant.
+- The month selector remains a labelled native select.
+- Desktop and mobile navigation expose current-page semantics and keyboard focus styles.
+- Desktop document width: 1440 px viewport / 1440 px scroll width.
+- Mobile document width: 390 px viewport / 390 px scroll width.
+- Browser console errors and warnings: none.
+- ESLint: passed.
+- Production build and TypeScript: passed.
+
+final result: passed
+
+---
+
+# Virafi institutional website design QA
+
+## Evidence
+
+- Upper-page concept: `docs/design/virafi-site-concept-top.png`.
+- Lower-page concept: `docs/design/virafi-site-concept-bottom.png`.
+- Desktop implementation: `/tmp/virafi-site-hero.png` at 1440 × 1000.
+- Mission/security implementation: `/tmp/virafi-site-purpose.png` at 1440 × 1000.
+- Mobile implementation: `/tmp/virafi-site-mobile-final.png` at 390 × 844.
+- Browser method: Codex in-app Browser with explicit 1440 × 1000 and 390 × 844 viewport overrides.
+
+## Fidelity ledger
+
+- Copy and hierarchy: header labels, hero headline, CTA labels, mission, vision, security statement, AI boundaries and footer content match the approved concepts. No unapproved hero eyebrow, badge or pill was added.
+- Layout: preserved the editorial split hero, dashboard preview, four-column capability rail, three-step rising path, asymmetrical purpose section, dark security band, limits section and closing CTA/footer rhythm.
+- Typography: retained the existing Newsreader/Figtree pairing. Serif headings, compact sans-serif controls and responsive line breaks were checked at both viewports.
+- Palette and surfaces: retained Virafi cream, warm ink, thin warm borders and restrained violet. Semantic amber and emerald appear only inside the product preview.
+- Asset treatment: all product UI remains code-native. The dashboard reference was rebuilt with semantic HTML and Phosphor icons; generated concepts are documentation only and are not shipped as page UI.
+- Responsive behavior: initial mobile QA found hidden `<br>` elements collapsing headline spacing and forcing CTA overflow. The final pass restores editorial breaks, stacks CTAs and scales the product preview; document and viewport widths both measure 390 px.
+- Navigation: Producto, Nosotros, Seguridad, legal pages, mobile menu and the create-account path were exercised. Authentication receives `next=/dashboard`.
+
+## Functional and accessibility checks
+
+- Public routes: `/`, `/producto`, `/nosotros`, `/seguridad`, `/privacy`, `/terms`.
+- Product remains authenticated at `/dashboard`; public routes were added to the proxy allowlist.
+- Desktop and mobile document widths match their viewports with no horizontal overflow.
+- The mobile menu exposes Producto, Nosotros, Seguridad and Iniciar sesión.
+- The privacy notice contains 14 navigable sections; terms contain 16.
+- Semantic headings, main navigation labels, legal table of contents and footer links are present.
+- Browser console errors and warnings: none.
+- ESLint: passed.
+- Production build and TypeScript: passed.
+
+## Legal-content note
+
+- The legal pages reflect the current documented product and the Mexican legal framework reviewed on 20 July 2026.
+- The pages visibly flag that the contractual entity, RFC, full physical address and telephone must be confirmed before a general commercial launch; those facts were not present in the repository and were not invented.
+
+final result: passed
+
+---
+
+# Virafi assistant, balance privacy and financial settings design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/jv/9dlx6_gx68b8v1vnsj3m1frr0000gn/T/TemporaryItems/NSIRD_screencaptureui_syDYdB/Captura de pantalla 2026-07-16 a la(s) 4.40.38 p.m..png` (832 × 520 assistant reference).
+- Assistant implementation screenshot: `/private/tmp/virafi-assistant-qa.png` (browser viewport 1280 × 720, authenticated summary, assistant open).
+- Financial settings implementation screenshot: `/private/tmp/virafi-onboarding-qa-final.png` (browser viewport 1280 × 720, authenticated, 75% prepared).
+- Full-view comparison evidence: the source and implementation were opened together in one comparison output; the assistant keeps the supplied dark header, warm surfaces, rounded message panel and compact composer while removing the obsolete checkbox and adding attachment and microphone controls.
+- Focused-region comparison: no separate crop was needed because the complete assistant and all composer controls are readable at native size in the comparison output.
 
 ## Findings
 
-- No P0, P1, or P2 visual or interaction findings remain.
-- P3: the live monthly goal can briefly display `$0.00` during the initial data request, then resolves to the saved `$120,000.00`; this is existing dashboard loading behavior, not a Wealth layout regression.
-- P3: the production shell uses slightly denser typography than the generated concept, consistent with the rest of the dashboard.
+- No actionable P0, P1 or P2 findings remain.
+- Fonts and typography: the existing Virafi Newsreader/Figtree hierarchy is preserved; the compact assistant uses the same small UI weights and readable line height as the dashboard.
+- Spacing and layout rhythm: the assistant remains a compact bottom-right workspace. Attachment, input, microphone and send controls share an aligned 44 px row without overflow at the tested viewport.
+- Colors and visual tokens: the warm cream, ink header, violet action and neutral borders stay within the established Virafi palette. Emerald configuration states remain semantic rather than decorative.
+- Image quality and asset fidelity: all new visible controls use the installed Phosphor icon family; there are no placeholder assets, text glyph icons or handcrafted SVG approximations.
+- Copy and content: `Usar esta vista` and the internal status-card language are gone. Configuration now describes user outcomes, and the balance explicitly says it represents connected bank accounts and excludes unconnected assets.
+- Interaction and accessibility: the eye toggles both the balance and monthly income/expense values and updates its accessible name. The assistant exposes uniquely named attachment, microphone, send and close controls. The configuration links target the appropriate sections.
 
-## Required fidelity surfaces
+## Browser verification
 
-- [x] Exact selected source resolved
-- [x] Five-step horizontal route
-- [x] Three icon-backed experience cards
-- [x] Goal panel and protective-base explanation
-- [x] Monthly contribution and primary CTA
-- [x] Technical controls below the fold
-- [x] Same-viewport comparison
-- [x] Primary interaction tested
-- [x] Production build and deployment passed
+- Primary interactions tested: opened the assistant from the sidebar; confirmed attachment and microphone controls; toggled `Ocultar saldos` to `Mostrar saldos`; verified masked values; restored values; opened `/onboarding`; verified all four configuration actions and anchors.
+- The document/image picker is present with the intended accepted formats and multi-file support. No personal file was transmitted during visual QA.
+- Browser console errors and warnings: none.
+- ESLint: passed.
+- Production build and TypeScript: passed.
+
+## Comparison history
+
+- Initial settings pass found a P2 accessibility duplication: the retired internal `Estado de configuración` block was visually hidden but still present in the accessibility tree.
+- Fix: removed the duplicate block entirely, leaving the user-facing configuration journey as the single status surface.
+- Post-fix evidence: `/private/tmp/virafi-onboarding-qa-final.png`; DOM verification confirmed the duplicate heading is absent and the browser console remains clean.
+
+final result: passed
+
+---
+
+# Virafi login OAuth branding design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/jv/9dlx6_gx68b8v1vnsj3m1frr0000gn/T/TemporaryItems/NSIRD_screencaptureui_UHSp5w/Captura de pantalla 2026-07-16 a la(s) 4.18.43 p.m..png`
+- Production implementation: `https://virafi.com/login`
+- Desktop implementation screenshot: `/private/tmp/virafi-login-oauth-desktop.png` (browser viewport 1280 × 720)
+- Mobile implementation screenshot: `/private/tmp/virafi-login-oauth-mobile.png` (browser viewport 390 × 844)
+- Combined source/implementation comparison: `/private/tmp/virafi-login-oauth-comparison.png`
+- State: account sign-in, email/password form visible, OAuth providers idle.
+
+## Findings
+
+- No actionable P0, P1, or P2 differences remain for the requested OAuth branding.
+- Fonts and typography: the existing Newsreader/Figtree hierarchy is unchanged; both provider labels use the established compact UI weight and remain optically centered with their icons.
+- Spacing and layout rhythm: both provider controls are 48 px high with a 12 px icon/label gap. They remain side-by-side on desktop and stack at 390 px without horizontal overflow.
+- Colors and visual tokens: Google keeps the product's light surface and displays the recognizable multicolor mark. Apple uses a high-contrast black surface with a white Apple mark, matching familiar provider sign-in treatment while preserving Virafi's surrounding warm palette.
+- Image quality and asset fidelity: both marks come from the installed `react-icons` library as sharp vector icons; no text glyphs, CSS drawings, emojis, or handcrafted SVG substitutes are used.
+- Copy and content: the visible labels remain `Google` and `Apple`; accessible names are `Continuar con Google` and `Continuar con Apple`.
+- Interaction and accessibility: both controls remain semantic buttons connected to the existing OAuth handlers, expose visible focus rings, and meet a 48 px tap-target height.
+
+## Full-view and focused comparison
+
+- The combined comparison confirms that the page composition, Virafi branding, form hierarchy, borders, radii, and spacing remain faithful to the supplied screen.
+- The focused OAuth region shows the only intended change: the prior text-only buttons now include the multicolor Google G and the white Apple mark on a black Apple button.
+- No additional focused crop was required because the provider controls and their 20 px icons are clearly readable in the combined comparison.
+
+## Browser verification
+
+- Desktop: one Google button and one Apple button found by accessible name; both measured 48 px high with 20 px icons; no horizontal overflow.
+- Mobile: both buttons measured 308 × 48 px, stacked vertically; document width equals the 390 px viewport.
+- Primary interactions verified: account sign-in state, provider buttons present and enabled, existing email/password form unchanged. Provider redirects were not invoked to avoid initiating an external OAuth session during visual QA.
+- Browser console errors and warnings: none.
+- ESLint: passed.
+- Production build and TypeScript: passed locally and on Vercel.
+
+## Comparison history
+
+- Initial comparison: no P0/P1/P2 mismatch in the requested provider-branding region, so no visual correction loop was required.
+
+final result: passed
+
+---
+
+# Virafi marketing redesign — visual QA
+
+## Source of visual truth
+
+- Desktop concept: `.design-captures/virafi-hybrid-approved.jpg`
+- Mobile concept: `.design-captures/virafi-mobile-approved.jpg`
+- Final desktop implementation: `.design-captures/virafi-implementation-desktop-final.jpg`
+- Final mobile implementation: `.design-captures/virafi-implementation-mobile-final.jpg`
+- Final mobile journey scene: `.design-captures/virafi-implementation-mobile-scene-final.jpg`
+
+## Verification environment
+
+- Desktop viewport: 1440 × 1024 CSS pixels, device scale factor 1.
+- Mobile viewport: 390 × 844 CSS pixels, device scale factor 1.
+- Browser: Codex in-app browser against `http://localhost:3000/`.
+- Desktop document width: 1440 / 1440 (no horizontal overflow).
+- Mobile document width: 390 / 390 (no horizontal overflow).
+- Fresh-page browser console: no warnings or errors.
+
+## Comparison evidence
+
+The approved desktop concept and final desktop screenshot were inspected side by side at native viewport size. The approved mobile concept was compared with both the final first viewport and the focused landscape scene. Text and dashboard details remained readable in the full-view comparison, so no enlarged crop was necessary.
+
+Five critical comparison points:
+
+1. Typography — the editorial serif headline, italic Virafi wordmark, sans-serif body, labels, and button weights match the selected direction.
+2. Composition — left-aligned copy, staged dashboard, illuminated goal route, home/travel/security landmarks, and proof strip preserve the approved hierarchy.
+3. Spacing — navigation, hero copy rhythm, CTA spacing, dashboard overlap, and proof-strip entry align with the reference at desktop and collapse cleanly on mobile.
+4. Color and image treatment — warm ivory surfaces, restrained violet accents, soft atmospheric landscape, and glass-like dashboard treatment match the approved palette and density.
+5. Copy — navigation, above-the-fold headline, description, primary CTA, secondary CTA, dashboard greeting, daily recommendation, proof title, and proof labels match the approved concept.
+
+## Iteration history
+
+- Pass 1, P2: the proof headline rendered on one line instead of two. Fixed with a narrower heading measure and tuned type size.
+- Pass 1, P2: mobile left too much space between the CTAs and dashboard. Fixed by compacting the mobile header and moving the dashboard and journey scene upward.
+- Pass 1, P2: both responsive landscape sources were being requested during development. Fixed by using breakpoint-specific CSS backgrounds and optimized JPEG assets.
+- Pass 2: repeated desktop/mobile screenshots and side-by-side inspection. No remaining P0, P1, or P2 visual issues.
+
+## Interaction verification
+
+- Scroll-driven hero progress updates in both directions; scrolling upward reverses the visual state.
+- Desktop pointer movement adds restrained depth parallax.
+- The secondary CTA navigates to `#como-funciona`.
+- The mobile menu opens and exposes the primary navigation links.
+- Reduced-motion styles remove the decorative movement while preserving content and navigation.
+
+## Above-the-fold copy diff
+
+No unintended differences. The implemented navigation, hero headline, body copy, CTAs, dashboard message, and proof points use the approved wording.
+
+## Intentional deviation
+
+The portrait concept shows the entire journey as one tall presentation board. In the implementation, the mobile scene is distributed across the natural page scroll so the dashboard, route, landmarks, and proof strip reveal progressively—the behavior requested for mobile rather than a compressed static composition.
+
+## Result
+
+passed
+
+---
+
+# Virafi sitewide motion refinement — visual QA
+
+## Source and implementation evidence
+
+- Desktop visual truth: `.design-captures/virafi-hybrid-approved.jpg` (1487 × 1058 px).
+- Desktop implementation: `.design-captures/virafi-sitewide-motion-home-final.jpg` (1440 × 1024 px at a 1440 × 1024 CSS viewport, density 1).
+- Mobile visual truth: `.design-captures/virafi-mobile-approved.jpg` (853 × 1844 px).
+- Mobile implementation: `.design-captures/virafi-sitewide-motion-home-mobile-final.jpg` (390 × 844 px at a 390 × 844 CSS viewport, density 1).
+- Secondary-route desktop evidence: `.design-captures/virafi-sitewide-motion-desktop-final.jpg` (`/seguridad`, 1440 × 1024).
+- Secondary-route mobile evidence: `.design-captures/virafi-sitewide-motion-mobile-final.jpg` (`/seguridad`, menu open, 390 × 844).
+- State: initial viewport after the route-entry transition settled.
+
+## Full-view and focused comparison
+
+The accepted desktop concept and the latest home render were opened together with `view_image`; the mobile concept and latest mobile render were inspected in the same way. The full-view comparison confirmed that the motion refactor did not change the approved typography, copy, layout, palette, dashboard framing, landscape treatment, navigation, CTAs, or first-section preview. Focused secondary-route screenshots confirmed that the shared motion layer preserves the existing Producto, Nosotros, Seguridad and legal-page compositions.
+
+## Findings and comparison history
+
+- Initial P2: the home reveal transformed both the section container and its children, doubling travel and opacity changes. Fixed by animating one item layer only.
+- Initial P2: a CSS transition on the dashboard and route highlight competed with scroll-driven values, creating lag and a rubber-band effect. Fixed with one frame-rate-independent interpolation loop and smaller movement amplitudes.
+- Initial P2: only the home route mounted the motion controller. Fixed by mounting it in `MarketingShell` and automatically covering public page heroes, sections, grouped list rows, legal sections, CTAs and footer content.
+- Post-fix evidence: desktop scrolling changed hero progress from `0.9488` at 620 px to `0.2063` at 250 px and `0.0085` at the top, confirming smooth reversible movement.
+- Post-fix route evidence: Producto (14+ animated targets), Nosotros (15+), Seguridad (13+), and Privacidad (53 targets across 17 motion sections) all initialized and responded to scroll without console warnings or errors.
+- No actionable P0, P1 or P2 findings remain.
+
+## Interaction and responsive verification
+
+- Tested flow: Inicio → scroll down/up → `#como-funciona` → Producto → Nosotros → Seguridad → mobile menu → Privacidad.
+- `#como-funciona` reached the expected hash and section position.
+- Client-side route entry animation ran on each public route without reloading the shared header.
+- Desktop and mobile documents matched their viewport widths (1440/1440 and 390/390); no horizontal overflow.
+- Mobile navigation opened and navigated correctly.
+- `prefers-reduced-motion` keeps all content visible and disables decorative transforms and transitions.
+- Fresh Browser/IAB logs: no warnings or errors.
+
+## Above-the-fold copy diff
+
+No copy changes. The approved navigation, headline, body, CTAs, dashboard message and proof strip remain identical.
+
+## Intentional deviation
+
+As in the approved implementation, the tall mobile landscape is revealed progressively through natural page scroll rather than compressed into the first 844 px viewport.
 
 final result: passed

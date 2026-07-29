@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   if (!supabase || !tenant.profileId) return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
   const [personalizationResult, profileResult] = await Promise.all([
     supabase.from('financial_personalization_profiles').select('*').eq('profile_id', tenant.profileId).maybeSingle(),
-    supabase.from('profiles').select('full_name, monthly_income_target').eq('id', tenant.profileId).maybeSingle(),
+    supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', tenant.profileId).maybeSingle(),
   ]);
   if (personalizationResult.error || profileResult.error) return NextResponse.json({ success: false, error: 'No pude cargar tu perfil financiero.' }, { status: 500 });
   return NextResponse.json({ success: true, personalization: { ...(personalizationResult.data || {}), ...(profileResult.data || {}) } });
@@ -44,7 +44,7 @@ export async function PUT(request: Request) {
     const { supabase, tenant } = await context(request);
     if (!supabase || !tenant.profileId) return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const hasGoalAnswers = ['short_term_goals', 'medium_term_goals', 'long_term_goals', 'goal_priorities']
+    const hasGoalAnswers = ['short_term_goals', 'medium_term_goals', 'long_term_goals']
       .some((field) => cleanArray(body[field]).length > 0);
     if (body.completed === true && !hasGoalAnswers) {
       return NextResponse.json({ success: false, error: 'Agrega al menos una meta antes de completar el perfil.' }, { status: 400 });
@@ -55,7 +55,13 @@ export async function PUT(request: Request) {
     payload.birth_year = Number.isInteger(birthYear) && birthYear >= 1900 && birthYear <= new Date().getFullYear() ? birthYear : null;
     const monthlyGoalCapacity = Number(body.monthly_goal_capacity);
     payload.monthly_goal_capacity = Number.isFinite(monthlyGoalCapacity) && monthlyGoalCapacity >= 0 ? monthlyGoalCapacity : 0;
-    if (body.completed === true) payload.interview_completed_at = new Date().toISOString();
+    const currentStep = Number(body.currentStep);
+    payload.interview_current_step = Number.isInteger(currentStep) && currentStep >= 0 && currentStep <= 100 ? currentStep : 0;
+    if (body.deferred === true) payload.interview_deferred_at = new Date().toISOString();
+    if (body.completed === true) {
+      payload.interview_completed_at = new Date().toISOString();
+      payload.interview_deferred_at = null;
+    }
     const monthlyIncomeTarget = Number(body.monthly_income_target);
     const profilePayload = {
       full_name: cleanText(body.full_name),
@@ -64,7 +70,7 @@ export async function PUT(request: Request) {
     };
     const [personalizationResult, profileResult] = await Promise.all([
       supabase.from('financial_personalization_profiles').upsert(payload, { onConflict: 'profile_id' }).select('*').single(),
-      supabase.from('profiles').update(profilePayload).eq('id', tenant.profileId).select('full_name, monthly_income_target').single(),
+      supabase.from('profiles').update(profilePayload).eq('id', tenant.profileId).select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').single(),
     ]);
     if (personalizationResult.error || profileResult.error) return NextResponse.json({ success: false, error: 'No pude guardar tus respuestas. Intenta nuevamente.' }, { status: 500 });
     const data = { ...personalizationResult.data, ...profileResult.data };

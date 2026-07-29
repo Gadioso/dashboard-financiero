@@ -10,7 +10,6 @@ export type Gasto = {
   monto: number | string;
   origen: string;
   fecha: string;
-  bank_transaction_raw_id?: string | null;
 };
 
 export type Ingreso = {
@@ -18,8 +17,8 @@ export type Ingreso = {
   concepto: string | null;
   monto: number | string;
   tipo?: string | null;
+  origen?: string | null;
   fecha: string;
-  bank_transaction_raw_id?: string | null;
 };
 
 export type AbonoTarjetaCredito = {
@@ -41,26 +40,6 @@ export type Movimiento = {
   origen: string;
   fecha: string;
   currency?: string | null;
-  bankStatus?: 'pending' | 'ignored' | 'classified' | 'failed' | null;
-  bankAccountName?: string | null;
-  bankInstitutionName?: string | null;
-  readOnly?: boolean;
-};
-
-export type BankTransactionRawView = {
-  id: string;
-  posted_at?: string | null;
-  authorized_at?: string | null;
-  description: string;
-  merchant_name?: string | null;
-  amount: number | string;
-  currency?: string | null;
-  normalized_status: 'pending' | 'ignored' | 'classified' | 'failed';
-  classification_error?: string | null;
-  gasto_id?: string | number | null;
-  ingreso_id?: string | number | null;
-  bank_accounts?: { name?: string | null; official_name?: string | null } | null;
-  bank_connections?: { provider?: string | null; institution_name?: string | null } | null;
 };
 
 export type ClasificacionMovimiento = {
@@ -138,13 +117,13 @@ export const aliasCategoria: Record<string, CategoriaFinanciera> = {
 export const categoriaParaGastos = (categoria: CategoriaFinanciera): CategoriaGasto =>
   categoria === 'Futuro' ? 'Seguros' : categoria;
 
-function currentMexicoDateParts() {
+function currentMexicoDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Mexico_City',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
 
   return {
@@ -154,7 +133,7 @@ function currentMexicoDateParts() {
   };
 }
 
-export function extraerFechaRelativaMovimiento(texto: string) {
+export function extraerFechaRelativaMovimiento(texto: string, ahora = new Date()) {
   const normalizado = texto.toLowerCase();
   let offset: number | null = null;
 
@@ -164,7 +143,7 @@ export function extraerFechaRelativaMovimiento(texto: string) {
 
   if (offset === null) return null;
 
-  const { year, monthIndex, day } = currentMexicoDateParts();
+  const { year, monthIndex, day } = currentMexicoDateParts(ahora);
 
   return new Date(Date.UTC(year, monthIndex, day + offset, 12));
 }
@@ -198,7 +177,7 @@ const mesesTexto: Record<string, number> = {
   dic: 11,
 };
 
-export function extraerFechaExplicitaMovimiento(texto: string) {
+export function extraerFechaExplicitaMovimiento(texto: string, ahora = new Date()) {
   const normalizado = texto
     .toLowerCase()
     .normalize('NFD')
@@ -209,7 +188,7 @@ export function extraerFechaExplicitaMovimiento(texto: string) {
 
   const day = Number(match[1]);
   const monthIndex = mesesTexto[match[2]];
-  const current = currentMexicoDateParts();
+  const current = currentMexicoDateParts(ahora);
   const year = match[3] ? Number(match[3]) : current.year;
 
   if (!Number.isInteger(day) || day < 1 || day > 31 || monthIndex === undefined || !Number.isInteger(year)) {
@@ -225,8 +204,35 @@ export function extraerFechaExplicitaMovimiento(texto: string) {
   return date;
 }
 
-export function extraerFechaMovimiento(texto: string) {
-  return extraerFechaExplicitaMovimiento(texto) || extraerFechaRelativaMovimiento(texto);
+export function extraerFechaMovimiento(texto: string, ahora = new Date()) {
+  return extraerFechaExplicitaMovimiento(texto, ahora) || extraerFechaRelativaMovimiento(texto, ahora);
+}
+
+export function resolverFechaMovimiento(
+  texto: string,
+  fechaSugerida?: string | null,
+  ahora = new Date(),
+  preferirFechaTexto = true,
+) {
+  const fechaDetectadaEnTexto = extraerFechaMovimiento(texto, ahora);
+
+  if (preferirFechaTexto && fechaDetectadaEnTexto) {
+    return fechaDetectadaEnTexto;
+  }
+
+  const fechaClasificada = fechaSugerida ? new Date(fechaSugerida) : null;
+
+  if (!fechaClasificada || Number.isNaN(fechaClasificada.getTime())) {
+    return fechaDetectadaEnTexto || ahora;
+  }
+
+  const usuarioIndicoAnio = /\b(?:19|20)\d{2}\b/.test(texto);
+
+  if (!usuarioIndicoAnio) {
+    fechaClasificada.setUTCFullYear(currentMexicoDateParts(ahora).year);
+  }
+
+  return fechaClasificada;
 }
 
 export const formatoFechaMX = new Intl.DateTimeFormat('es-MX', {
@@ -381,25 +387,21 @@ export function nombreBolsa(categoria: string) {
 }
 
 export function nombreOrigen(origen: string, subcategoria?: string | null) {
-  if (origen === 'Santander_Email' || subcategoria === 'Santander') return 'Santander Email';
-  if (origen === 'Supabase') return 'Supabase';
+  void subcategoria;
+  if (origen === 'Supabase') return 'Web';
   if (origen === 'Telegram') return 'Telegram';
   if (origen === 'Web') return 'Web';
-  if (origen === 'Banco') return 'Banco';
-
-  return origen;
+  return origen || 'Web';
 }
 
 export function combinarMovimientos({
   ingresos,
   gastos,
   abonosTarjeta = [],
-  movimientosBancarios = [],
 }: {
   ingresos: Ingreso[];
   gastos: Gasto[];
   abonosTarjeta?: AbonoTarjetaCredito[];
-  movimientosBancarios?: BankTransactionRawView[];
 }) {
   const movimientosIngreso: Movimiento[] = ingresos.map((ingreso) => ({
     id: `ingreso-${ingreso.id}`,
@@ -408,7 +410,7 @@ export function combinarMovimientos({
     categoria: 'Ingreso',
     subcategoria: ingreso.tipo || 'Ingreso',
     monto: ingreso.monto,
-    origen: 'Web',
+    origen: nombreOrigen(ingreso.origen || 'Web'),
     fecha: ingreso.fecha,
   }));
   const movimientosGasto: Movimiento[] = gastos.map((gasto) => ({
@@ -431,43 +433,7 @@ export function combinarMovimientos({
     origen: nombreOrigen(abono.origen),
     fecha: abono.fecha,
   }));
-  const movimientosNormalizados = new Set([
-    ...ingresos.map((ingreso) => ingreso.bank_transaction_raw_id).filter(Boolean),
-    ...gastos.map((gasto) => gasto.bank_transaction_raw_id).filter(Boolean),
-  ]);
-  const movimientosBancoPendientes: Movimiento[] = movimientosBancarios
-    .filter((movimiento) => (
-      !movimientosNormalizados.has(movimiento.id)
-      && movimiento.classification_error !== 'Contrapartida del abono a tarjeta; no cuenta como ingreso.'
-    ))
-    .map((movimiento) => {
-      const amount = Number(movimiento.amount || 0);
-      const isIncome = amount > 0;
-      const account = movimiento.bank_accounts;
-      const connection = movimiento.bank_connections;
-
-      return {
-        id: `banco-${movimiento.id}`,
-        tipo: isIncome ? 'ingreso' : 'gasto',
-        concepto: movimiento.merchant_name || movimiento.description || 'Movimiento bancario',
-        categoria: movimiento.normalized_status === 'failed'
-          ? 'Revisar'
-          : movimiento.normalized_status === 'ignored'
-            ? 'Transferencia'
-            : 'Clasificando',
-        subcategoria: account?.official_name || account?.name || 'Cuenta bancaria',
-        monto: Math.abs(amount),
-        origen: connection?.institution_name || connection?.provider || 'Banco',
-        fecha: movimiento.authorized_at || movimiento.posted_at || new Date().toISOString(),
-        currency: movimiento.currency || 'MXN',
-        bankStatus: movimiento.normalized_status,
-        bankAccountName: account?.official_name || account?.name || null,
-        bankInstitutionName: connection?.institution_name || null,
-        readOnly: true,
-      } satisfies Movimiento;
-    });
-
-  return [...movimientosIngreso, ...movimientosGasto, ...movimientosAbono, ...movimientosBancoPendientes].sort(
+  return [...movimientosIngreso, ...movimientosGasto, ...movimientosAbono].sort(
     (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 }

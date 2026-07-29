@@ -1,35 +1,15 @@
 {
   "name": "dashboard-financiero",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev",
-    "build": "mastra build",
-    "start": "mastra start"
+    "dev": "npm --prefix financiero-web run dev",
+    "build": "npm --prefix financiero-web run build",
+    "start": "npm --prefix financiero-web run start",
+    "lint": "npm --prefix financiero-web run lint",
+    "test": "npm --prefix financiero-web run test"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
   "engines": {
     "node": ">=22.13.0"
-  },
-  "dependencies": {
-    "@mastra/core": "^1.37.1",
-    "@mastra/duckdb": "^1.4.0",
-    "@mastra/evals": "^1.2.3",
-    "@mastra/libsql": "^1.11.1",
-    "@mastra/loggers": "^1.1.1",
-    "@mastra/memory": "^1.20.0",
-    "@mastra/observability": "^1.14.0",
-    "@supabase/supabase-js": "^2.106.2",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/node": "^25.9.1",
-    "mastra": "^1.10.2",
-    "typescript": "^6.0.3"
   }
 }
