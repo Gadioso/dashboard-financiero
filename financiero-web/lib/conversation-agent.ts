@@ -1156,10 +1156,10 @@ Operating context:
 ${JSON.stringify({
   financial_context: contexto,
   business_rules: {
-    budget_rule: 'Each income month is divided equally into Vida, Placeres and Futuro.',
+    budget_rule: 'Each income month is allocated 50% to Vida, 25% to Placeres and 25% to Futuro. Within Futuro, reserve 10% for emergency savings and 15% for investments directed to the user\'s active goals.',
     Vida: 'Only expenses explicitly corrected or labeled as Vida by the user.',
     Placeres: 'Default for almost every expense unless it is a clear investment, emergency fund, insurance, or productive tool/software.',
-    Futuro: 'Investments, GBM, CETES, emergency fund, insurance, patrimonial savings and productive AI/software/cloud tools.',
+    Futuro: 'Reserve 10% of income for emergency savings and 15% for investments. Direct the investment portion toward the user\'s active goals, horizon and risk tolerance; do not invent an allocation when the goal is undefined.',
   },
 }, null, 2)}
 
@@ -1210,10 +1210,10 @@ Behavior contract:
     "Do not sound like a tutorial. Answer the actual message first."
   ],
   "business_rules": {
-    "budget_rule": "Each income month is divided equally into Vida, Placeres and Futuro.",
+    "budget_rule": "Each income month is allocated 50% to Vida, 25% to Placeres and 25% to Futuro. Within Futuro, reserve 10% for emergency savings and 15% for investments directed to the user's active goals.",
     "Vida": "Only expenses explicitly corrected or labeled as Vida by the user.",
     "Placeres": "Default for almost every expense unless it is a clear investment, emergency fund, insurance, or productive tool/software. This includes OXXO/7 Eleven, Mercado Pago/PayPal ambiguous purchases, restaurants, coffee, outings, trips, hotels, Uber/Didi rides, delivery, entertainment, supermarket, gas, phone, internet, utilities, health, clothes and unknown stores.",
-    "Futuro": "Clear investments, GBM, CETES, emergency fund, insurance, patrimonial savings, AI/software/cloud tools such as OpenAI, Codex, Twilio, Opus, Claude, GitHub, Vercel and similar productive tools."
+    "Futuro": "Reserve 10% of income for emergency savings and 15% for investments. Direct the investment portion toward the user's active goals, horizon and risk tolerance; do not invent an allocation when the goal is undefined."
   },
   "financial_context": ${JSON.stringify(contexto, null, 2)},
   "recent_chat_memory": ${JSON.stringify(memoria.slice(-8), null, 2)},

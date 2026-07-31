@@ -52,7 +52,7 @@ Ejemplos:
 - `me pagaron 12500 de aire mensualidad`
 - `ingresó 10000 freelance`
 
-El agente guarda el ingreso y recalcula el presupuesto mensual 33/33/33.
+El agente guarda el ingreso y recalcula el presupuesto mensual 50/25/25: 50% Vida, 25% Placeres y 25% Futuro. Dentro de Futuro, 10% se reserva para emergencia y 15% para inversiones alineadas a metas.
 
 ### Consultar resumen
 
@@ -68,7 +68,7 @@ El agente responde con ingresos, promedio de últimos 3 meses, presupuesto por b
 
 ### Conversar con contexto financiero
 
-Para preguntas abiertas que no sean comandos directos, el agente usa LLM con un contexto calculado desde Supabase: ingresos del mes, promedio de ingresos de 3 meses, presupuesto 33/33/33, gasto por bolsa y gastos recientes.
+Para preguntas abiertas que no sean comandos directos, el agente usa LLM con un contexto calculado desde Supabase: ingresos del mes, promedio de ingresos de 3 meses, presupuesto 50/25/25, gasto por bolsa y gastos recientes. La recomendación de inversión debe considerar las metas activas, su horizonte y el riesgo tolerado.
 
 Ejemplos:
 

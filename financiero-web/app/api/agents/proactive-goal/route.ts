@@ -59,7 +59,7 @@ function fallbackAnalysis(context: Record<string, number>): GoalAnalysis {
     actions: [
       `Cerrar una brecha de ${money(weeklyGap)} por semana (${money(dailyGap)} por día restante) con ingresos nuevos o cobros pendientes.`,
       `Proteger el flujo neto actual de ${money(context.netFlow)} y revisar Placeres antes de comprometer gasto adicional.`,
-      `Dirigir hasta ${money(context.targetPerBucket)} del ingreso mensual a Futuro conforme se alcance la meta, sin confundir software con inversión patrimonial.`,
+      `Separar ${money(context.targetPerBucket)} al mes para Futuro: 10% del ingreso a emergencia y 15% a inversiones alineadas con la meta prioritaria, sin confundir software con inversión patrimonial.`,
     ],
     risk: context.averageIncome3Months < context.monthlyTarget
       ? `El promedio mensual de 3 meses está ${money(context.monthlyTarget - context.averageIncome3Months)} por debajo de la meta; la brecha es estructural, no solo de este mes.`
@@ -172,7 +172,7 @@ async function runForProfile(supabase: SupabaseClient, profile: ProfileRow, forc
     goalGap,
     remainingDays,
     remainingWeeks: Math.max(remainingDays / 7, 1),
-    targetPerBucket: monthlyTarget / 3,
+    targetPerBucket: monthlyTarget * 0.25,
   };
   const analysis = await improveAnalysis(context, fallbackAnalysis(context));
   const createdAt = new Date().toISOString();
