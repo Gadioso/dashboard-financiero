@@ -340,6 +340,9 @@ type MovementEditForm = {
   fecha: string;
 };
 
+type InlineMovementField = 'concepto' | 'subcategoria' | 'fecha' | 'categoria' | 'origen' | 'monto';
+type InlineMovementEdit = { id: string; field: InlineMovementField; value: string };
+
 type ManualExpenseForm = {
   concepto: string;
   monto: string;
@@ -541,6 +544,8 @@ export default function DashboardFinanciero() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<MovementEditForm | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<InlineMovementEdit | null>(null);
+  const [inlineSaving, setInlineSaving] = useState(false);
   const [goalEditForm, setGoalEditForm] = useState<GoalEditForm | null>(null);
   const [goalSaving, setGoalSaving] = useState(false);
   const [goalContributionId, setGoalContributionId] = useState('');
@@ -1456,6 +1461,47 @@ export default function DashboardFinanciero() {
     setEditingId(null);
   };
 
+  const comenzarEdicionInline = (movimiento: Movimiento, field: InlineMovementField) => {
+    if (movimiento.tipo !== 'gasto' && movimiento.tipo !== 'ingreso') return;
+    const value = field === 'fecha'
+      ? toDateTimeLocalValue(movimiento.fecha).slice(0, 10)
+      : field === 'categoria'
+        ? nombreBolsa(movimiento.categoria)
+        : field === 'monto'
+          ? String(Math.abs(Number(movimiento.monto || 0)))
+          : field === 'origen'
+            ? (movimiento.origen || 'Web')
+            : field === 'subcategoria'
+              ? (movimiento.subcategoria || '')
+              : (movimiento.concepto || '');
+    setInlineEdit({ id: movimiento.id, field, value });
+  };
+
+  const guardarEdicionInline = async (movimiento: Movimiento, nextValue?: string) => {
+    if (!inlineEdit || inlineEdit.id !== movimiento.id || inlineSaving) return;
+    const value = (nextValue ?? inlineEdit.value).trim();
+    if (inlineEdit.field === 'concepto' && !value) return mostrarMensajeTemporal('El concepto no puede quedar vacío.');
+    if (inlineEdit.field === 'monto' && (!Number.isFinite(Number(value)) || Number(value) <= 0)) return mostrarMensajeTemporal('El monto debe ser mayor a cero.');
+    setInlineSaving(true);
+    const endpoint = movimiento.tipo === 'ingreso' ? `/api/ingresos/${movimiento.id.replace('ingreso-', '')}` : `/api/gastos/${movimiento.id.replace('gasto-', '')}`;
+    const concepto = inlineEdit.field === 'concepto' ? value : movimiento.concepto;
+    const subcategoria = inlineEdit.field === 'subcategoria' ? value : (movimiento.subcategoria || (movimiento.tipo === 'ingreso' ? 'Extra' : 'Otros Placeres'));
+    const origen = inlineEdit.field === 'origen' ? value : (movimiento.origen || 'Web');
+    const monto = inlineEdit.field === 'monto' ? Number(value) : Math.abs(Number(movimiento.monto || 0));
+    const fecha = inlineEdit.field === 'fecha' ? fromDateTimeLocalValue(`${value}T12:00`) : movimiento.fecha;
+    const payload = movimiento.tipo === 'ingreso'
+      ? { concepto, monto, tipo: subcategoria, origen, fecha }
+      : { concepto, monto, categoria: inlineEdit.field === 'categoria' ? value : nombreBolsa(movimiento.categoria), subcategoria, origen, fecha };
+    try {
+      const response = await fetchWithSessionRefresh(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await response.json();
+      if (!response.ok || !data.success) { setMensajeStatus(formatActionError(data, 'No pude guardar el cambio.')); return; }
+      setInlineEdit(null);
+      await fetchData();
+    } catch { setMensajeStatus('No pude conectar para guardar el cambio.'); }
+    finally { setInlineSaving(false); }
+  };
+
   const abrirGastoManual = () => {
     setManualExpenseForm({
       concepto: '',
@@ -1547,6 +1593,7 @@ export default function DashboardFinanciero() {
           concepto,
           monto,
           tipo: editForm.subcategoria.trim() || 'Extra',
+          origen: editForm.origen.trim() || 'Web',
           fecha: fromDateTimeLocalValue(editForm.fecha),
         }
       : {
@@ -4042,23 +4089,25 @@ export default function DashboardFinanciero() {
                     ) : (
                       movimientosPaginados.map((movimiento) => (
                         <tr key={movimiento.id} className="hover:bg-slate-50">
-                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="whitespace-nowrap px-5 py-3 text-slate-500 cursor-pointer" title="Doble clic para editar">{formatearFecha(movimiento.fecha)}</td>
-                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="px-5 py-3 cursor-pointer" title="Doble clic para editar">
-                            <p className="font-semibold text-slate-900">{movimiento.concepto}</p>
-                            <p className="text-xs text-slate-500">{movimiento.subcategoria || 'Sin subcategoría'}</p>
+                          <td className="whitespace-nowrap px-5 py-3 text-slate-500">
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'fecha' ? <input autoFocus type="date" value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="h-8 rounded border border-blue-300 px-2 text-sm text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'fecha')} className="text-left hover:text-blue-700">{formatearFecha(movimiento.fecha)}</button>}
                           </td>
-                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="px-5 py-3 cursor-pointer" title="Doble clic para editar">
-                            <span className={`rounded-md px-2 py-1 text-xs font-bold ${
+                          <td className="px-5 py-3">
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'concepto' ? <input autoFocus value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="h-8 w-full rounded border border-blue-300 px-2 text-sm text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'concepto')} className="block text-left font-semibold text-slate-900 hover:text-blue-700">{movimiento.concepto}</button>}
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'subcategoria' ? <input autoFocus value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="mt-1 h-7 w-full rounded border border-blue-300 px-2 text-xs text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'subcategoria')} className="mt-1 block text-left text-xs text-slate-500 hover:text-blue-700">{movimiento.subcategoria || 'Sin subcategoría'}</button>}
+                          </td>
+                          <td className="px-5 py-3">
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'categoria' ? <select autoFocus value={inlineEdit.value} onChange={(event) => void guardarEdicionInline(movimiento, event.target.value)} onBlur={() => setInlineEdit(null)} className="h-8 rounded border border-blue-300 bg-white px-2 text-xs font-bold text-slate-900"><option value="Vida">Vida</option><option value="Placeres">Placeres</option><option value="Futuro">Emer/Inv</option></select> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'categoria')} className={`rounded-md px-2 py-1 text-xs font-bold ${
                               nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
                               nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-amber-50 text-amber-700' :
                               nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
-                            }`}>
-                              {etiquetaBolsa(movimiento.categoria)}
-                            </span>
+                            }`}>{etiquetaBolsa(movimiento.categoria)}</button>}
                           </td>
-                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="px-5 py-3 text-slate-500 cursor-pointer" title="Doble clic para editar">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</td>
-                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className={`px-5 py-3 text-right font-bold cursor-pointer ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-900'}`} title="Doble clic para editar">
-                            {movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}${formatearMonto(movimiento.monto)}
+                          <td className="px-5 py-3 text-slate-500">
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'origen' ? <input autoFocus value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="h-8 w-full rounded border border-blue-300 px-2 text-sm text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'origen')} className="text-left hover:text-blue-700">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</button>}
+                          </td>
+                          <td className={`px-5 py-3 text-right font-bold ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-900'}`}>
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'monto' ? <input autoFocus type="number" min="0" step="0.01" value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="h-8 w-28 rounded border border-blue-300 px-2 text-right text-sm text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'monto')} className="hover:text-blue-700">{movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}${formatearMonto(movimiento.monto)}</button>}
                           </td>
                           <td className="px-5 py-3 text-right">
                             {movimiento.tipo === 'abono_tarjeta' ? (
