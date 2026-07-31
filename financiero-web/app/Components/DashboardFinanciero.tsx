@@ -40,6 +40,7 @@ import {
   calcularRestantesPorBolsa,
   calcularResumenMensual2026,
   combinarMovimientos,
+  etiquetaBolsa,
   finMesISO,
   formatearEntero,
   formatearFecha,
@@ -442,11 +443,11 @@ function crearAnalisisCliente(input: DashboardAnalysisFallbackInput): DashboardA
       ],
       risks: [
         positiveMonths < Math.ceil(months.length / 2) ? 'Menos de la mitad de los meses presentan flujo positivo.' : '',
-        input.tasaFuturo < 25 ? 'La asignación acumulada a Futuro está por debajo del ritmo anual deseable.' : '',
+        input.tasaFuturo < 25 ? 'La asignación acumulada a Emer/Inv está por debajo del ritmo anual deseable.' : '',
       ].filter(Boolean).length
         ? [
             positiveMonths < Math.ceil(months.length / 2) ? 'Menos de la mitad de los meses presentan flujo positivo.' : '',
-            input.tasaFuturo < 25 ? 'La asignación acumulada a Futuro está por debajo del ritmo anual deseable.' : '',
+            input.tasaFuturo < 25 ? 'La asignación acumulada a Emer/Inv está por debajo del ritmo anual deseable.' : '',
           ].filter(Boolean)
         : ['El riesgo principal es que un mes atípico cambie la proyección si no se revisa el acumulado mensualmente.'],
     };
@@ -476,15 +477,15 @@ function crearAnalisisCliente(input: DashboardAnalysisFallbackInput): DashboardA
       ? `Pausar cargos nuevos en ${pressuredBucket.label} hasta recuperar margen.`
       : 'Revisar ingresos, egresos y flujo neto contra el periodo anterior.',
     input.tasaFuturo < 25
-      ? `Acercar Futuro al 25%; hoy falta ${Math.round(Math.max(0, 25 - input.tasaFuturo))}%. De ese 25%, priorizar 10% a emergencia y 15% a la meta de inversión.`
-      : 'Mantener Futuro separado de pagos ordinarios y dirigir el 15% de inversión a la meta prioritaria.',
+      ? `Acercar Emer/Inv al 25%; hoy falta ${Math.round(Math.max(0, 25 - input.tasaFuturo))}%. De ese 25%, priorizar 10% a emergencia y 15% a la meta de inversión.`
+      : 'Mantener Emer/Inv separado de pagos ordinarios y dirigir el 15% de inversión a la meta prioritaria.',
     'Cerrar el periodo con revisión de bolsas fuera de rango.',
   ];
 
   const risks = [
     input.flujoNetoMes < 0 ? `Flujo neto negativo de ${formatoDineroCorto(input.flujoNetoMes)}.` : '',
     pressuredBucket && pressuredBucket.percent >= 100 ? `${pressuredBucket.label} ya superó su límite.` : '',
-    input.tasaFuturo < 25 ? 'Futuro está por debajo del ritmo necesario.' : '',
+    input.tasaFuturo < 25 ? 'Emer/Inv está por debajo del ritmo necesario.' : '',
   ].filter(Boolean);
 
   return {
@@ -1789,7 +1790,7 @@ export default function DashboardFinanciero() {
       trend: flujoNetoMes < 0 ? 'Atención' : tendencias.flujo,
     },
     {
-      label: 'Futuro',
+      label: 'Emer/Inv',
       value: `$${formatearMonto(resumen.gastado.Futuro)}`,
       detail: `${tasaFuturo.toFixed(1)}% del ingreso`,
       tone: 'violet',
@@ -1823,7 +1824,7 @@ export default function DashboardFinanciero() {
       tint: 'bg-orange-50 text-orange-700',
     },
     {
-      label: 'Futuro',
+      label: 'Emer/Inv',
       used: resumen.gastado.Futuro,
       limit: resumen.presupuesto.Futuro,
       remaining: restantes.Futuro,
@@ -1993,7 +1994,7 @@ export default function DashboardFinanciero() {
             remaining: presupuestoYearToDatePlaceres - gastadoYearToDate.Placeres,
           },
           {
-            label: 'Futuro',
+            label: 'Emer/Inv',
             used: gastadoYearToDate.Futuro,
             limit: presupuestoYearToDateFuturo,
             remaining: presupuestoYearToDateFuturo - gastadoYearToDate.Futuro,
@@ -2149,7 +2150,7 @@ export default function DashboardFinanciero() {
     title: movement.tipo === 'ingreso'
       ? `Ingreso registrado: $${formatearMonto(Math.abs(Number(movement.monto)))}`
       : `Gasto registrado: $${formatearMonto(Math.abs(Number(movement.monto)))}`,
-    description: `${movement.concepto} · ${movement.tipo === 'gasto' ? nombreBolsa(movement.categoria) : 'Ingreso'} · ${nombreOrigen(movement.origen, movement.subcategoria)}`,
+      description: `${movement.concepto} · ${movement.tipo === 'gasto' ? etiquetaBolsa(movement.categoria) : 'Ingreso'} · ${nombreOrigen(movement.origen, movement.subcategoria)}`,
     createdAt: movement.fecha,
   }));
   const cardPaymentNotifications = abonosTarjetaMensuales.slice(0, 10).map((payment) => ({
@@ -2258,7 +2259,7 @@ export default function DashboardFinanciero() {
               >
                 <option value="Vida">Vida</option>
                 <option value="Placeres">Placeres</option>
-                <option value="Futuro">Futuro</option>
+                <option value="Futuro">Emer/Inv</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
@@ -2351,7 +2352,7 @@ export default function DashboardFinanciero() {
                 >
                   <option value="Vida">Vida</option>
                   <option value="Placeres">Placeres</option>
-                  <option value="Futuro">Futuro</option>
+                  <option value="Futuro">Emer/Inv</option>
                 </select>
               </label>
             ) : (
@@ -2860,7 +2861,7 @@ export default function DashboardFinanciero() {
                     className="relative mx-auto grid size-40 place-items-center rounded-full"
                     style={{ background: gastoPresupuestadoTotal > 0 ? `conic-gradient(var(--brand-future) 0 ${gastoPorcentajeStops[0]}%, var(--brand-business) ${gastoPorcentajeStops[0]}% ${gastoPorcentajeStops[1]}%, var(--brand-wealth) ${gastoPorcentajeStops[1]}% 100%)` : 'conic-gradient(#e2e8f0 0 100%)' }}
                     role="img"
-                    aria-label={`Distribución del gasto: Vida ${gastoPorcentajeEntero[0]}%, Placeres ${gastoPorcentajeEntero[1]}% y Futuro ${gastoPorcentajeEntero[2]}%`}
+                    aria-label={`Distribución del gasto: Vida ${gastoPorcentajeEntero[0]}%, Placeres ${gastoPorcentajeEntero[1]}% y Emer/Inv ${gastoPorcentajeEntero[2]}%`}
                   >
                     <div className="grid size-24 place-items-center rounded-full bg-white text-center">
                       <div>
@@ -3002,13 +3003,14 @@ export default function DashboardFinanciero() {
                   </div>
                   <div className="text-right">
                     <span className="block text-sm font-bold text-blue-700">${formatearMonto(resumen.presupuesto.Vida + resumen.presupuesto.Placeres + resumen.presupuesto.Futuro)} asignados</span>
-                    <span className="text-xs text-slate-500">Futuro: 10% emergencia (${formatearMonto(asignacionFuturo.Emergencia)}) · 15% inversión (${formatearMonto(asignacionFuturo.Inversiones)})</span>
+                    <span className="text-xs text-slate-500">Emer/Inv: 10% emergencia (${formatearMonto(asignacionFuturo.Emergencia)}) · 15% inversión (${formatearMonto(asignacionFuturo.Inversiones)})</span>
                   </div>
                 </div>
                 <div className="grid gap-3">
                   {budgetBuckets.map((bucket) => {
                     const pct = calcularPorcentaje(bucket.used, bucket.limit);
                     const overBudget = bucket.remaining < 0;
+                    const detailBucket = bucket.label === 'Emer/Inv' ? 'Futuro' : bucket.label;
                     return (
                       <div key={bucket.label} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3028,10 +3030,10 @@ export default function DashboardFinanciero() {
                           <div className={`h-full rounded-full ${overBudget ? 'bg-rose-500' : bucket.color}`} style={{ width: `${pct}%` }} />
                         </div>
                         <div className="mt-4 border-t border-slate-200 pt-3 text-sm">
-                          <p className="font-bold text-slate-700">{detallePorBolsa[bucket.label]?.count || 0} movimientos este mes</p>
-                          {(detallePorBolsa[bucket.label]?.top || []).length > 0 ? (
+                          <p className="font-bold text-slate-700">{detallePorBolsa[detailBucket]?.count || 0} movimientos este mes</p>
+                          {(detallePorBolsa[detailBucket]?.top || []).length > 0 ? (
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {detallePorBolsa[bucket.label].top.map(([label, amount]) => (
+                              {detallePorBolsa[detailBucket].top.map(([label, amount]) => (
                                 <span key={label} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">{label}: ${formatearMonto(amount)}</span>
                               ))}
                             </div>
@@ -3223,7 +3225,7 @@ export default function DashboardFinanciero() {
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-bold text-slate-950">{movimiento.concepto}</p>
-                          <p className="truncate text-xs text-slate-500">{movimiento.subcategoria || nombreBolsa(movimiento.categoria)}</p>
+                          <p className="truncate text-xs text-slate-500">{movimiento.subcategoria || etiquetaBolsa(movimiento.categoria)}</p>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className={'text-sm font-bold ' + (movimiento.tipo === 'ingreso' ? 'text-emerald-700' : 'text-slate-950')}>
@@ -3826,7 +3828,7 @@ export default function DashboardFinanciero() {
                             <tr key={movimiento.id}>
                               <td className="px-4 py-3 text-slate-500">{formatearFecha(movimiento.fecha)}</td>
                               <td className="px-4 py-3 font-semibold text-slate-900">{movimiento.concepto}</td>
-                              <td className="px-4 py-3 text-slate-600">{nombreBolsa(String(movimiento.categoria))}</td>
+                              <td className="px-4 py-3 text-slate-600">{etiquetaBolsa(String(movimiento.categoria))}</td>
                               <td className="px-4 py-3 text-slate-500">{nombreOrigen(movimiento.origen)}</td>
                               <td className={`px-4 py-3 text-right font-bold ${movimiento.tipo === 'ingreso' ? 'text-emerald-700' : 'text-slate-900'}`}>
                                 {movimiento.tipo === 'ingreso' ? '+' : '-'}${formatearMonto(movimiento.monto)}
@@ -3965,7 +3967,7 @@ export default function DashboardFinanciero() {
                           nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-blue-50 text-blue-700' :
                           nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
                         }`}>
-                          {nombreBolsa(movimiento.categoria)}
+                          {etiquetaBolsa(movimiento.categoria)}
                         </span>
                         {movimiento.tipo === 'abono_tarjeta' ? (
                           <span className="text-xs font-bold text-violet-700">No cuenta como gasto</span>
@@ -4040,7 +4042,7 @@ export default function DashboardFinanciero() {
                               nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-blue-50 text-blue-700' :
                               nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
                             }`}>
-                              {nombreBolsa(movimiento.categoria)}
+                              {etiquetaBolsa(movimiento.categoria)}
                             </span>
                           </td>
                           <td className="px-5 py-3 text-slate-500">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</td>

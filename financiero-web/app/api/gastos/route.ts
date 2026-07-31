@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     if (!categoriasGasto.has(categoria)) {
-      return NextResponse.json({ success: false, error: 'La categoría debe ser Vida, Placeres o Futuro.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'La categoría debe ser Vida, Placeres o Emer/Inv.' }, { status: 400 });
     }
 
     if (!fecha) {

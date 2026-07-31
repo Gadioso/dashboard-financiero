@@ -127,7 +127,7 @@ function inferMovementType(typeValue: unknown, amount: number, debit: number | n
 export function categorizeImportedMovement(description: string, explicitCategory?: unknown) {
   const explicit = normalizeLabel(explicitCategory);
   if (explicit === 'vida') return { category: 'Vida' as const, subcategory: 'Vida' };
-  if (explicit === 'futuro' || explicit === 'seguros') return { category: 'Futuro' as const, subcategory: explicit === 'seguros' ? 'Seguros' : 'Futuro' };
+  if (explicit === 'futuro' || explicit === 'emer/inv' || explicit === 'emer inv' || explicit === 'emergencia' || explicit === 'inversion' || explicit === 'seguros') return { category: 'Futuro' as const, subcategory: explicit === 'seguros' ? 'Seguros' : explicit === 'emergencia' ? 'Emergencia' : explicit === 'inversion' ? 'Inversion' : 'Futuro' };
   if (explicit === 'placeres' || explicit === 'placer') return { category: 'Placeres' as const, subcategory: 'Placeres' };
 
   const value = normalizeLabel(description);

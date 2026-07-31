@@ -84,7 +84,7 @@ export default function FinancialImportModal({
   const downloadTemplate = () => {
     const csv = [
       'Fecha,Concepto,Monto,Tipo,Categoria,Subcategoria,Moneda',
-      '2026-01-15,Nómina enero,25000,Ingreso,Futuro,Ingreso,MXN',
+      '2026-01-15,Nómina enero,25000,Ingreso,Emer/Inv,Ingreso,MXN',
       '2026-01-16,Supermercado,1450.50,Gasto,Vida,Despensa,MXN',
     ].join('\n');
     const link = document.createElement('a');
@@ -225,7 +225,7 @@ export default function FinancialImportModal({
                         <td className="px-3 py-2"><input type="date" value={row.occurred_at?.slice(0, 10) || ''} onChange={(event) => updateRow(row.id, { occurred_at: event.target.value })} className="h-9 rounded-md border border-slate-200 px-2" /></td>
                         <td className="px-3 py-2"><input value={row.description || ''} onChange={(event) => updateRow(row.id, { description: event.target.value })} className="h-9 w-64 rounded-md border border-slate-200 px-2" /></td>
                         <td className="px-3 py-2"><select value={row.movement_type} onChange={(event) => updateRow(row.id, { movement_type: event.target.value as PreviewRow['movement_type'] })} className="h-9 rounded-md border border-slate-200 bg-white px-2"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option></select></td>
-                        <td className="px-3 py-2"><select value={row.category || 'Placeres'} onChange={(event) => updateRow(row.id, { category: event.target.value as PreviewRow['category'] })} className="h-9 rounded-md border border-slate-200 bg-white px-2"><option>Vida</option><option>Placeres</option><option>Futuro</option></select></td>
+                        <td className="px-3 py-2"><select value={row.category || 'Placeres'} onChange={(event) => updateRow(row.id, { category: event.target.value as PreviewRow['category'] })} className="h-9 rounded-md border border-slate-200 bg-white px-2"><option>Vida</option><option>Placeres</option><option value="Futuro">Emer/Inv</option></select></td>
                         <td className="px-3 py-2"><input value={row.subcategory || ''} onChange={(event) => updateRow(row.id, { subcategory: event.target.value })} className="h-9 w-44 rounded-md border border-slate-200 px-2" /></td>
                         <td className="px-3 py-2"><input type="number" min="0.01" step="0.01" value={row.amount ?? ''} onChange={(event) => updateRow(row.id, { amount: event.target.value })} className="h-9 w-32 rounded-md border border-slate-200 px-2 text-right font-semibold" /></td>
                         <td className="px-3 py-2"><span className={`rounded-md px-2 py-1 text-xs font-bold ${row.status === 'ready' ? 'bg-emerald-50 text-emerald-700' : row.status === 'duplicate' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'}`}>{row.status === 'ready' ? 'Listo' : row.status === 'duplicate' ? 'Duplicado' : 'Revisar'}</span>{row.validation_errors?.length ? <p className="mt-1 max-w-52 text-xs text-slate-500">{row.validation_errors.join(' ')}</p> : null}</td>

@@ -148,7 +148,7 @@ async function classifyMultipleExpenses(text: string, apiKey: string): Promise<M
     "If a date applies to all items, copy the same fechaMovimiento to every item.",
     "When a date omits the year, use the year from current_date_mexico. Never guess another year.",
     "Classify Uber, restaurants, food, travel and unknown discretionary expenses as Placeres.",
-    "Classify productive software/tools such as Google, OpenAI, Vercel, Supabase, cloud, AI or SaaS as Futuro/Herramientas Software.",
+    "Classify productive software/tools such as Google, OpenAI, Vercel, Supabase, cloud, AI or SaaS as Emer/Inv/Herramientas Software (persisted internally as Futuro).",
     "Do not invent amounts or expenses.",
     "Return only raw JSON."
   ],
@@ -158,7 +158,7 @@ async function classifyMultipleExpenses(text: string, apiKey: string): Promise<M
       {
         "concepto": "clean merchant/concept",
         "monto": 904,
-        "categoria": "Vida | Placeres | Futuro",
+        "categoria": "Vida | Placeres | Emer/Inv (persisted internally as Futuro)",
         "subcategoria": "Spanish subcategory",
         "fechaMovimiento": "optional ISO date"
       }

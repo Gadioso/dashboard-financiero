@@ -308,7 +308,7 @@ function extraerCategoriaCorreccionTelegram(texto?: string | null) {
   if (!normalizado) return null;
   if (/\b(?:vida|costo\s+de\s+vida)\b/.test(normalizado)) return 'vida';
   if (/\b(?:placeres?|placer)\b/.test(normalizado)) return 'placeres';
-  if (/\b(?:futuro|inversion|ahorro|emergencia)\b/.test(normalizado)) return 'futuro';
+  if (/\b(?:futuro|emer\s*\/\s*inv|inversion|ahorro|emergencia)\b/.test(normalizado)) return 'futuro';
 
   return null;
 }
@@ -713,7 +713,7 @@ export async function POST(request: Request) {
 
       await sincronizarPresupuestoMensual(supabase, fechaMovimiento, tenant.profileId);
 
-      const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 50/25/25; dentro de Futuro, 10% queda para emergencia y 15% para inversiones alineadas a tus metas.`;
+      const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 50/25/25; dentro de Emer/Inv, 10% queda para emergencia y 15% para inversiones alineadas a tus metas.`;
       await responderTelegram(chatId, message);
       await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
 
