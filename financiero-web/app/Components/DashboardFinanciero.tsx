@@ -2698,16 +2698,6 @@ export default function DashboardFinanciero() {
                 </React.Fragment>
               );
             })}
-            <button type="button" onClick={() => setChatOpen(true)} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-              <VirafIAMark className="size-5 shrink-0 text-blue-700" />
-              <span className="flex-1">VirafIA</span>
-              <span className="text-xs font-bold text-blue-700">Nuevo</span>
-            </button>
-            <button type="button" onClick={toggleNotificationTray} className="mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-              <Bell aria-hidden="true" className="size-5" weight="regular" />
-              <span className="flex-1">Notificaciones</span>
-              {unreadNotifications.length > 0 && <span className="grid min-w-6 place-items-center rounded-full bg-blue-600 px-1 text-xs font-black leading-6 text-white">{Math.min(unreadNotifications.length, 99)}</span>}
-            </button>
           </nav>
           <div className="border-t border-slate-100 px-4 pb-4 pt-3">
             <Link href="/onboarding" aria-label="Configuración" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
