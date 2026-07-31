@@ -52,6 +52,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const concepto = cleanText(body.concepto) || 'Ingreso';
     const monto = cleanAmount(body.monto);
     const tipo = cleanText(body.tipo, 80) || 'Extra';
+    const origen = cleanText(body.origen, 80) || 'Web';
     const fecha = cleanDate(body.fecha);
 
     if (monto === null) {
@@ -64,9 +65,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const updateQuery = supabase
       .from('ingresos')
-      .update({ concepto, monto, tipo, fecha })
+      .update({ concepto, monto, tipo, origen, fecha })
       .eq('id', id)
-      .select('id, concepto, monto, tipo, fecha');
+      .select('id, concepto, monto, tipo, origen, fecha');
     const { data, error } = await applyProfileFilter(updateQuery, tenant.profileId).maybeSingle();
 
     if (error) {

@@ -55,6 +55,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const monto = cleanAmount(body.monto);
     const categoria = cleanText(body.categoria, 40);
     const subcategoria = cleanText(body.subcategoria, 80) || null;
+    const origen = cleanText(body.origen, 80) || 'Web';
     const fecha = cleanDate(body.fecha);
 
     if (!concepto) {
@@ -75,7 +76,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const updateQuery = supabase
       .from('gastos')
-      .update({ concepto, monto, categoria: categoriaParaGastos(categoria as CategoriaFinanciera), subcategoria, fecha })
+      .update({ concepto, monto, categoria: categoriaParaGastos(categoria as CategoriaFinanciera), subcategoria, origen, fecha })
       .eq('id', id)
       .select('id, concepto, monto, categoria, subcategoria, origen, fecha');
     const { data, error } = await applyProfileFilter(updateQuery, tenant.profileId).maybeSingle();
@@ -123,7 +124,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       action: 'expense.update',
       resourceType: 'gastos',
       resourceId: data.id,
-      metadata: { categoria, subcategoria, monto, fecha },
+      metadata: { categoria, subcategoria, origen, monto, fecha },
     });
 
     return NextResponse.json({ success: true, gasto: data });
