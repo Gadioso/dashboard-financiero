@@ -9,7 +9,9 @@ export type AiFeature =
 
 const outputLimits: Record<AiFeature, number> = {
   'financial-chat': 800,
-  'financial-agent': 800,
+  // Gemini 2.5 may spend part of the output budget on thinking tokens. Keep
+  // enough headroom so proactive messages do not stop halfway through a line.
+  'financial-agent': 1_200,
   'financial-attachment': 1_200,
   'financial-import': 8_000,
   structured: 350,

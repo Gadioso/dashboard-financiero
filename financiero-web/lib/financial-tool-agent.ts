@@ -171,7 +171,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       },
     }),
     getBudgetsAndCardPayments: tool({
-      description: 'Get monthly 33/33/33 budget ceilings and credit-card payments for a requested period. Use for budget availability, category limits, payment history and card cash-flow questions.',
+      description: 'Get monthly 50/25/25 budget ceilings (50% Vida, 25% Placeres, 25% Futuro) and credit-card payments for a requested period. Within Futuro, 10% is reserved for emergencies and 15% for goal-directed investments. Use for budget availability, category limits, payment history and card cash-flow questions.',
       inputSchema: periodSchema,
       execute: async ({ start, end, label }) => {
         const startMonth = start.slice(0, 7);

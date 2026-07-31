@@ -88,7 +88,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
   const totalIngresos = money(ingresosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
   const totalGastos = money(gastosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
   const totalAbonosTdc = money(abonosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
-  const expectedTercio = money(totalIngresos / 3);
+  const expectedBudget = { Vida: money(totalIngresos * 0.50), Placeres: money(totalIngresos * 0.25), Futuro: money(totalIngresos * 0.25) };
   const presupuestoActual = presupuesto
     ? {
         Vida: money(presupuesto.techo_vida),
@@ -101,7 +101,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
   const budgetIssues = profileKeys.flatMap((profileId) => {
     const ingresosPerfil = ingresosMes.filter((row) => (row.profile_id || '') === profileId);
     const totalPerfil = money(ingresosPerfil.reduce((sum, row) => sum + Number(row.monto || 0), 0));
-    const tercioPerfil = money(totalPerfil / 3);
+    const expectedProfileBudget = { Vida: money(totalPerfil * 0.50), Placeres: money(totalPerfil * 0.25), Futuro: money(totalPerfil * 0.25) };
     const presupuestoPerfil = presupuestosMes.find((row) => (row.profile_id || '') === profileId);
 
     if (!presupuestoPerfil) {
@@ -109,7 +109,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
         profileId: profileId || null,
         issue: 'missing_budget',
         totalIngresos: totalPerfil,
-        expected: tercioPerfil,
+        expected: expectedProfileBudget,
         current: null,
       }];
     }
@@ -119,16 +119,16 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
       Placeres: money(presupuestoPerfil.techo_placeres),
       Futuro: money(presupuestoPerfil.techo_futuro),
     };
-    const outOfSync = Math.abs(current.Vida - tercioPerfil) > 0.01 ||
-      Math.abs(current.Placeres - tercioPerfil) > 0.01 ||
-      Math.abs(current.Futuro - tercioPerfil) > 0.01;
+    const outOfSync = Math.abs(current.Vida - expectedProfileBudget.Vida) > 0.01 ||
+      Math.abs(current.Placeres - expectedProfileBudget.Placeres) > 0.01 ||
+      Math.abs(current.Futuro - expectedProfileBudget.Futuro) > 0.01;
 
     return outOfSync
       ? [{
           profileId: profileId || null,
           issue: 'out_of_sync_budget',
           totalIngresos: totalPerfil,
-          expected: tercioPerfil,
+          expected: expectedProfileBudget,
           current,
         }]
       : [];
@@ -140,7 +140,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
     gastos: totalGastos,
     resultado: money(totalIngresos - totalGastos),
     abonosTdc: totalAbonosTdc,
-    tercioEsperado: expectedTercio,
+    presupuestoEsperado: expectedBudget,
     presupuestoActual,
     budgetIssues,
     presupuestoDesfasado: budgetIssues.length > 0,

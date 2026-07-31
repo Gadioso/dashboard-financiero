@@ -109,7 +109,7 @@ export async function POST(request: Request) {
           techo_vida: presupuesto.Vida,
           techo_placeres: presupuesto.Placeres,
           techo_futuro: presupuesto.Futuro,
-          fase_ahorro: 'Regla 33/33/33 activa',
+          fase_ahorro: 'Regla 50/25/25 activa',
         }, tenant.profileId);
         const { data: insertedBudget, error: budgetInsertError } = await supabase
           .from('presupuestos_mensuales')

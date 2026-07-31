@@ -151,6 +151,18 @@ function simpleHash(value: string) {
   return hash >>> 0;
 }
 
+function isCompleteProactiveMessage(value: string) {
+  const message = value.trim();
+  if (message.length < 40) return false;
+
+  // A MAX_TOKENS response commonly ends in a connector ("que", "para", …)
+  // rather than punctuation. Never deliver that partial sentence to Telegram.
+  if (!/[.!?…»”)]$/.test(message)) return false;
+  return !/\b(?:que|y|o|pero|porque|para|de|con|en|a|el|la|lo|un|una|por|hoy)$/i.test(
+    message.replace(/[.!?…»”)]*$/, '').trim(),
+  );
+}
+
 export function proactiveOpening({
   firstName,
   localDate,
@@ -466,7 +478,7 @@ Write the message now. Return only the message text.
       result.text,
       snapshot.goalPaces.map((goal) => goal.name),
     );
-    return message.length >= 40 ? message.slice(0, 1200) : fallback;
+    return isCompleteProactiveMessage(message) ? message.slice(0, 1200) : fallback;
   } catch (error) {
     console.error('[daily-cfo] intelligent message generation failed; using local fallback', error);
     return fallback;

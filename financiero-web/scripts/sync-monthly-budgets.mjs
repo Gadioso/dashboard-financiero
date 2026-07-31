@@ -78,13 +78,15 @@ async function main() {
         return sameMonth && sameProfile;
       })
       .reduce((sum, ingreso) => sum + Number(ingreso.monto || 0), 0));
-    const tercio = money(totalIngresos / 3);
+    const nextVida = money(totalIngresos * 0.50);
+    const nextPlaceres = money(totalIngresos * 0.25);
+    const nextFuturo = money(totalIngresos * 0.25);
     const current = {
       Vida: money(presupuesto.techo_vida),
       Placeres: money(presupuesto.techo_placeres),
       Futuro: money(presupuesto.techo_futuro),
     };
-    const next = { Vida: tercio, Placeres: tercio, Futuro: tercio };
+    const next = { Vida: nextVida, Placeres: nextPlaceres, Futuro: nextFuturo };
     const changed = current.Vida !== next.Vida || current.Placeres !== next.Placeres || current.Futuro !== next.Futuro;
 
     if (!changed) continue;
@@ -120,8 +122,6 @@ async function main() {
   for (const [key, group] of incomeGroups) {
     if (existingBudgetKeys.has(key)) continue;
 
-    const tercio = money(group.totalIngresos / 3);
-
     plans.push({
       action: 'insert',
       id: null,
@@ -129,7 +129,7 @@ async function main() {
       profileId: group.profileId,
       totalIngresos: group.totalIngresos,
       current: null,
-      next: { Vida: tercio, Placeres: tercio, Futuro: tercio },
+      next: { Vida: money(group.totalIngresos * 0.50), Placeres: money(group.totalIngresos * 0.25), Futuro: money(group.totalIngresos * 0.25) },
     });
   }
 
@@ -141,15 +141,21 @@ async function main() {
         techo_vida: plan.next.Vida,
         techo_placeres: plan.next.Placeres,
         techo_futuro: plan.next.Futuro,
-        fase_ahorro: 'Regla 33/33/33 activa',
+        fase_ahorro: 'Regla 50/25/25 activa',
       };
-      const query = plan.action === 'insert'
-        ? supabase.from('presupuestos_mensuales').insert([payload])
+      const runWrite = (nextPayload) => plan.action === 'insert'
+        ? supabase.from('presupuestos_mensuales').insert([nextPayload])
         : supabase
           .from('presupuestos_mensuales')
-          .update(payload)
+          .update(nextPayload)
           .eq('id', plan.id);
-      const { error } = await query;
+      let { error } = await runWrite(payload);
+
+      // Allow the sync job to run before the schema migration reaches the
+      // remote database. The next migration will normalize this legacy phase.
+      if (error && /fase_ahorro_check/i.test(error.message)) {
+        ({ error } = await runWrite({ ...payload, fase_ahorro: 'Fase 1: Escudo' }));
+      }
 
       if (error) throw new Error(`No pude actualizar presupuesto ${plan.id}: ${error.message}`);
     }

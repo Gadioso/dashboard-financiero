@@ -216,7 +216,7 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
     diagnosisParts.push(`${pressuredBucket.label} es la bolsa con mayor presión: lleva ${formatPercent(pressuredBucket.percent)} usado y le quedan ${formatMoney(pressuredBucket.remaining)}.`);
   }
   if (summary.tasaFuturo > 0) {
-    diagnosisParts.push(`La asignación a Futuro va en ${formatPercent(summary.tasaFuturo)}, contra una meta operativa de 33%.`);
+    diagnosisParts.push(`La asignación a Futuro va en ${formatPercent(summary.tasaFuturo)}, contra una meta operativa de 25% (10% emergencia y 15% inversión para metas).`);
   }
   if (goal.monthlyIncomeTarget > 0) {
     diagnosisParts.unshift(`La meta mensual es ${formatMoney(goal.monthlyIncomeTarget)} y el avance actual es ${formatPercent(goal.progressPct)}; faltan ${formatMoney(goal.monthlyGap)} este mes.`);
@@ -239,10 +239,10 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
   } else if (pressuredBucket) {
     actions.push(`Revisar ${pressuredBucket.label} dos veces por semana para evitar que pase de ${formatPercent(pressuredBucket.percent)} a zona crítica.`);
   }
-  if (summary.tasaFuturo < 33) {
-    actions.push(`Separar hasta ${formatMoney(goal.targetPerBucket || summary.ingresosMes / 3)} para Futuro conforme entre ingreso; hoy faltan ${formatPercent(Math.max(0, 33 - summary.tasaFuturo))} puntos para el ritmo objetivo.`);
+  if (summary.tasaFuturo < 25) {
+    actions.push(`Separar hasta ${formatMoney(goal.targetPerBucket || summary.ingresosMes * 0.25)} para Futuro conforme entre ingreso; hoy faltan ${formatPercent(Math.max(0, 25 - summary.tasaFuturo))} puntos para el ritmo objetivo. Dentro de ese monto: 10% a emergencia y 15% a la meta de inversión.`);
   } else {
-    actions.push('Mantener Futuro separado de pagos ordinarios para conservar limpia la regla 33/33/33.');
+    actions.push('Mantener Futuro separado de pagos ordinarios y dirigir el 15% de inversión a la meta prioritaria.');
   }
   actions.push('Cerrar el periodo con una revisión de ingresos, egresos, flujo neto y bolsas fuera de rango.');
 
@@ -329,7 +329,7 @@ export async function POST(request: Request) {
   }
 
   const prompt = `
-Eres un analista financiero personal para Diego. Analiza su dashboard 33/33/33 y responde en español mexicano, concreto y accionable.
+Eres un analista financiero personal para Diego. Analiza su dashboard con regla 50/25/25 y responde en español mexicano, concreto y accionable. Vida es 50%, Placeres 25% y Futuro 25%; dentro de Futuro, 10% es emergencia y 15% se dirige a metas de inversión según horizonte y riesgo.
 
 Alcance: ${scope === 'year' ? `acumulado 2026 de ${monthLabel}` : `mes ${monthLabel} 2026`}.
 

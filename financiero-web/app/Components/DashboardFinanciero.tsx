@@ -34,6 +34,7 @@ import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
+  calcularAsignacionFuturo,
   calcularPresupuestoTresTercios,
   calcularPromedioIngresosUltimos3Meses,
   calcularRestantesPorBolsa,
@@ -474,9 +475,9 @@ function crearAnalisisCliente(input: DashboardAnalysisFallbackInput): DashboardA
     pressuredBucket && pressuredBucket.percent >= 80
       ? `Pausar cargos nuevos en ${pressuredBucket.label} hasta recuperar margen.`
       : 'Revisar ingresos, egresos y flujo neto contra el periodo anterior.',
-    input.tasaFuturo < 33
-      ? `Acercar Futuro al 33%; hoy falta ${Math.round(Math.max(0, 33 - input.tasaFuturo))}%.`
-      : 'Mantener Futuro separado de pagos ordinarios.',
+    input.tasaFuturo < 25
+      ? `Acercar Futuro al 25%; hoy falta ${Math.round(Math.max(0, 25 - input.tasaFuturo))}%. De ese 25%, priorizar 10% a emergencia y 15% a la meta de inversión.`
+      : 'Mantener Futuro separado de pagos ordinarios y dirigir el 15% de inversión a la meta prioritaria.',
     'Cerrar el periodo con revisión de bolsas fuera de rango.',
   ];
 
@@ -671,7 +672,7 @@ export default function DashboardFinanciero() {
 
       let y = 112;
       pdf.setFontSize(14);
-      pdf.text(isYear ? 'Resultado por mes' : 'Distribución 33/33/33', margin, y);
+      pdf.text(isYear ? 'Resultado por mes' : 'Distribución 50/25/25', margin, y);
       y += 9;
 
       if (isYear) {
@@ -810,7 +811,7 @@ export default function DashboardFinanciero() {
         mesActivo,
       });
       const gastado = calcularGastadoPorBolsa(gastosDelMes);
-      const presupuestoDinamico = presupuesto?.techo_vida
+      const presupuestoDinamico = presupuesto?.techo_vida && presupuesto.fase_ahorro !== 'Regla 33/33/33 activa'
         ? {
             Vida: Number(presupuesto.techo_vida),
             Placeres: Number(presupuesto.techo_placeres || 0),
@@ -832,7 +833,7 @@ export default function DashboardFinanciero() {
         promedioIngresosUltimos3Meses,
         presupuesto: presupuestoDinamico,
         gastado,
-        faseAhorro: 'Regla 33/33/33 activa'
+        faseAhorro: 'Regla 50/25/25 activa'
       });
 
       setResumenMensual(
@@ -1658,13 +1659,14 @@ export default function DashboardFinanciero() {
     gastado: resumen.gastado,
   });
   const presupuestoPromedio = calcularPresupuestoTresTercios(resumen.promedioIngresosUltimos3Meses);
+  const asignacionFuturo = calcularAsignacionFuturo(resumen.ingresosMes);
   const totalAbonosTarjetaMes = abonosTarjetaMensuales.reduce((total, abono) => total + Number(abono.monto || 0), 0);
   const totalGastadoMes = resumen.gastado.Vida + resumen.gastado.Placeres + resumen.gastado.Futuro;
   const flujoNetoMes = resumen.ingresosMes - totalGastadoMes;
   const metaMensualActiva = monthlyIncomeTarget;
   const avanceMetaMensual = metaMensualActiva > 0 ? Math.min((resumen.ingresosMes / metaMensualActiva) * 100, 100) : 0;
   const brechaMetaMensual = Math.max(metaMensualActiva - resumen.ingresosMes, 0);
-  const tercioMetaMensual = metaMensualActiva / 3;
+  const futuroMetaMensual = metaMensualActiva * 0.25;
   const brechaVsPromedio = Math.max(metaMensualActiva - resumen.promedioIngresosUltimos3Meses, 0);
   const tasaFuturo = resumen.ingresosMes > 0 ? (resumen.gastado.Futuro / resumen.ingresosMes) * 100 : 0;
   const fechaActual = new Date();
@@ -2033,7 +2035,7 @@ export default function DashboardFinanciero() {
             averageIncomeLast3Months: resumen.promedioIngresosUltimos3Meses,
             monthlyGap: brechaMetaMensual,
             gapVsThreeMonthAverage: brechaVsPromedio,
-            targetPerBucket: tercioMetaMensual,
+            targetPerBucket: futuroMetaMensual,
             progressPct: avanceMetaMensual,
           },
           monthly: isYearScope
@@ -2070,7 +2072,7 @@ export default function DashboardFinanciero() {
       setAnalysisLoading(false);
       setTimeout(() => setMensajeStatus(''), 4000);
     }
-  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, tercioMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
+  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, futuroMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const currentAnalysisKey = `${analysisScope}:${analysisScope === 'year' ? yearToDateMonthKey : mesActivo}`;
@@ -2115,6 +2117,23 @@ export default function DashboardFinanciero() {
   const presupuestoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.limit, 0);
   const gastoPresupuestadoTotal = budgetBuckets.reduce((total, bucket) => total + bucket.used, 0);
   const presupuestoUtilizado = presupuestoTotal > 0 ? Math.min((gastoPresupuestadoTotal / presupuestoTotal) * 100, 100) : 0;
+  // The budget card is a view of actual spending, so its donut and labels must
+  // use the same denominator: the total spent across the three buckets.
+  const gastoPorcentajeExacto = budgetBuckets.map((bucket) => (
+    gastoPresupuestadoTotal > 0 ? (bucket.used / gastoPresupuestadoTotal) * 100 : 0
+  ));
+  const gastoPorcentajeEntero = gastoPresupuestadoTotal > 0
+    ? gastoPorcentajeExacto.map((value, index) => (
+      index === gastoPorcentajeExacto.length - 1
+        ? Math.max(0, 100 - gastoPorcentajeExacto.slice(0, -1).reduce((sum, item) => sum + Math.round(item), 0))
+        : Math.round(value)
+    ))
+    : budgetBuckets.map(() => 0);
+  const gastoPorcentajeStops = gastoPorcentajeExacto.reduce<number[]>((stops, value, index) => {
+    stops.push((stops[index - 1] || 0) + value);
+    return stops;
+  }, []);
+  const gastoPorcentajeTexto = gastoPorcentajeEntero.join('/');
   const recomendacionResumen = flujoNetoMes > 0
     ? `Con tu flujo actual, podrías dirigir ${formatoDineroCorto(Math.max(flujoNetoMes * 0.25, 0))} extra a tu meta prioritaria este mes.`
     : flujoNetoMes < 0
@@ -2163,8 +2182,8 @@ export default function DashboardFinanciero() {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para probar a VirafIA con el metodo 33/33/33.',
-      features: ['Registro manual', '30 días de historial', 'Presupuesto 33/33/33', 'VirafIA limitada'],
+      description: 'Para probar a VirafIA con el método 50/25/25.',
+      features: ['Registro manual', '30 días de historial', 'Presupuesto 50/25/25', 'VirafIA limitada'],
     },
     {
       name: 'Beta',
@@ -2834,14 +2853,14 @@ export default function DashboardFinanciero() {
                     <h2 className="text-xl text-slate-950">Presupuesto por categoría</h2>
                     <p className="mt-1 text-sm text-slate-500">{presupuestoUtilizado.toFixed(0)}% utilizado</p>
                   </div>
-                  <span className="text-base font-black text-blue-700">33/33/33</span>
+                  <span className="text-base font-black text-blue-700">{gastoPorcentajeTexto}</span>
                 </div>
                 <div className="mt-6 grid items-center gap-6 sm:grid-cols-[150px_1fr] xl:grid-cols-1 2xl:grid-cols-[160px_1fr]">
                   <div
                     className="relative mx-auto grid size-40 place-items-center rounded-full"
-                    style={{ background: 'conic-gradient(var(--brand-future) 0 33.333%, var(--brand-business) 33.333% 66.666%, var(--brand-wealth) 66.666% 100%)' }}
+                    style={{ background: gastoPresupuestadoTotal > 0 ? `conic-gradient(var(--brand-future) 0 ${gastoPorcentajeStops[0]}%, var(--brand-business) ${gastoPorcentajeStops[0]}% ${gastoPorcentajeStops[1]}%, var(--brand-wealth) ${gastoPorcentajeStops[1]}% 100%)` : 'conic-gradient(#e2e8f0 0 100%)' }}
                     role="img"
-                    aria-label="Distribución equilibrada del presupuesto en Vida, Placeres y Futuro"
+                    aria-label={`Distribución del gasto: Vida ${gastoPorcentajeEntero[0]}%, Placeres ${gastoPorcentajeEntero[1]}% y Futuro ${gastoPorcentajeEntero[2]}%`}
                   >
                     <div className="grid size-24 place-items-center rounded-full bg-white text-center">
                       <div>
@@ -2851,13 +2870,13 @@ export default function DashboardFinanciero() {
                     </div>
                   </div>
                   <div className="space-y-3">
-                    {budgetBuckets.map((bucket) => (
+                    {budgetBuckets.map((bucket, index) => (
                       <div key={bucket.label} className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <span className={'size-3 shrink-0 rounded-full ' + bucket.color} />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-bold text-slate-950">{bucket.label}</p>
-                            <p className="text-xs text-slate-500">33% · {formatoDineroCorto(bucket.limit)}</p>
+                            <p className="text-xs text-slate-500">{gastoPorcentajeEntero[index]}% del gasto · {formatoDineroCorto(bucket.limit)} presupuesto</p>
                           </div>
                         </div>
                         <p className="text-xs font-bold text-slate-700">{formatoDineroCorto(bucket.used)}</p>
@@ -2876,7 +2895,7 @@ export default function DashboardFinanciero() {
                 <div>
                     <h1 className="text-2xl tracking-tight text-slate-950 md:text-3xl">Hola{accountFirstName ? `, ${accountFirstName}` : ''}.</h1>
                   <p className="mt-1 text-sm text-slate-500">
-                    {loading ? 'Actualizando datos...' : `Resumen de ${selectedMonthName.toLowerCase()} 2026 con regla 33/33/33.`}
+                    {loading ? 'Actualizando datos...' : `Resumen de ${selectedMonthName.toLowerCase()} 2026 con regla 50/25/25.`}
                   </p>
                 </div>
 
@@ -2940,7 +2959,7 @@ export default function DashboardFinanciero() {
                     <h2 className="text-lg font-bold text-slate-950">Presupuesto por categoría</h2>
                     <p className="text-sm text-slate-500">Uso actual de bolsas</p>
                   </div>
-                  <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">33/33/33</span>
+                  <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">50/25/25</span>
                 </div>
                 <div className="mt-5 space-y-5">
                   {budgetBuckets.map((bucket) => {
@@ -2981,7 +3000,10 @@ export default function DashboardFinanciero() {
                     <h2 className="text-lg font-bold text-slate-950">Detalle de bolsas</h2>
                     <p className="text-sm text-slate-500">Presupuesto, consumo y margen disponible por categoría.</p>
                   </div>
-                  <span className="text-sm font-bold text-blue-700">${formatearMonto(resumen.presupuesto.Vida + resumen.presupuesto.Placeres + resumen.presupuesto.Futuro)} asignados</span>
+                  <div className="text-right">
+                    <span className="block text-sm font-bold text-blue-700">${formatearMonto(resumen.presupuesto.Vida + resumen.presupuesto.Placeres + resumen.presupuesto.Futuro)} asignados</span>
+                    <span className="text-xs text-slate-500">Futuro: 10% emergencia (${formatearMonto(asignacionFuturo.Emergencia)}) · 15% inversión (${formatearMonto(asignacionFuturo.Inversiones)})</span>
+                  </div>
                 </div>
                 <div className="grid gap-3">
                   {budgetBuckets.map((bucket) => {
@@ -3697,7 +3719,7 @@ export default function DashboardFinanciero() {
                       {reportScope === 'month' ? (
                         <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
                           <div>
-                            <h4 className="text-base font-black text-slate-950">Distribución 33/33/33</h4>
+                            <h4 className="text-base font-black text-slate-950">Distribución 50/25/25</h4>
                             <div className="mt-4 space-y-4">
                               {budgetBuckets.map((bucket) => {
                                 const pct = bucket.limit > 0 ? Math.min((bucket.used / bucket.limit) * 100, 100) : 0;

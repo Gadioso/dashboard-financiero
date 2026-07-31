@@ -81,7 +81,7 @@ export const resumenInicial: ResumenFinanciero = {
   promedioIngresosUltimos3Meses: 0,
   presupuesto: { Vida: 0, Placeres: 0, Futuro: 0 },
   gastado: { Vida: 0, Placeres: 0, Futuro: 0 },
-  faseAhorro: 'Regla 33/33/33 activa',
+  faseAhorro: 'Regla 50/25/25 activa',
 };
 
 export const meses2026 = [
@@ -265,12 +265,21 @@ export const formatearFecha = (valor: string) => {
 };
 
 export function calcularPresupuestoTresTercios(ingresosMes: number) {
-  const tercio = ingresosMes > 0 ? ingresosMes / 3 : 0;
+  const ingreso = ingresosMes > 0 ? ingresosMes : 0;
 
   return {
-    Vida: tercio,
-    Placeres: tercio,
-    Futuro: tercio,
+    Vida: ingreso * 0.50,
+    Placeres: ingreso * 0.25,
+    Futuro: ingreso * 0.25,
+  };
+}
+
+export function calcularAsignacionFuturo(ingresosMes: number) {
+  const ingreso = ingresosMes > 0 ? ingresosMes : 0;
+  return {
+    Emergencia: ingreso * 0.10,
+    Inversiones: ingreso * 0.15,
+    Futuro: ingreso * 0.25,
   };
 }
 

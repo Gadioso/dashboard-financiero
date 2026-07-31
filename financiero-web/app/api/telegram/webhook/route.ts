@@ -713,7 +713,7 @@ export async function POST(request: Request) {
 
       await sincronizarPresupuestoMensual(supabase, fechaMovimiento, tenant.profileId);
 
-      const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 33/33/33.`;
+      const message = `Registrado. ${respuesta.message} Ya recalculé tus bolsas 50/25/25; dentro de Futuro, 10% queda para emergencia y 15% para inversiones alineadas a tus metas.`;
       await responderTelegram(chatId, message);
       await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
 
