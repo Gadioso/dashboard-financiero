@@ -14,7 +14,7 @@ Ejemplos:
 - `299 codex`
 - `metí 1000 a cetes`
 
-El agente clasifica el movimiento en `Vida`, `Placeres` o `Futuro` y lo guarda en la tabla `gastos`.
+El agente clasifica el movimiento en `Vida`, `Placeres` o `Emer/Inv` (categoría interna `Futuro`) y lo guarda en la tabla `gastos`.
 
 ### Conectar y desconectar Telegram
 
@@ -52,7 +52,7 @@ Ejemplos:
 - `me pagaron 12500 de aire mensualidad`
 - `ingresó 10000 freelance`
 
-El agente guarda el ingreso y recalcula el presupuesto mensual 50/25/25: 50% Vida, 25% Placeres y 25% Futuro. Dentro de Futuro, 10% se reserva para emergencia y 15% para inversiones alineadas a metas.
+El agente guarda el ingreso y recalcula el presupuesto mensual 50/25/25: 50% Vida, 25% Placeres y 25% Emer/Inv. Dentro de Emer/Inv, 10% se reserva para emergencia y 15% para inversiones alineadas a metas.
 
 ### Consultar resumen
 
@@ -88,7 +88,7 @@ Ejemplos:
 - `últimos 5 gastos`
 - `gastos de placeres de junio`
 - `gastos de vida enero 2026`
-- `gastos de futuro abril`
+- `gastos de Emer/Inv abril`
 
 Cada gasto se muestra con un ID corto para poder borrarlo con confirmación.
 

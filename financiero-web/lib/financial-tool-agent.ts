@@ -67,7 +67,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       },
     }),
     getMovements: tool({
-      description: 'Get exact movements and totals for a period, optionally filtered by Vida, Placeres or Futuro. Use it to explain where a number comes from and never infer movements from prior prose.',
+      description: 'Get exact movements and totals for a period, optionally filtered by Vida, Placeres or Emer/Inv. Use it to explain where a number comes from and never infer movements from prior prose.',
       inputSchema: periodSchema.extend({ category: categorySchema.optional(), limit: z.number().int().min(1).max(50).default(15) }),
       execute: async ({ start, end, label, category, limit }) => {
         let query = supabase.from('gastos').select('id, monto, concepto, categoria, subcategoria, fecha, origen').eq('profile_id', profileId).gte('fecha', start).lt('fecha', end).order('fecha', { ascending: false }).limit(limit);
@@ -171,7 +171,7 @@ export async function runFinancialToolAgent({ text, memory, supabase, profileId 
       },
     }),
     getBudgetsAndCardPayments: tool({
-      description: 'Get monthly 50/25/25 budget ceilings (50% Vida, 25% Placeres, 25% Futuro) and credit-card payments for a requested period. Within Futuro, 10% is reserved for emergencies and 15% for goal-directed investments. Use for budget availability, category limits, payment history and card cash-flow questions.',
+      description: 'Get monthly 50/25/25 budget ceilings (50% Vida, 25% Placeres, 25% Emer/Inv) and credit-card payments for a requested period. Within Emer/Inv, 10% is reserved for emergencies and 15% for goal-directed investments. Use for budget availability, category limits, payment history and card cash-flow questions.',
       inputSchema: periodSchema,
       execute: async ({ start, end, label }) => {
         const startMonth = start.slice(0, 7);
@@ -251,11 +251,11 @@ Never present an unsupported legacy target as the price of a goal. A monthly sav
 If a goal combines different outcomes, separate them into milestones with different costs, dates and liquidity needs. Do not quote the raw goal name as though it were a variable label; speak naturally about what the person is trying to accomplish.
 When asked how to set money aside, distinguish three steps when applicable: where the money should physically go, how to keep it unavailable for ordinary spending, and how its confirmed contribution is tracked in Virafi. Ask a specific question only if the destination depends on liquidity or timing that the tools do not establish.
 For "anual", "anualmente" or "este año", use January 1 through the first day of next month (year-to-date), unless the user names another year.
-Futuro includes persisted categories Futuro and Seguros.
+Emer/Inv includes persisted categories Futuro and Seguros.
 The profile field monthly_income_target is the user's monthly income goal. The risk-profile field monthlyContribution is only the planned monthly investment contribution. Never confuse those two numbers.
 The identity profile fields bio, professional_headline, location and financial_why are context for prioritization and explanation. Never turn them into invented amounts or goals; explicit saved financial data remains the source of truth.
 The personalization field goal_priorities contains life values, not fundable goals. Use those values to explain why an explicit financial goal matters and to propose concrete supporting actions, but never assign money or a deadline directly to a value such as faith, family, health or work.
-Money allocated to Futuro is capital allocation or spending, not earned income and not automatic progress toward the monthly income goal. Explain that distinction whenever the user connects Futuro with the income goal.
+Money allocated to Emer/Inv is capital allocation or spending, not earned income and not automatic progress toward the monthly income goal. Explain that distinction whenever the user connects Emer/Inv with the income goal.
 Explain the conclusion first, then the evidence, then one useful next action when relevant.
 Do not invent returns, balances, movements, connections or goals.
 Do not perform writes, deletes, reclassifications, transfers or trades. Those actions remain behind deterministic confirmation controls.

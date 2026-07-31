@@ -161,7 +161,7 @@ function ruleBasedYearAnalysis(monthLabel: string, body: AnalysisBody): Dashboar
   const bestMonth = [...months].sort((a, b) => b.resultado - a.resultado)[0];
   const worstMonth = [...months].sort((a, b) => a.resultado - b.resultado)[0];
   const positiveMonths = months.filter((month) => month.resultado >= 0).length;
-  const futureBucket = buckets.find((bucket) => bucket.label === 'Futuro');
+  const futureBucket = buckets.find((bucket) => bucket.label === 'Emer/Inv' || bucket.label === 'Futuro');
 
   return {
     headline: months.length
@@ -179,11 +179,11 @@ function ruleBasedYearAnalysis(monthLabel: string, body: AnalysisBody): Dashboar
     ],
     risks: [
       positiveMonths < Math.ceil(months.length / 2) ? 'La mayoría de los meses no mantiene flujo positivo.' : '',
-      futureBucket && futureBucket.percent < 75 ? `Futuro acumula sólo ${formatPercent(futureBucket.percent)} de su ritmo anual esperado.` : '',
+      futureBucket && futureBucket.percent < 75 ? `Emer/Inv acumula sólo ${formatPercent(futureBucket.percent)} de su ritmo anual esperado.` : '',
     ].filter(Boolean).length
       ? [
           positiveMonths < Math.ceil(months.length / 2) ? 'La mayoría de los meses no mantiene flujo positivo.' : '',
-          futureBucket && futureBucket.percent < 75 ? `Futuro acumula sólo ${formatPercent(futureBucket.percent)} de su ritmo anual esperado.` : '',
+          futureBucket && futureBucket.percent < 75 ? `Emer/Inv acumula sólo ${formatPercent(futureBucket.percent)} de su ritmo anual esperado.` : '',
         ].filter(Boolean)
       : ['La proyección puede variar si los próximos meses se apartan del promedio observado.'],
   };
@@ -216,7 +216,7 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
     diagnosisParts.push(`${pressuredBucket.label} es la bolsa con mayor presión: lleva ${formatPercent(pressuredBucket.percent)} usado y le quedan ${formatMoney(pressuredBucket.remaining)}.`);
   }
   if (summary.tasaFuturo > 0) {
-    diagnosisParts.push(`La asignación a Futuro va en ${formatPercent(summary.tasaFuturo)}, contra una meta operativa de 25% (10% emergencia y 15% inversión para metas).`);
+    diagnosisParts.push(`La asignación a Emer/Inv va en ${formatPercent(summary.tasaFuturo)}, contra una meta operativa de 25% (10% emergencia y 15% inversión para metas).`);
   }
   if (goal.monthlyIncomeTarget > 0) {
     diagnosisParts.unshift(`La meta mensual es ${formatMoney(goal.monthlyIncomeTarget)} y el avance actual es ${formatPercent(goal.progressPct)}; faltan ${formatMoney(goal.monthlyGap)} este mes.`);
@@ -240,9 +240,9 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
     actions.push(`Revisar ${pressuredBucket.label} dos veces por semana para evitar que pase de ${formatPercent(pressuredBucket.percent)} a zona crítica.`);
   }
   if (summary.tasaFuturo < 25) {
-    actions.push(`Separar hasta ${formatMoney(goal.targetPerBucket || summary.ingresosMes * 0.25)} para Futuro conforme entre ingreso; hoy faltan ${formatPercent(Math.max(0, 25 - summary.tasaFuturo))} puntos para el ritmo objetivo. Dentro de ese monto: 10% a emergencia y 15% a la meta de inversión.`);
+    actions.push(`Separar hasta ${formatMoney(goal.targetPerBucket || summary.ingresosMes * 0.25)} para Emer/Inv conforme entre ingreso; hoy faltan ${formatPercent(Math.max(0, 25 - summary.tasaFuturo))} puntos para el ritmo objetivo. Dentro de ese monto: 10% a emergencia y 15% a la meta de inversión.`);
   } else {
-    actions.push('Mantener Futuro separado de pagos ordinarios y dirigir el 15% de inversión a la meta prioritaria.');
+    actions.push('Mantener Emer/Inv separado de pagos ordinarios y dirigir el 15% de inversión a la meta prioritaria.');
   }
   actions.push('Cerrar el periodo con una revisión de ingresos, egresos, flujo neto y bolsas fuera de rango.');
 
@@ -256,7 +256,7 @@ function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: An
     risks.push(`${pressuredBucket.label} está cerca de saturarse con ${formatPercent(pressuredBucket.percent)} usado.`);
   }
   if (summary.tasaFuturo < 25) {
-    risks.push('Futuro está por debajo del ritmo necesario y puede debilitar objetivos de ahorro.');
+    risks.push('Emer/Inv está por debajo del ritmo necesario y puede debilitar objetivos de ahorro.');
   }
   if (!risks.length) {
     risks.push('El principal riesgo es relajar la captura diaria y perder visibilidad del flujo real.');
@@ -329,7 +329,7 @@ export async function POST(request: Request) {
   }
 
   const prompt = `
-Eres un analista financiero personal para Diego. Analiza su dashboard con regla 50/25/25 y responde en español mexicano, concreto y accionable. Vida es 50%, Placeres 25% y Futuro 25%; dentro de Futuro, 10% es emergencia y 15% se dirige a metas de inversión según horizonte y riesgo.
+Eres un analista financiero personal para Diego. Analiza su dashboard con regla 50/25/25 y responde en español mexicano, concreto y accionable. Vida es 50%, Placeres 25% y Emer/Inv 25%; dentro de Emer/Inv, 10% es emergencia y 15% se dirige a metas de inversión según horizonte y riesgo.
 
 Alcance: ${scope === 'year' ? `acumulado 2026 de ${monthLabel}` : `mes ${monthLabel} 2026`}.
 
@@ -347,7 +347,7 @@ Reglas:
 - Si algo falta, dilo como limitación.
 - Da lectura de comportamiento, no consejos genéricos.
 - La meta mensual es el objetivo rector. Cuantifica la brecha contra el ingreso actual y contra el promedio de 3 meses.
-- Explica cuánto debe provenir de mejorar ingresos, cuánto de controlar gasto y cuánto puede dirigirse a Futuro/inversión; recortar gasto no cuenta como crear ingresos.
+- Explica cuánto debe provenir de mejorar ingresos, cuánto de controlar gasto y cuánto puede dirigirse a Emer/Inv/inversión; recortar gasto no cuenta como crear ingresos.
 - Prioriza máximo 3 acciones, ordenadas por impacto, cada una con monto, frecuencia y criterio verificable de cumplimiento.
 - Distingue inversión patrimonial de herramientas o gasto productivo; no presentes software como rendimiento de inversión.
 - Si el alcance es mensual, analiza exclusivamente el mes seleccionado: movimientos, presupuesto consumido, flujo y acciones ejecutables antes del cierre de ese mes. No hagas proyecciones anuales salvo que sean indispensables.

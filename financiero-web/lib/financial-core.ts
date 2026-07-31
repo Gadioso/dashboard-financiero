@@ -395,6 +395,11 @@ export function nombreBolsa(categoria: string) {
   return categoria;
 }
 
+/** User-facing label for the internal Futuro bucket. */
+export function etiquetaBolsa(categoria: string) {
+  return nombreBolsa(categoria) === 'Futuro' ? 'Emer/Inv' : nombreBolsa(categoria);
+}
+
 export function nombreOrigen(origen: string, subcategoria?: string | null) {
   void subcategoria;
   if (origen === 'Supabase') return 'Web';
@@ -474,7 +479,7 @@ export function parsearMovimientoEstructurado(texto: string) {
   if (!categoria) {
     return {
       ok: false as const,
-      error: 'No identifiqué la categoría. Usa vida, placeres o futuro. Ejemplo: 150 taxi placeres',
+      error: 'No identifiqué la categoría. Usa vida, placeres o Emer/Inv. Ejemplo: 150 taxi placeres',
     };
   }
 

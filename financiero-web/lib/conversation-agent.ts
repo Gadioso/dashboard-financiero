@@ -90,7 +90,8 @@ function normalizarTextoBasico(texto: string) {
     .trim()
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\bemer\s*\/\s*inv\b|\bemer\s+inv\b/g, 'futuro');
 }
 
 function esMovimientoCortoConConcepto(normalizado: string) {
@@ -335,7 +336,7 @@ function detectarFiltroCategoria(texto: string) {
   const normalizado = texto.toLowerCase();
 
   if (normalizado.includes('placer') || /\b(salidas?|restaurantes?|caf[eé]s?|ocio)\b/.test(normalizado)) return 'Placeres';
-  if (/\b(futuro|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?|herramientas?|software|openai|chatgpt|codex|twilio|opus|cloud|claude|github|vercel|supabase)\b/.test(normalizado)) return 'Futuro';
+  if (/\b(futuro|emer\s*\/\s*inv|inversi[oó]n|inversiones|invertido|gbm|cetes|emergencia|seguros?|herramientas?|software|openai|chatgpt|codex|twilio|opus|cloud|claude|github|vercel|supabase)\b/.test(normalizado)) return 'Futuro';
   if (/\b(vida|costo de vida)\b/.test(normalizado)) return 'Vida';
 
   return null;
@@ -359,7 +360,7 @@ function normalizarCategoriaCorreccion(texto: string) {
     return { categoria: 'Placeres' as const, subcategoria: 'Otros Placeres' };
   }
 
-  if (normalizado.includes('futuro') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia') || normalizado.includes('herramienta') || normalizado.includes('software')) {
+  if (normalizado.includes('futuro') || normalizado.includes('emer/inv') || normalizado.includes('inversi') || normalizado.includes('ahorro') || normalizado.includes('emergencia') || normalizado.includes('herramienta') || normalizado.includes('software')) {
     return { categoria: 'Futuro' as const, subcategoria: normalizado.includes('emergencia') ? 'Emergencia' : 'Inversion' };
   }
 
@@ -393,7 +394,7 @@ async function actualizarCategoriaGasto(
   const categoria = normalizarCategoriaCorreccion(categoriaTexto);
 
   if (!categoria) {
-    return 'No entendí la categoría. Usa: vida, placeres o futuro.';
+    return 'No entendí la categoría. Usa: vida, placeres o Emer/Inv.';
   }
 
   const query = supabase
@@ -493,7 +494,7 @@ async function totalGastosPorCategoria(supabase: SupabaseClient, texto: string, 
   const categoria = detectarFiltroCategoria(texto);
 
   if (!categoria) {
-    return 'Dime qué bolsa quieres revisar: Vida, Placeres o Futuro.';
+    return 'Dime qué bolsa quieres revisar: Vida, Placeres o Emer/Inv.';
   }
 
   const query = supabase
@@ -1156,10 +1157,10 @@ Operating context:
 ${JSON.stringify({
   financial_context: contexto,
   business_rules: {
-    budget_rule: 'Each income month is allocated 50% to Vida, 25% to Placeres and 25% to Futuro. Within Futuro, reserve 10% for emergency savings and 15% for investments directed to the user\'s active goals.',
+    budget_rule: 'Each income month is allocated 50% to Vida, 25% to Placeres and 25% to Emer/Inv. Within Emer/Inv, reserve 10% for emergency savings and 15% for investments directed to the user\'s active goals.',
     Vida: 'Only expenses explicitly corrected or labeled as Vida by the user.',
     Placeres: 'Default for almost every expense unless it is a clear investment, emergency fund, insurance, or productive tool/software.',
-    Futuro: 'Reserve 10% of income for emergency savings and 15% for investments. Direct the investment portion toward the user\'s active goals, horizon and risk tolerance; do not invent an allocation when the goal is undefined.',
+    'Emer/Inv': 'Reserve 10% of income for emergency savings and 15% for investments. Direct the investment portion toward the user\'s active goals, horizon and risk tolerance; do not invent an allocation when the goal is undefined.',
   },
 }, null, 2)}
 
@@ -1210,10 +1211,10 @@ Behavior contract:
     "Do not sound like a tutorial. Answer the actual message first."
   ],
   "business_rules": {
-    "budget_rule": "Each income month is allocated 50% to Vida, 25% to Placeres and 25% to Futuro. Within Futuro, reserve 10% for emergency savings and 15% for investments directed to the user's active goals.",
+    "budget_rule": "Each income month is allocated 50% to Vida, 25% to Placeres and 25% to Emer/Inv. Within Emer/Inv, reserve 10% for emergency savings and 15% for investments directed to the user's active goals.",
     "Vida": "Only expenses explicitly corrected or labeled as Vida by the user.",
     "Placeres": "Default for almost every expense unless it is a clear investment, emergency fund, insurance, or productive tool/software. This includes OXXO/7 Eleven, Mercado Pago/PayPal ambiguous purchases, restaurants, coffee, outings, trips, hotels, Uber/Didi rides, delivery, entertainment, supermarket, gas, phone, internet, utilities, health, clothes and unknown stores.",
-    "Futuro": "Reserve 10% of income for emergency savings and 15% for investments. Direct the investment portion toward the user's active goals, horizon and risk tolerance; do not invent an allocation when the goal is undefined."
+    "Emer/Inv": "Reserve 10% of income for emergency savings and 15% for investments. Direct the investment portion toward the user's active goals, horizon and risk tolerance; do not invent an allocation when the goal is undefined."
   },
   "financial_context": ${JSON.stringify(contexto, null, 2)},
   "recent_chat_memory": ${JSON.stringify(memoria.slice(-8), null, 2)},
@@ -1480,8 +1481,8 @@ export async function responderConversacionFinanciera({
       return {
         action: 'reply',
         message: intent.plural
-          ? 'No tengo claros los últimos gastos para corregirlos. Mándame "últimos gastos" o usa "cambiar <id> y <id> a vida/placeres/futuro".'
-          : 'No tengo un último gasto claro para corregir. Mándame "últimos gastos" o usa "cambiar <id> a vida/placeres/futuro".',
+          ? 'No tengo claros los últimos gastos para corregirlos. Mándame "últimos gastos" o usa "cambiar <id> y <id> a vida/placeres/Emer/Inv".'
+          : 'No tengo un último gasto claro para corregir. Mándame "últimos gastos" o usa "cambiar <id> a vida/placeres/Emer/Inv".',
       };
     }
 
