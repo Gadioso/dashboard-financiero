@@ -336,6 +336,7 @@ type MovementEditForm = {
   monto: string;
   categoria: string;
   subcategoria: string;
+  origen: string;
   fecha: string;
 };
 
@@ -1443,6 +1444,7 @@ export default function DashboardFinanciero() {
       monto: String(Math.abs(Number(movimiento.monto || 0))),
       categoria: movimiento.tipo === 'ingreso' ? 'Ingreso' : nombreBolsa(movimiento.categoria),
       subcategoria: movimiento.subcategoria || (movimiento.tipo === 'ingreso' ? 'Extra' : 'Otros Placeres'),
+      origen: movimiento.origen || 'Web',
       fecha: toDateTimeLocalValue(movimiento.fecha),
     });
     setEditingId(movimiento.id);
@@ -1552,6 +1554,7 @@ export default function DashboardFinanciero() {
           monto,
           categoria: editForm.categoria,
           subcategoria: editForm.subcategoria.trim() || 'Otros Placeres',
+          origen: editForm.origen.trim() || 'Web',
           fecha: fromDateTimeLocalValue(editForm.fecha),
         };
 
@@ -2341,6 +2344,14 @@ export default function DashboardFinanciero() {
               />
             </label>
           </div>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Origen
+            <input
+              value={editForm.origen}
+              onChange={(event) => setEditForm((current) => current ? { ...current, origen: event.target.value } : current)}
+              className="h-11 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-blue-500"
+            />
+          </label>
           <div className="grid gap-4 sm:grid-cols-2">
             {editForm.tipo === 'gasto' ? (
               <label className="grid gap-1 text-sm font-semibold text-slate-700">
@@ -3964,7 +3975,7 @@ export default function DashboardFinanciero() {
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <span className={`rounded-md px-2 py-1 text-xs font-bold ${
                           nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
-                          nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-blue-50 text-blue-700' :
+                          nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-amber-50 text-amber-700' :
                           nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
                         }`}>
                           {etiquetaBolsa(movimiento.categoria)}
@@ -4031,22 +4042,22 @@ export default function DashboardFinanciero() {
                     ) : (
                       movimientosPaginados.map((movimiento) => (
                         <tr key={movimiento.id} className="hover:bg-slate-50">
-                          <td className="whitespace-nowrap px-5 py-3 text-slate-500">{formatearFecha(movimiento.fecha)}</td>
-                          <td className="px-5 py-3">
+                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="whitespace-nowrap px-5 py-3 text-slate-500 cursor-pointer" title="Doble clic para editar">{formatearFecha(movimiento.fecha)}</td>
+                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="px-5 py-3 cursor-pointer" title="Doble clic para editar">
                             <p className="font-semibold text-slate-900">{movimiento.concepto}</p>
                             <p className="text-xs text-slate-500">{movimiento.subcategoria || 'Sin subcategoría'}</p>
                           </td>
-                          <td className="px-5 py-3">
+                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="px-5 py-3 cursor-pointer" title="Doble clic para editar">
                             <span className={`rounded-md px-2 py-1 text-xs font-bold ${
                               nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
-                              nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-blue-50 text-blue-700' :
+                              nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-amber-50 text-amber-700' :
                               nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
                             }`}>
                               {etiquetaBolsa(movimiento.categoria)}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-slate-500">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</td>
-                          <td className={`px-5 py-3 text-right font-bold ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-900'}`}>
+                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className="px-5 py-3 text-slate-500 cursor-pointer" title="Doble clic para editar">{nombreOrigen(movimiento.origen, movimiento.subcategoria)}</td>
+                          <td onDoubleClick={() => abrirEditorMovimiento(movimiento)} className={`px-5 py-3 text-right font-bold cursor-pointer ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-900'}`} title="Doble clic para editar">
                             {movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}${formatearMonto(movimiento.monto)}
                           </td>
                           <td className="px-5 py-3 text-right">
