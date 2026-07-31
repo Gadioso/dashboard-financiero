@@ -96,6 +96,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return upsertSubscription(subscription);
   }
 
+  const creditPackId = session.metadata?.credit_pack_id;
+  const credits = Number(session.metadata?.credits || 0);
+  if (profileId && creditPackId && Number.isInteger(credits) && credits > 0) {
+    const { error } = await supabase.from('billing_credit_ledger').insert({
+      profile_id: profileId,
+      credits,
+      source: 'credit_pack',
+      stripe_event_id: session.id,
+      stripe_session_id: session.id,
+    });
+    if (error && !/duplicate|unique/i.test(error.message)) throw new Error(`No pude acreditar los créditos: ${error.message}`);
+  }
+
   return {
     profileId,
     stripeCustomerId: stripeCustomerId || null,

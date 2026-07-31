@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import type { BillingPlan } from '@/lib/billing';
+import { getCreditPack, type CreditPackId } from '@/lib/billing';
 
 const stripeApiVersion = '2026-05-27.dahlia';
 
@@ -33,8 +34,8 @@ export function getStripePriceIdForPlan(plan: BillingPlan) {
 }
 
 const planCatalog: Record<Exclude<BillingPlan, 'free'>, { name: string; unitAmount: number; lookupKey: string }> = {
-  beta: { name: 'Virafi Beta', unitAmount: 1500, lookupKey: 'dashboard_financiero_beta_monthly' },
-  premium: { name: 'Virafi Premium', unitAmount: 2900, lookupKey: 'dashboard_financiero_premium_monthly' },
+  beta: { name: 'Virafi Esencial', unitAmount: 19900, lookupKey: 'virafi_esencial_mxn_monthly' },
+  premium: { name: 'Virafi Pro', unitAmount: 39900, lookupKey: 'virafi_pro_mxn_monthly' },
 };
 
 export async function getOrCreateStripePriceForPlan(plan: Exclude<BillingPlan, 'free'>) {
@@ -57,13 +58,35 @@ export async function getOrCreateStripePriceForPlan(plan: Exclude<BillingPlan, '
   });
   const price = await stripe.prices.create({
     product: product.id,
-    currency: 'usd',
+    currency: 'mxn',
     unit_amount: catalog.unitAmount,
     recurring: { interval: 'month' },
     lookup_key: catalog.lookupKey,
     metadata: { app: 'dashboard_financiero', plan },
   });
 
+  return price.id;
+}
+
+export async function getOrCreateStripePriceForCreditPack(packId: CreditPackId) {
+  const stripe = getStripeClient();
+  if (!stripe) return null;
+  const pack = getCreditPack(packId);
+  if (!pack) return null;
+  const lookupKey = `virafi_${pack.id}_mxn_one_time`;
+  const existing = await stripe.prices.list({ active: true, lookup_keys: [lookupKey], limit: 1 });
+  if (existing.data[0]) return existing.data[0].id;
+  const product = await stripe.products.create({
+    name: `Virafi ${pack.label}`,
+    metadata: { app: 'dashboard_financiero', credit_pack: pack.id, credits: String(pack.credits) },
+  });
+  const price = await stripe.prices.create({
+    product: product.id,
+    currency: 'mxn',
+    unit_amount: pack.unitAmountMxn,
+    lookup_key: lookupKey,
+    metadata: { app: 'dashboard_financiero', credit_pack: pack.id, credits: String(pack.credits) },
+  });
   return price.id;
 }
 

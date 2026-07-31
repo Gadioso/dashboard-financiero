@@ -6,6 +6,7 @@ export type BillingLimitResource = 'telegramAccounts';
 
 export type BillingLimits = {
   telegramAccounts: number;
+  monthlyCredits: number;
 };
 
 export type BillingStatus = {
@@ -27,14 +28,30 @@ const activeSubscriptionStatuses = new Set(activeSubscriptionStatusList);
 export const billingPlanLimits: Record<BillingPlan, BillingLimits> = {
   free: {
     telegramAccounts: 0,
+    monthlyCredits: 25,
   },
   beta: {
     telegramAccounts: 1,
+    monthlyCredits: 200,
   },
   premium: {
     telegramAccounts: 1,
+    monthlyCredits: 500,
   },
 };
+
+/** One-time packs are intentionally more expensive per credit than upgrading. */
+export const creditPacks = [
+  { id: 'credits-100', credits: 100, unitAmountMxn: 4900, label: '100 créditos', priceLabel: '$49 MXN' },
+  { id: 'credits-300', credits: 300, unitAmountMxn: 12900, label: '300 créditos', priceLabel: '$129 MXN' },
+  { id: 'credits-700', credits: 700, unitAmountMxn: 27900, label: '700 créditos', priceLabel: '$279 MXN' },
+] as const;
+
+export type CreditPackId = (typeof creditPacks)[number]['id'];
+
+export function getCreditPack(packId: unknown) {
+  return creditPacks.find((pack) => pack.id === packId) || null;
+}
 
 export const defaultBillingStatus: BillingStatus = {
   configured: false,

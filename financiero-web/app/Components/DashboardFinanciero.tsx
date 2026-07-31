@@ -1330,7 +1330,7 @@ export default function DashboardFinanciero() {
   const abrirCheckoutBilling = async (plan: 'beta' | 'premium' = 'premium') => {
     setBillingLoading(true);
     setBillingAction('checkout');
-    setMensajeStatus(`Abriendo checkout ${plan === 'beta' ? 'Beta' : 'Premium'}...`);
+    setMensajeStatus(`Abriendo checkout ${plan === 'beta' ? 'Esencial' : 'Pro'}...`);
 
     try {
       const response = await fetchWithSessionRefresh('/api/billing/checkout', {
@@ -1345,7 +1345,31 @@ export default function DashboardFinanciero() {
         return;
       }
 
-      window.location.href = data.url;
+      window.location.assign(data.url);
+    } catch {
+      setMensajeStatus('No pude abrir el pago seguro. Intenta nuevamente.');
+    } finally {
+      setBillingLoading(false);
+      setBillingAction(null);
+    }
+  };
+
+  const comprarCreditos = async (creditPackId: 'credits-100' | 'credits-300' | 'credits-700') => {
+    setBillingLoading(true);
+    setBillingAction('checkout');
+    setMensajeStatus('Abriendo checkout de créditos...');
+    try {
+      const response = await fetchWithSessionRefresh('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creditPackId }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.url) {
+        setMensajeStatus(`Error billing: ${formatActionError(data, 'No pude crear checkout.')}`);
+        return;
+      }
+      window.location.assign(data.url);
     } catch {
       setMensajeStatus('No pude abrir el pago seguro. Intenta nuevamente.');
     } finally {
@@ -1368,7 +1392,7 @@ export default function DashboardFinanciero() {
         return;
       }
 
-      window.location.href = data.url;
+      window.location.assign(data.url);
     } catch {
       setMensajeStatus('No pude abrir el portal de facturación.');
     } finally {
@@ -1728,9 +1752,9 @@ export default function DashboardFinanciero() {
     : totalGastadoMes > 0 ? 100 : 0;
   const mesSinIngresosConGastos = resumen.ingresosMes === 0 && totalGastadoMes > 0;
   const planLabel = billingStatus?.plan === 'premium'
-    ? 'Premium'
+    ? 'Pro'
     : billingStatus?.plan === 'beta'
-      ? 'Beta'
+      ? 'Esencial'
       : 'Gratis';
   const accountName = accountProfile?.full_name?.trim() || 'Tu perfil';
   const accountFirstName = accountName === 'Tu perfil' ? '' : accountName.split(/\s+/)[0];
@@ -2233,22 +2257,22 @@ export default function DashboardFinanciero() {
       name: 'Gratis',
       price: '$0',
       plan: 'free',
-      description: 'Para probar a VirafIA con el método 50/25/25.',
-      features: ['Registro manual', '30 días de historial', 'Presupuesto 50/25/25', 'VirafIA limitada'],
+      description: 'Para probar el método y conocer a VirafIA.',
+      features: ['Registro manual', '30 días de historial', 'Presupuesto 50/25/25', '25 créditos IA al mes'],
     },
     {
-      name: 'Beta',
-      price: '$15',
+      name: 'Esencial',
+      price: '$199 MXN',
       plan: 'beta',
-      description: 'Para usar a VirafIA con automatizacion progresiva.',
-      features: ['Telegram incluido', '12 meses de historial', 'Metas personalizadas', 'Análisis mensual con VirafIA'],
+      description: 'Para organizar tus finanzas con acompañamiento inteligente.',
+      features: ['200 créditos IA al mes', 'Telegram incluido', '12 meses de historial', 'Metas personalizadas', 'Análisis mensual con VirafIA'],
     },
     {
-      name: 'Premium',
-      price: '$29',
+      name: 'Pro',
+      price: '$399 MXN',
       plan: 'premium',
-      description: 'Para seguimiento avanzado con mas analisis y soporte.',
-      features: ['Historial ampliado', 'Wealth y escenarios', 'Análisis mensual/anual con VirafIA', 'Soporte prioritario'],
+      description: 'Para seguimiento avanzado y decisiones financieras frecuentes.',
+      features: ['500 créditos IA al mes', 'Historial ampliado', 'Wealth y escenarios', 'Análisis mensual/anual con VirafIA', 'Soporte prioritario'],
     },
   ];
   const manualExpenseModal = manualExpenseOpen ? (
@@ -3724,6 +3748,27 @@ export default function DashboardFinanciero() {
                       </div>
                     );
                   })}
+                </div>
+                <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h3 className="text-base font-black text-slate-950">¿Te quedaste sin créditos?</h3>
+                      <p className="text-sm text-slate-600">Los paquetes sueltos cuestan más por crédito que subir de plan.</p>
+                    </div>
+                    <a href="mailto:info@virafi.com?subject=Consumo%20alto%20de%20VirafIA" className="text-sm font-bold text-blue-700 hover:underline">Hablar con Virafi</a>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {[
+                      { id: 'credits-100' as const, label: '100 créditos', price: '$49 MXN' },
+                      { id: 'credits-300' as const, label: '300 créditos', price: '$129 MXN' },
+                      { id: 'credits-700' as const, label: '700 créditos', price: '$279 MXN' },
+                    ].map((pack) => (
+                      <button key={pack.id} type="button" onClick={() => void comprarCreditos(pack.id)} disabled={billingLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-left hover:border-blue-300 disabled:opacity-60">
+                        <span className="block text-sm font-black text-slate-950">{pack.label}</span>
+                        <span className="mt-1 block text-xs font-bold text-blue-700">{pack.price}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </section>

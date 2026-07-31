@@ -9,6 +9,7 @@ import { getGeminiModelName } from '@/lib/gemini';
 import { VIRAFIA_CONVERSATION_PRINCIPLES } from '@/lib/virafia-conversation-principles';
 import { buildGoalCfoPlan } from '@/lib/goal-cfo-plan';
 import { isConcreteFinancialGoal } from '@/lib/personalized-goals';
+import { consumeAiCredit } from '@/lib/ai-credits';
 
 type AgentRunInput = {
   text: string;
@@ -40,6 +41,20 @@ function compactQueryResult<T>(result: { data: T | null; error: { message: strin
 export async function runFinancialToolAgent({ text, memory, supabase, profileId }: AgentRunInput) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
   if (!apiKey) throw new Error('GEMINI_API_KEY no está configurada.');
+
+  const { data: subscription } = await supabase
+    .from('billing_subscriptions')
+    .select('plan, status')
+    .eq('profile_id', profileId)
+    .in('status', ['active', 'trialing'])
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  await consumeAiCredit({
+    supabase,
+    profileId,
+    plan: subscription?.plan === 'premium' ? 'premium' : subscription?.plan === 'beta' ? 'beta' : 'free',
+  });
 
   const google = createGoogleGenerativeAI({ apiKey });
 

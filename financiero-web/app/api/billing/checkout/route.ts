@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import type { BillingPlan } from '@/lib/billing';
-import { getAppBaseUrl, getOrCreateStripePriceForPlan, getStripeClient } from '@/lib/stripe-server';
+import { getCreditPack, type BillingPlan, type CreditPackId } from '@/lib/billing';
+import { getAppBaseUrl, getOrCreateStripePriceForCreditPack, getOrCreateStripePriceForPlan, getStripeClient } from '@/lib/stripe-server';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext } from '@/lib/tenant-context';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 type CheckoutBody = {
   plan?: BillingPlan;
+  creditPackId?: CreditPackId;
 };
 
 function parseCheckoutPlan(value: unknown): Exclude<BillingPlan, 'free'> {
@@ -63,6 +64,28 @@ export async function POST(request: Request) {
     const stripe = getStripeClient();
     const supabase = getSupabaseServiceClient();
     const body = (await request.json().catch(() => ({}))) as CheckoutBody;
+    const creditPack = getCreditPack(body.creditPackId);
+    if (creditPack) {
+      if (!stripe || !supabase) return NextResponse.json({ success: false, error: 'El pago seguro todavía no está disponible.' }, { status: 503 });
+      const tenant = await getRequestTenantContext(request);
+      if (!tenant.profileId) return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
+      const priceId = await getOrCreateStripePriceForCreditPack(creditPack.id);
+      if (!priceId) return NextResponse.json({ success: false, error: 'No pude configurar el paquete de créditos.' }, { status: 503 });
+      const customerId = await getOrCreateStripeCustomer({ email: tenant.email, profileId: tenant.profileId, supabase });
+      const baseUrl = getAppBaseUrl(request);
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        allow_promotion_codes: true,
+        success_url: `${baseUrl}/dashboard?billing=credits_success`,
+        cancel_url: `${baseUrl}/dashboard?billing=cancelled`,
+        client_reference_id: tenant.profileId,
+        metadata: { profile_id: tenant.profileId, credit_pack_id: creditPack.id, credits: String(creditPack.credits) },
+      });
+      await logAuditEvent({ supabase, request, profileId: tenant.profileId, actorEmail: tenant.email, action: 'billing.credit_checkout.created', resourceType: 'stripe_checkout_session', resourceId: session.id, metadata: { customerId, creditPackId: creditPack.id, credits: creditPack.credits } });
+      return NextResponse.json({ success: true, url: session.url });
+    }
     const plan = parseCheckoutPlan(body.plan);
     const priceId = await getOrCreateStripePriceForPlan(plan);
 

@@ -40,6 +40,15 @@ Configurar en Stripe:
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
 
+## Catálogo actual
+
+- Esencial: **$199 MXN/mes**, 200 créditos IA.
+- Pro: **$399 MXN/mes**, 500 créditos IA.
+- Gratis: 25 créditos IA al mes, sin suscripción.
+- Paquetes extraordinarios: 100 créditos por $49 MXN, 300 por $129 MXN o 700 por $279 MXN. El precio por crédito es deliberadamente mayor que subir de plan.
+
+Los IDs configurados en `STRIPE_PRICE_BETA_MONTHLY` y `STRIPE_PRICE_PREMIUM_MONTHLY` deben ser precios recurrentes en MXN. Los paquetes se crean como precios únicos en MXN mediante lookup keys `virafi_credits-100_mxn_one_time`, `virafi_credits-300_mxn_one_time` y `virafi_credits-700_mxn_one_time`.
+
 ## Estado actual
 
 Sin suscripcion activa, el producto queda en `free`. Cuando el webhook registra una suscripcion `active` o `trialing`, `/api/account/status` devuelve `billing.plan = "beta"` o `billing.plan = "premium"` segun metadata/precio de Stripe.
