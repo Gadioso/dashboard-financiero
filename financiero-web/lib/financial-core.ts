@@ -284,8 +284,16 @@ export function calcularAsignacionFuturo(ingresosMes: number) {
 }
 
 export function mesKeyDesdeFecha(fecha: Date) {
-  const year = fecha.getUTCFullYear();
-  const month = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+  // The product is operated in Mexico City. Using UTC here makes the app
+  // jump to the next month during the evening in Mexico (for example, July
+  // 31 at 18:00 local time is already August 1 in UTC).
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(fecha);
+  const year = parts.find((part) => part.type === 'year')?.value || String(fecha.getUTCFullYear());
+  const month = parts.find((part) => part.type === 'month')?.value || String(fecha.getUTCMonth() + 1).padStart(2, '0');
 
   return `${year}-${month}`;
 }
