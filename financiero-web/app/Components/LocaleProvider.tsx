@@ -73,20 +73,6 @@ export default function LocaleProvider({ children }: { children: React.ReactNode
   return (
     <LocaleContext.Provider value={value}>
       <LocalizedContent locale={locale}>{children}</LocalizedContent>
-      <div className="pointer-events-auto fixed right-4 top-4 z-[100] rounded-lg border border-slate-300 bg-white p-1.5 shadow-xl backdrop-blur md:right-6 md:top-5">
-        <label className="flex min-w-28 items-center gap-2 px-2 text-xs font-bold text-slate-600">
-          <span aria-hidden="true">🌐</span><span className="sr-only">{translate(locale, 'language')}</span>
-          <select
-            aria-label={translate(locale, 'language')}
-            value={locale}
-            onChange={(event) => setLocale(event.target.value as AppLocale)}
-            className="h-8 cursor-pointer bg-transparent text-xs font-bold text-slate-700 outline-none"
-          >
-            <option value="es-MX">🇲🇽 {translate(locale, 'spanish')}</option>
-            <option value="en-US">🇺🇸 {translate(locale, 'english')}</option>
-          </select>
-        </label>
-      </div>
     </LocaleContext.Provider>
   );
 }
