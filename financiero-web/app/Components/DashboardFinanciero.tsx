@@ -2611,7 +2611,7 @@ export default function DashboardFinanciero() {
               ref={chatFileInputRef}
               type="file"
               multiple
-              accept="image/*,application/pdf,text/plain,text/csv,text/markdown,text/html,application/json,.pdf,.txt,.csv,.md,.json"
+              accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,text/markdown,text/html,application/json,.xlsx,.pdf,.txt,.csv,.md,.json"
               onChange={(event) => {
                 agregarAdjuntosChat(Array.from(event.target.files || []));
                 event.target.value = '';
@@ -2631,13 +2631,13 @@ export default function DashboardFinanciero() {
               >
                 <Paperclip aria-hidden="true" className="size-5" weight="bold" />
               </button>
-              <input
-                type="text"
+              <textarea
                 value={inputIA}
                 onChange={(event) => setInputIA(event.target.value)}
                 disabled={procesando}
                 placeholder='Ej. "¿cómo voy este mes?" o "agrega abono de 10k"'
-                className="h-11 min-w-0 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
+                rows={2}
+                className="min-h-11 max-h-32 min-w-0 resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 disabled:opacity-60"
               />
               <button
                 type="button"

@@ -7,6 +7,7 @@ const maxTotalBytes = 40 * 1024 * 1024;
 
 const supportedTypes = new Set([
   'application/pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/json',
   'text/plain',
   'text/csv',
@@ -17,7 +18,7 @@ const supportedTypes = new Set([
 function normalizedMimeType(file: File) {
   if (file.type) return file.type;
   const extension = file.name.split('.').pop()?.toLowerCase();
-  return ({ pdf: 'application/pdf', json: 'application/json', txt: 'text/plain', csv: 'text/csv', md: 'text/markdown', markdown: 'text/markdown', html: 'text/html', htm: 'text/html' } as Record<string, string>)[extension || ''] || '';
+  return ({ pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel', json: 'application/json', txt: 'text/plain', csv: 'text/csv', md: 'text/markdown', markdown: 'text/markdown', html: 'text/html', htm: 'text/html' } as Record<string, string>)[extension || ''] || '';
 }
 
 function isSupported(file: File) {

@@ -12,8 +12,8 @@ import {
   appendVirafiaConversationMessage,
   readVirafiaConversation,
 } from '@/lib/virafia-conversation';
-import { isWeekdayInTimezone } from '@/lib/schedule';
-export { isWeekdayInTimezone } from '@/lib/schedule';
+import { isMondayInTimezone, isWeekdayInTimezone } from '@/lib/schedule';
+export { isMondayInTimezone, isWeekdayInTimezone } from '@/lib/schedule';
 
 const DEFAULT_TIMEZONE = 'America/Mexico_City';
 const DEFAULT_WINDOW_START = 8;
@@ -423,7 +423,10 @@ export function fallbackMessage(snapshot: DailyCfoSnapshot, actions: DailyCfoAct
   const actionLine = actions[0]?.amount
     ? `Esta semana separaría ${money(actions[0].amount)} en una cuenta o instrumento distinto al dinero de gasto y después registraría esa aportación en Virafi.`
     : `Yo empezaría por esto: ${actions[0]?.title || 'definir tu siguiente paso'}.`;
-  return `${greeting} ${movementLine}\n\n${goalLine} ${actionLine}`;
+  const mondayIntake = isMondayInTimezone(new Date(`${snapshot.localDate}T12:00:00.000Z`), snapshot.timezone)
+    ? `Es lunes, ${snapshot.firstName}. Para poner tus números al día, adjúntame imágenes, un Excel o tu Google Sheet exportado, un estado de cuenta, o escríbeme todos tus movimientos pendientes en un solo mensaje. Los revisamos juntos y te digo qué falta confirmar.\n\n`
+    : '';
+  return `${mondayIntake}${greeting} ${movementLine}\n\n${goalLine} ${actionLine}`;
 }
 
 async function improveMessage({
@@ -454,6 +457,7 @@ Daily intervention rules:
 - Write 2-4 short paragraphs, under 850 characters, with no headings, markdown or bullet list.
 - Do not force a question. If a question is useful, make it concrete and decision-oriented.
 - Never mention prompts, algorithms or internal data structures.
+- Every Monday, begin with a direct invitation to catch up: ask the person to attach images, an Excel file, a Google Sheet export, or a bank statement, or to write all pending movements in one message. Keep this invitation concrete and in Mexican Spanish.
 `.trim();
 
   const prompt = `
@@ -480,7 +484,11 @@ Write the message now. Return only the message text.
       result.text,
       snapshot.goalPaces.map((goal) => goal.name),
     );
-    return isCompleteProactiveMessage(message) ? message.slice(0, 1200) : fallback;
+    if (!isCompleteProactiveMessage(message)) return fallback;
+    const mondayPrefix = isMondayInTimezone(new Date(`${snapshot.localDate}T12:00:00.000Z`), snapshot.timezone)
+      ? `Es lunes, ${snapshot.firstName}. Para poner tus números al día, adjúntame imágenes, un Excel o tu Google Sheet exportado, un estado de cuenta, o escríbeme todos tus movimientos pendientes en un solo mensaje. Los revisamos juntos y te digo qué falta confirmar.\n\n`
+      : '';
+    return `${mondayPrefix}${message}`.slice(0, 1200);
   } catch (error) {
     console.error('[daily-cfo] intelligent message generation failed; using local fallback', error);
     return fallback;
