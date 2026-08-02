@@ -547,7 +547,9 @@ export async function POST(request: Request) {
     const tenant = await getTelegramTenantContext({ supabase, chatId });
 
     if (!tenant.profileId) {
-      return NextResponse.json({ success: true, ignored: true, action: 'unauthorized-chat' });
+      const message = 'Este chat todavía no está vinculado a una cuenta de Virafi. Entra a Configuración → Finanzas e integraciones, genera una llave de Telegram y envíala aquí.';
+      await responderTelegram(chatId, message);
+      return NextResponse.json({ success: true, ignored: true, action: 'unauthorized-chat', message });
     }
 
     const membership = await getAppMembershipStatus({ supabase, profileId: tenant.profileId });

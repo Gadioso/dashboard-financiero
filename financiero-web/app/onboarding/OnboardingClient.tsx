@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ArrowSquareOut, CheckCircle, Circle, Copy, Gear, LockKey, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, ArrowSquareOut, CheckCircle, Circle, Copy, Gear, LockKey, TelegramLogo, Target, UserCircle } from '@phosphor-icons/react';
 import PersonalizationInterview from './PersonalizationInterview';
 import ProfileSettings from './ProfileSettings';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
+import LanguageSwitcher from '@/app/Components/LanguageSwitcher';
+import { useLocale } from '@/app/Components/LocaleProvider';
 
 type AccountStatus = {
   success: boolean;
@@ -49,6 +51,7 @@ function userSafeMessage(value: unknown, fallback: string) {
 }
 
 export default function OnboardingClient() {
+  const { locale, t } = useLocale();
   const [activeTab, setActiveTab] = useState<'profile' | 'finance'>('finance');
   const [guidedGoals, setGuidedGoals] = useState<boolean | null>(null);
   const [status, setStatus] = useState<AccountStatus | null>(null);
@@ -212,8 +215,8 @@ export default function OnboardingClient() {
       <main className="min-h-screen bg-[var(--brand-cream)] px-4 py-8 text-slate-950 md:py-12">
         <div className="mx-auto max-w-3xl">
           <header className="mb-8 flex items-center justify-between gap-4">
-            <VirafiBrand compact />
-            <Link href="/dashboard" className="text-sm font-bold text-slate-500 transition-colors hover:text-blue-700">Ir al dashboard</Link>
+            <div className="flex items-center gap-3"><VirafiBrand compact /><LanguageSwitcher compact /></div>
+            <Link href="/dashboard" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"><ArrowLeft aria-hidden="true" className="size-4" weight="bold" /> {t('backToDashboard')}</Link>
           </header>
           <div className="mb-6">
             <p className="text-sm font-bold text-blue-700">Primero, tu rumbo</p>
@@ -240,17 +243,19 @@ export default function OnboardingClient() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <VirafiBrand compact />
-            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">{activeTab === 'profile' ? 'Tu perfil' : 'Configuración financiera'}</h1>
+            <div className="flex items-center justify-between gap-4"><VirafiBrand compact /><LanguageSwitcher /></div>
+            <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">{activeTab === 'profile' ? t('profile') : t('settings')}</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              {activeTab === 'profile' ? 'Define quién eres y qué quieres que Virafi tome en cuenta.' : 'Personaliza tus metas y administra tus integraciones desde un solo lugar.'}
+              {activeTab === 'profile'
+                ? (locale === 'en-US' ? 'Tell Virafi who you are and what should shape your financial guidance.' : 'Define quién eres y qué quieres que Virafi tome en cuenta.')
+                : (locale === 'en-US' ? 'Personalize your goals and manage integrations in one place.' : 'Personaliza tus metas y administra tus integraciones desde un solo lugar.')}
             </p>
           </div>
           <Link
             href="/dashboard"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
           >
-            Ver dashboard
+            <ArrowLeft aria-hidden="true" className="size-4" weight="bold" /> {t('backToDashboard')}
           </Link>
         </header>
 
@@ -259,10 +264,10 @@ export default function OnboardingClient() {
 
         <nav aria-label="Secciones de configuración" className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           <button type="button" onClick={() => setActiveTab('profile')} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors ${activeTab === 'profile' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <UserCircle aria-hidden="true" className="size-5" weight="duotone" /> Perfil
+            <UserCircle aria-hidden="true" className="size-5" weight="duotone" /> {t('profile')}
           </button>
           <button type="button" onClick={() => setActiveTab('finance')} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors ${activeTab === 'finance' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <Gear aria-hidden="true" className="size-5" weight="duotone" /> Finanzas e integraciones
+            <Gear aria-hidden="true" className="size-5" weight="duotone" /> {t('financesIntegrations')}
           </button>
         </nav>
 

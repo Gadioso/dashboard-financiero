@@ -23,6 +23,7 @@ import {
   Plant,
   Receipt,
   ShieldCheck,
+  SignOut as SignOutIcon,
   Sparkle,
   Target,
   Wallet,
@@ -31,6 +32,8 @@ import {
 import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview';
 import VirafiBrand, { VirafiMark } from '@/app/Components/VirafiBrand';
 import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
+import LanguageSwitcher from '@/app/Components/LanguageSwitcher';
+import { useLocale } from '@/app/Components/LocaleProvider';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -258,6 +261,7 @@ type GoalContributionPanel = {
 
 type AccountStatus = {
   success: boolean;
+  profileId?: string | null;
   profile?: {
     id: string;
     full_name?: string | null;
@@ -532,6 +536,7 @@ function fondoObjetivo(fondo: FondoAcumulado) {
 }
 
 export default function DashboardFinanciero() {
+  const { locale, t } = useLocale();
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
   const [procesando, setProcesando] = useState(false);
@@ -619,6 +624,12 @@ export default function DashboardFinanciero() {
   const audioStopTimeoutRef = useRef<number | null>(null);
   const statusTimeoutRef = useRef<number | null>(null);
   const chatFileInputRef = useRef<HTMLInputElement | null>(null);
+  const accountProfileIdRef = useRef<string | null>(null);
+
+  async function logoutFromDashboard() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    window.location.assign('/login');
+  }
 
   useEffect(() => {
     const stored = window.localStorage.getItem('dashboard_notifications_seen_at_v2');
@@ -916,13 +927,18 @@ export default function DashboardFinanciero() {
         if (mounted) {
           const accountData = accountResult.status === 'fulfilled' ? await readJsonResponse<AccountStatus>(accountResult.value) : null;
           if (accountData) {
+            const nextProfileId = accountData.profileId || accountData.profile?.id || null;
+            if (accountProfileIdRef.current !== nextProfileId) {
+              accountProfileIdRef.current = nextProfileId;
+              setChatMessages([]);
+            }
             if (accountData.billing) setBillingStatus(accountData.billing);
             if (accountData.profile) {
               setAccountProfile(accountData.profile);
               setMonthlyIncomeTarget(valorNumerico(accountData.profile.monthly_income_target));
             }
             if (accountData.agentTasks) setAgentTasks(accountData.agentTasks);
-            if (accountData.virafiaMessages?.length) {
+            if (accountData.virafiaMessages) {
               setChatMessages((current) => current.length ? current : accountData.virafiaMessages!.map((message) => ({
                 id: message.id,
                 role: message.role,
@@ -1907,19 +1923,19 @@ export default function DashboardFinanciero() {
     },
   ], [restantes.Futuro, restantes.Placeres, restantes.Vida, resumen.gastado.Futuro, resumen.gastado.Placeres, resumen.gastado.Vida, resumen.presupuesto.Futuro, resumen.presupuesto.Placeres, resumen.presupuesto.Vida]);
   const desktopNavItems: Array<{ label: string; view: DashboardView; icon: React.ElementType }> = [
-    { label: 'Resumen', view: 'resumen', icon: House },
-    { label: 'Movimientos', view: 'movimientos', icon: ArrowsDownUp },
-    { label: 'Presupuestos', view: 'presupuestos', icon: ChartDonut },
-    { label: 'Metas', view: 'metas', icon: Target },
-    { label: 'Análisis', view: 'analisis', icon: ChartLineUp },
+    { label: locale === 'en-US' ? 'Overview' : 'Resumen', view: 'resumen', icon: House },
+    { label: locale === 'en-US' ? 'Transactions' : 'Movimientos', view: 'movimientos', icon: ArrowsDownUp },
+    { label: locale === 'en-US' ? 'Budgets' : 'Presupuestos', view: 'presupuestos', icon: ChartDonut },
+    { label: locale === 'en-US' ? 'Goals' : 'Metas', view: 'metas', icon: Target },
+    { label: locale === 'en-US' ? 'Analysis' : 'Análisis', view: 'analisis', icon: ChartLineUp },
     { label: 'Virafi Wealth', view: 'wealth', icon: Plant },
-    { label: 'Planes', view: 'planes', icon: CalendarBlank },
-    { label: 'Reportes', view: 'reportes', icon: FileText },
+    { label: locale === 'en-US' ? 'Plans' : 'Planes', view: 'planes', icon: CalendarBlank },
+    { label: locale === 'en-US' ? 'Reports' : 'Reportes', view: 'reportes', icon: FileText },
   ];
   const mobileNavItems = [
-    { label: 'Inicio', view: 'resumen' as const, icon: House },
-    { label: 'Mov.', view: 'movimientos' as const, icon: ArrowsDownUp },
-    { label: 'Metas', view: 'metas' as const, icon: Target },
+    { label: locale === 'en-US' ? 'Home' : 'Inicio', view: 'resumen' as const, icon: House },
+    { label: locale === 'en-US' ? 'Txns.' : 'Mov.', view: 'movimientos' as const, icon: ArrowsDownUp },
+    { label: locale === 'en-US' ? 'Goals' : 'Metas', view: 'metas' as const, icon: Target },
     { label: 'Wealth', view: 'wealth' as const, icon: Plant },
   ];
   const activeNav = desktopNavItems.find((item) => item.view === vistaActiva) || desktopNavItems[0];
@@ -1944,7 +1960,7 @@ export default function DashboardFinanciero() {
   const agregarAdjuntosChat = (files: File[]) => {
     const uniqueFiles = [...chatAttachments, ...files].filter((file, index, all) => (
       all.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size) === index
-    )).slice(0, 4);
+    )).slice(0, 12);
     const oversized = uniqueFiles.find((file) => file.size > 10 * 1024 * 1024);
     const totalBytes = uniqueFiles.reduce((total, file) => total + file.size, 0);
 
@@ -1952,8 +1968,8 @@ export default function DashboardFinanciero() {
       setMensajeStatus(`${oversized.name} supera el límite de 10 MB.`);
       return;
     }
-    if (totalBytes > 20 * 1024 * 1024) {
-      setMensajeStatus('Los archivos no pueden superar 20 MB en total.');
+    if (totalBytes > 40 * 1024 * 1024) {
+      setMensajeStatus('Los archivos no pueden superar 40 MB en total.');
       return;
     }
 
@@ -2700,10 +2716,14 @@ export default function DashboardFinanciero() {
             })}
           </nav>
           <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-            <Link href="/onboarding" aria-label="Configuración" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            <div className="flex items-center gap-2"><LanguageSwitcher compact /><Link href="/onboarding" aria-label={t('settings')} className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <GearIcon />
-              <span>Configuración</span>
-            </Link>
+              <span>{t('settings')}</span>
+            </Link></div>
+            <button type="button" onClick={() => void logoutFromDashboard()} className="mt-2 flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700">
+              <SignOutIcon />
+              <span>{t('logout')}</span>
+            </button>
             <Link href="/onboarding?tab=profile" className="mt-3 block rounded-lg border border-slate-200 bg-[var(--brand-cream)] p-3 transition-colors hover:border-blue-200 hover:bg-blue-50" aria-label="Abrir mi perfil">
               <div className="flex items-center gap-3">
                 <div className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-blue-600 text-sm font-bold text-white">{accountProfile?.avatarUrl ? <Image src={accountProfile.avatarUrl} alt={`Foto de ${accountName}`} fill sizes="36px" unoptimized className="object-cover" /> : accountInitials}</div>
@@ -2730,6 +2750,7 @@ export default function DashboardFinanciero() {
                     {unreadNotifications.length > 0 && <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-black leading-5 text-white">{Math.min(unreadNotifications.length, 99)}</span>}
                   </button>
                   <Link href="/onboarding" aria-label="Configuración" className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm"><GearIcon /></Link>
+                  <button type="button" onClick={() => void logoutFromDashboard()} aria-label={t('logout')} className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"><SignOutIcon /></button>
                 </div>
                 {notificationTrayOpen && (
                   <div className="absolute right-0 top-12 z-50 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">

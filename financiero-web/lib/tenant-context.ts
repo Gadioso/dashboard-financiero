@@ -96,10 +96,6 @@ async function ensureProfileForAuthUser({
 }
 
 export async function getRequestTenantContext(request: Request): Promise<TenantContext> {
-  if (isPrivateDashboardRequest(request)) {
-    return getPrivateTenantContext();
-  }
-
   const accessToken = getSupabaseAccessToken(request);
   const supabase = accessToken ? getSupabaseServiceClient() : null;
 
@@ -117,6 +113,13 @@ export async function getRequestTenantContext(request: Request): Promise<TenantC
     }
 
     return { profileId: null, source: 'anonymous' };
+  }
+
+  // A Supabase session always wins over the legacy/private access cookie. This
+  // prevents a second Google account from silently using the original private
+  // profile when both cookies are present in the browser.
+  if (isPrivateDashboardRequest(request)) {
+    return getPrivateTenantContext();
   }
 
   if (process.env.NODE_ENV === 'production') {

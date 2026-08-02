@@ -50,6 +50,9 @@ export default function ProfileSettings({
   const [feedback, setFeedback] = useState('');
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -139,6 +142,25 @@ export default function ProfileSettings({
     }
   }
 
+  async function deleteAccount() {
+    if (deleteConfirmation.trim() !== 'BORRAR MIS DATOS') return;
+    setDeletingAccount(true);
+    setFeedback('');
+    try {
+      const response = await request('/api/account/data', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation: 'BORRAR MIS DATOS', deleteAuthUser: true }),
+      });
+      const data = await response.json().catch(() => ({})) as { success?: boolean; error?: string };
+      if (!response.ok || !data.success) throw new Error(data.error || 'No pude eliminar la cuenta.');
+      window.location.assign('/login?deleted=1');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No pude eliminar la cuenta. Intenta nuevamente.');
+      setDeletingAccount(false);
+    }
+  }
+
   const visibleAvatar = previewUrl || (!removeAvatar ? avatarUrl : null);
   const initials = String(profile.full_name || profile.email || 'V')
     .split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'V';
@@ -212,6 +234,13 @@ export default function ProfileSettings({
         </div>
       </section>
 
+      <section className="mt-6 rounded-xl border border-rose-200 bg-rose-50/50 p-5 shadow-sm md:p-6" aria-labelledby="danger-zone-title">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-700">Zona de riesgo</p>
+        <h2 id="danger-zone-title" className="mt-1 text-lg font-bold text-slate-950">Eliminar cuenta y datos</h2>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Borra tu perfil, movimientos, conversaciones, integraciones, archivos y sesión de forma permanente. Esta acción no se puede deshacer.</p>
+        <button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={deletingAccount} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"><Trash aria-hidden="true" className="size-5" /> Eliminar mi cuenta</button>
+      </section>
+
       {logoutConfirmOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 backdrop-blur-sm" role="presentation">
           <section
@@ -245,6 +274,21 @@ export default function ProfileSettings({
               >
                 {loggingOut ? 'Cerrando sesión...' : 'Sí, cerrar sesión'}
               </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteConfirmOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 px-4 backdrop-blur-sm" role="presentation">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" className="w-full max-w-md rounded-xl border border-rose-200 bg-white p-6 shadow-2xl">
+            <span className="grid size-11 place-items-center rounded-full bg-rose-100 text-rose-700"><Trash aria-hidden="true" className="size-6" weight="bold" /></span>
+            <h2 id="delete-confirm-title" className="mt-5 text-xl font-bold text-slate-950">¿Eliminar tu cuenta?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Se eliminarán permanentemente todos tus datos y tu acceso a Virafi. Escribe <strong>BORRAR MIS DATOS</strong> para confirmar.</p>
+            <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" placeholder="BORRAR MIS DATOS" className="mt-4 h-11 w-full rounded-lg border border-rose-200 px-3 text-sm outline-none focus:border-rose-500" />
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmation(''); }} disabled={deletingAccount} className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+              <button type="button" onClick={() => void deleteAccount()} disabled={deletingAccount || deleteConfirmation.trim() !== 'BORRAR MIS DATOS'} className="min-h-11 rounded-lg bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">{deletingAccount ? 'Eliminando…' : 'Eliminar definitivamente'}</button>
             </div>
           </section>
         </div>

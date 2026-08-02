@@ -120,7 +120,7 @@ export async function GET(request: Request) {
       billingResult,
       countResults,
     ] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, avatar_path, bio, professional_headline, location, website_url, financial_why, monthly_income_target, created_at, updated_at').eq('id', profileId).maybeSingle(),
+      supabase.from('profiles').select('id, email, full_name, avatar_path, bio, professional_headline, location, website_url, financial_why, monthly_income_target, country_code, locale, created_at, updated_at').eq('id', profileId).maybeSingle(),
       supabase.from('telegram_accounts').select('id, chat_id, username, first_seen_at, last_seen_at').eq('profile_id', profileId).order('last_seen_at', { ascending: false }),
       supabase.from('business_entities').select('id, name, entity_type, country, currency, status, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(12),
       supabase.from('investment_accounts').select('id, business_entity_id, provider, account_name, account_type, mode, status, base_currency, last_sync_at, created_at').eq('profile_id', profileId).order('created_at', { ascending: false }).limit(12),

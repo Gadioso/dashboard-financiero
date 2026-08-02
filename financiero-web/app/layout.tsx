@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Figtree, Newsreader } from "next/font/google";
 import "./globals.css";
+import LocaleProvider from '@/app/Components/LocaleProvider';
 
 const figtree = Figtree({
   subsets: ["latin"],
@@ -47,9 +48,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`h-full antialiased ${figtree.variable} ${newsreader.variable}`}>
+    <html lang="es-MX" className={`h-full antialiased ${figtree.variable} ${newsreader.variable}`}>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        {children}
+        <LocaleProvider>{children}</LocaleProvider>
       </body>
     </html>
   );

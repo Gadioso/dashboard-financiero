@@ -32,11 +32,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: 'Falta configurar Supabase Auth.' }, { status: 500 });
   }
 
-  const { email: rawEmail, password, fullName, next } = (await request.json().catch(() => ({}))) as {
+  const { email: rawEmail, password, fullName, next, countryCode } = (await request.json().catch(() => ({}))) as {
     email?: string;
     password?: string;
     fullName?: string;
     next?: string;
+    countryCode?: string;
   };
   const email = normalizeEmail(rawEmail);
 
@@ -47,6 +48,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const normalizedCountryCode = countryCode === 'US' ? 'US' : 'MX';
+  const locale = normalizedCountryCode === 'US' ? 'en-US' : 'es-MX';
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -54,6 +58,8 @@ export async function POST(request: Request) {
       emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin}/auth/callback?next=${encodeURIComponent('/onboarding?focus=goals')}`,
       data: {
         full_name: fullName?.trim() || null,
+        country_code: normalizedCountryCode,
+        locale,
       },
     },
   });

@@ -1014,7 +1014,7 @@ async function obtenerContextoConversacional(supabase: SupabaseClient, texto: st
     ? supabase.from('financial_personalization_profiles').select('birth_year, occupation, industry, work_model, income_sources, income_growth_goal, short_term_goals, medium_term_goals, long_term_goals, goal_priorities, monthly_goal_capacity, financial_concerns, valued_pleasures, pleasures_to_reduce, recurring_life_costs, recurring_investments, emergency_fund_status, investment_experience, risk_tolerance, recommendation_style').eq('profile_id', profileId).maybeSingle()
     : Promise.resolve({ data: null, error: null });
   const identidadQuery = profileId
-    ? supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target').eq('id', profileId).maybeSingle()
+    ? supabase.from('profiles').select('full_name, professional_headline, location, bio, financial_why, monthly_income_target, locale').eq('id', profileId).maybeSingle()
     : Promise.resolve({ data: null, error: null });
   const metasQuery = profileId
     ? supabase.from('financial_goals').select('id, name, current_amount, target_amount, target_date, sort_order, status').eq('profile_id', profileId).eq('status', 'active').order('sort_order')
@@ -1133,18 +1133,21 @@ async function responderConversacionAbierta({
   const contexto = await obtenerContextoConversacional(supabase, texto, profileId);
 
   function respuestaLocal() {
+    const english = contexto.identidadPerfil?.locale === 'en-US';
     const gastosTotal = Number(contexto.gastado.Vida || 0) + Number(contexto.gastado.Placeres || 0) + Number(contexto.gastado.Futuro || 0);
     const restantes = Object.entries(contexto.restante || {})
       .map(([bolsa, monto]) => `${bolsa}: $${formatearMonto(Number(monto || 0))}`)
       .join(' · ');
 
     if (texto.trim().toLowerCase() === 'hola') {
-      return 'Aquí estoy. Puedes mandarme un gasto, un ingreso, un abono a tarjeta, o preguntarme "cómo voy este mes".';
+      return english ? 'I’m here. Send me an expense, income, card payment, or ask how you are doing this month.' : 'Aquí estoy. Puedes mandarme un gasto, un ingreso, un abono a tarjeta, o preguntarme "cómo voy este mes".';
     }
 
     return [
-      `Lectura rápida de ${contexto.periodo}: ingresos $${formatearMonto(contexto.ingresosMes)}, gastos $${formatearMonto(gastosTotal)}, flujo $${formatearMonto(contexto.ingresosMes - gastosTotal)}.`,
-      restantes ? `Restante por bolsa: ${restantes}.` : '',
+      english
+        ? `Quick read for ${contexto.periodo}: income $${formatearMonto(contexto.ingresosMes)}, spending $${formatearMonto(gastosTotal)}, cash flow $${formatearMonto(contexto.ingresosMes - gastosTotal)}.`
+        : `Lectura rápida de ${contexto.periodo}: ingresos $${formatearMonto(contexto.ingresosMes)}, gastos $${formatearMonto(gastosTotal)}, flujo $${formatearMonto(contexto.ingresosMes - gastosTotal)}.`,
+      restantes ? (english ? `Remaining by bucket: ${restantes}.` : `Restante por bolsa: ${restantes}.`) : '',
     ].filter(Boolean).join('\n');
   }
 
@@ -1165,6 +1168,7 @@ ${JSON.stringify({
 }, null, 2)}
 
 Behavior contract:
+- Respond in ${contexto.identidadPerfil?.locale === 'en-US' ? 'English (United States)' : 'Mexican Spanish'}, matching the user's language when they explicitly write in another language.
 - Answer the actual message first. Do not sound like a command menu, tutorial or scripted bot.
 - Use only the supplied financial context for factual financial claims. Never invent balances, movements or actions.
 - Use identidadPerfil as personal context for tone, priorities and recommendations. It never overrides explicit financial amounts, movements or goals.

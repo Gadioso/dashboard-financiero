@@ -12,12 +12,13 @@ import { getSupabaseAnonClient } from '@/lib/supabase-server';
 export async function POST(request: Request) {
   const expectedPrivateToken = process.env.DASHBOARD_ACCESS_TOKEN || '';
   const privateToken = getRequestCookie(request, authCookieName);
-
-  if (expectedPrivateToken && privateToken === expectedPrivateToken) {
+  const refreshToken = getRequestCookie(request, refreshCookieName);
+  // If a Supabase session exists, refresh that session first. Otherwise a
+  // stale private-token cookie could keep a different account active.
+  if (!refreshToken && expectedPrivateToken && privateToken === expectedPrivateToken) {
     return NextResponse.json({ success: true, mode: 'private-token' });
   }
 
-  const refreshToken = getRequestCookie(request, refreshCookieName);
   if (!refreshToken) {
     const response = NextResponse.json({ success: false, error: 'La sesión expiró.' }, { status: 401 });
     clearAuthCookies(response);

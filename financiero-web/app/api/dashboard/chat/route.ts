@@ -9,7 +9,8 @@ import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
 import { notifyDetectedMovement } from '@/lib/movement-notifications';
-import { analyzeFinancialAttachments, validateFinancialAttachments } from '@/lib/financial-attachment-analysis';
+import { analyzeFinancialAttachments, extractFinancialAttachmentMovements, validateFinancialAttachments } from '@/lib/financial-attachment-analysis';
+import { buildFinancialImportRow } from '@/lib/financial-import';
 import { appendVirafiaExchange } from '@/lib/virafia-conversation';
 
 export const dynamic = 'force-dynamic';
@@ -117,7 +118,7 @@ type MultiExpenseDraft = {
 
 function shouldTryMultipleExpenses(text: string) {
   const normalized = text.toLowerCase();
-  const amountCount = (normalized.match(/\$?\s*\d+(?:[,.]\d{1,2})?\s*(?:k|pesos?|mxn)?\b/g) || []).length;
+  const amountCount = (normalized.match(/\$?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s*(?:k|mil|pesos?|mxn)?\b/g) || []).length;
 
   return amountCount >= 2 && /\b(?:dos|tres|varios|gastos?|otro|otra|y)\b/.test(normalized) && /\b(?:agrega|agregar|registra|registrar|gasto|gastos|pagu[eé]|gast[eé])\b/.test(normalized);
 }
@@ -141,11 +142,12 @@ async function classifyMultipleExpenses(text: string, apiKey: string): Promise<M
     "output_format": "raw_json_only",
     "no_markdown": true
   },
-  "objective": "Extract every distinct expense from one Spanish user message. Return an empty array if the message is not asking to create multiple expenses.",
+  "objective": "Extract every distinct expense from one Spanish user message. Support weekly/monthly batches with dozens of items. Return an empty array if the message is not asking to create multiple expenses.",
   "rules": [
     "Only extract expenses explicitly requested by the user.",
     "Amounts near dates are not amounts. Example: in 'google el 2 de julio de 500', amount is 500 and '2 de julio' is the date.",
     "If a date applies to all items, copy the same fechaMovimiento to every item.",
+    "Resolve weekday-only dates (lunes, martes, miércoles, jueves, viernes, sábado, domingo) relative to current_date_mexico; if several weekdays are listed, assign each amount to its stated weekday.",
     "When a date omits the year, use the year from current_date_mexico. Never guess another year.",
     "Classify Uber, restaurants, food, travel and unknown discretionary expenses as Placeres.",
     "Classify productive software/tools such as Google, OpenAI, Vercel, Supabase, cloud, AI or SaaS as Emer/Inv/Herramientas Software (persisted internally as Futuro).",
@@ -167,7 +169,7 @@ async function classifyMultipleExpenses(text: string, apiKey: string): Promise<M
 }
 `;
 
-  const raw = await generateGeminiText(apiKey, prompt);
+  const raw = await generateGeminiText(apiKey, prompt, 'financial-import');
   const parsed = JSON.parse(extraerJson(raw)) as { expenses?: Array<Partial<MultiExpenseDraft>> };
 
   return (parsed.expenses || [])
@@ -184,7 +186,7 @@ async function classifyMultipleExpenses(text: string, apiKey: string): Promise<M
       };
     })
     .filter((expense) => expense.concepto && Number.isFinite(expense.monto) && expense.monto > 0)
-    .slice(0, 8);
+    .slice(0, 120);
 }
 
 export async function POST(request: Request) {
@@ -223,6 +225,42 @@ export async function POST(request: Request) {
       ? `${textoBase}\n\nContexto visible del dashboard: ${screenContext}`
       : textoBase;
     const memoria = parsed.messages;
+
+    if (attachments.length) {
+      const extractedMovements = await extractFinancialAttachmentMovements({ files: attachments, userPrompt: texto }).catch(() => []);
+      const rows = extractedMovements.map((movement, index) => buildFinancialImportRow({
+        rowIndex: index + 1,
+        movementType: movement.movementType,
+        occurredAt: movement.occurredAt,
+        description: movement.description,
+        amount: movement.amount,
+        category: movement.category,
+        subcategory: movement.subcategory,
+        currency: movement.currency,
+        sourceData: { files: attachments.map((file) => file.name) },
+      })).filter((row) => row.status === 'ready');
+      if (rows.length) {
+        const fingerprints = rows.map((row) => row.fingerprint);
+        const existing = new Set<string>();
+        const [expenses, income] = await Promise.all([
+          supabase.from('gastos').select('import_fingerprint').eq('profile_id', tenant.profileId).in('import_fingerprint', fingerprints),
+          supabase.from('ingresos').select('import_fingerprint').eq('profile_id', tenant.profileId).in('import_fingerprint', fingerprints),
+        ]);
+        [...(expenses.data || []), ...(income.data || [])].forEach((item) => { if (item.import_fingerprint) existing.add(item.import_fingerprint); });
+        const freshRows = rows.filter((row) => !existing.has(row.fingerprint));
+        const expenseRows = freshRows.filter((row) => row.movementType === 'gasto').map((row) => withProfile({ concepto: row.description, monto: row.amount, categoria: categoriaParaGastos(row.category), subcategoria: row.subcategory, origen: 'Archivo', fecha: row.occurredAt, import_fingerprint: row.fingerprint }, tenant.profileId));
+        const incomeRows = freshRows.filter((row) => row.movementType === 'ingreso').map((row) => withProfile({ concepto: row.description, monto: row.amount, tipo: 'Extra', origen: 'Archivo', fecha: row.occurredAt, import_fingerprint: row.fingerprint }, tenant.profileId));
+        const [expenseInsert, incomeInsert] = await Promise.all([
+          expenseRows.length ? supabase.from('gastos').insert(expenseRows).select('id, concepto, monto, categoria, subcategoria, fecha') : Promise.resolve({ data: [], error: null }),
+          incomeRows.length ? supabase.from('ingresos').insert(incomeRows).select('id, concepto, monto, tipo, fecha') : Promise.resolve({ data: [], error: null }),
+        ]);
+        if (expenseInsert.error || incomeInsert.error) throw new Error(`No pude guardar todos los movimientos del lote: ${expenseInsert.error?.message || incomeInsert.error?.message}`);
+        const imported = [...(expenseInsert.data || []), ...(incomeInsert.data || [])];
+        await logAuditEvent({ supabase, request, profileId: tenant.profileId, actorEmail: tenant.email, action: 'dashboard_chat.batch_movement_create', resourceType: 'financial_movements', metadata: { extracted: rows.length, imported: imported.length, duplicates: rows.length - imported.length, attachments: attachments.map((file) => file.name) } });
+        const total = imported.reduce((sum, row) => sum + Number(row.monto || 0), 0);
+        return virafiaResponse({ supabase, profileId: tenant.profileId, userText: textoBase, payload: { success: true, action: 'movement', data: imported, message: `Procesé ${rows.length} movimientos de ${attachments.length} archivo${attachments.length === 1 ? '' : 's'} y registré ${imported.length} por $${formatearMonto(total)}${rows.length - imported.length ? `; omití ${rows.length - imported.length} duplicados` : ''}.` } });
+      }
+    }
 
     if (attachmentAnalysis) {
       const respuesta = await responderConversacionFinanciera({

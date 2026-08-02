@@ -5,8 +5,11 @@ import { FormEvent, Suspense, useState } from 'react';
 import { FaApple } from 'react-icons/fa6';
 import { FcGoogle } from 'react-icons/fc';
 import VirafiBrand from '@/app/Components/VirafiBrand';
+import LanguageSwitcher from '@/app/Components/LanguageSwitcher';
+import { useLocale } from '@/app/Components/LocaleProvider';
 
 function LoginForm() {
+  const { locale, t } = useLocale();
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/dashboard';
   const routeError = searchParams.get('error') || '';
@@ -15,13 +18,17 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [countryCode, setCountryCode] = useState<'MX' | 'US'>(() => {
+    if (typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('en')) return 'US';
+    return 'MX';
+  });
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const safeLoginError = (value: unknown) => {
     const text = typeof value === 'string' ? value.trim() : '';
-    return /supabase|api|schema|token|secret|key|oauth|env\b|configurad/i.test(text) ? 'El acceso no está disponible en este momento. Intenta nuevamente.' : text || 'No pude iniciar sesión.';
+    return /supabase|api|schema|token|secret|key|oauth|env\b|configurad/i.test(text) ? (locale === 'en-US' ? 'Access is unavailable right now. Please try again.' : 'El acceso no está disponible en este momento. Intenta nuevamente.') : text || (locale === 'en-US' ? 'Could not sign in.' : 'No pude iniciar sesión.');
   };
 
   async function submit(action: 'login' | 'signup' = accountAction, event?: FormEvent<HTMLFormElement>) {
@@ -41,6 +48,7 @@ function LoginForm() {
                 email,
                 password,
                 fullName,
+                countryCode,
                 next,
               }
         ),
@@ -130,10 +138,10 @@ function LoginForm() {
         <div className="mb-6 flex items-center gap-3 lg:hidden">
           <VirafiBrand compact />
         </div>
-        <p className="text-sm font-semibold text-blue-700">Tu rumbo financiero</p>
-        <h1 className="mt-3 text-3xl tracking-tight text-slate-950">Iniciar sesión</h1>
+            <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-blue-700">{t('financialDirection')}</p><LanguageSwitcher compact /></div>
+        <h1 className="mt-3 text-3xl tracking-tight text-slate-950">{t('login')}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Entra con tu cuenta para consultar únicamente tu información financiera.
+          {t('loginDescription')}
         </p>
 
         <div className="mt-6 grid grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
@@ -142,14 +150,14 @@ function LoginForm() {
             onClick={() => chooseMode('account')}
             className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${mode === 'account' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
           >
-            Cuenta
+            {t('account')}
           </button>
           <button
             type="button"
             onClick={() => chooseMode('private')}
             className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${mode === 'private' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
           >
-            Acceso de respaldo
+            {t('backupAccess')}
           </button>
         </div>
 
@@ -161,18 +169,18 @@ function LoginForm() {
                 onClick={() => setAccountAction('login')}
                 className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'login' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
               >
-                Entrar
+                {t('enter')}
               </button>
               <button
                 type="button"
                 onClick={() => setAccountAction('signup')}
                 className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${accountAction === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
               >
-                Crear cuenta
+                {t('signUp')}
               </button>
             </div>
             <label className="block text-sm font-medium text-slate-600">
-              Email
+              {t('email')}
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -183,7 +191,7 @@ function LoginForm() {
               />
             </label>
             <label className="block text-sm font-medium text-slate-600">
-              Contraseña
+              {t('password')}
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -200,26 +208,39 @@ function LoginForm() {
                 disabled={loading || !email.trim()}
                 className="text-left text-sm font-semibold text-blue-700 hover:text-blue-800 disabled:opacity-50"
               >
-                Olvidé mi contraseña
+                {t('forgotPassword')}
               </button>
             ) : null}
             {accountAction === 'signup' && (
-              <label className="block text-sm font-medium text-slate-600">
-                Nombre completo
-                <input
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  type="text"
-                  autoComplete="name"
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-                  placeholder="Tu nombre"
-                />
-              </label>
+              <>
+                <label className="block text-sm font-medium text-slate-600">
+                  {t('fullName')}
+                  <input
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    type="text"
+                    autoComplete="name"
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
+                    placeholder="Tu nombre"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-600">
+                  {t('country')}
+                  <select
+                    value={countryCode}
+                    onChange={(event) => setCountryCode(event.target.value as 'MX' | 'US')}
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
+                  >
+                    <option value="MX">{t('mexico')} — {locale === 'en-US' ? 'email in Spanish' : 'correo en español'}</option>
+                    <option value="US">{t('unitedStates')} — email in English</option>
+                  </select>
+                </label>
+              </>
             )}
           </div>
         ) : (
           <label className="mt-5 block text-sm font-medium text-slate-600">
-            Código de acceso
+            {locale === 'en-US' ? 'Access code' : 'Código de acceso'}
             <input
               value={token}
               onChange={(event) => setToken(event.target.value)}
@@ -238,7 +259,7 @@ function LoginForm() {
           <>
             <div className="my-5 flex items-center gap-3">
               <div className="h-px flex-1 bg-slate-200" />
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">O continúa con</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{t('continueWith')}</span>
               <div className="h-px flex-1 bg-slate-200" />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">

@@ -5,6 +5,7 @@ import { logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getAuthorizedTelegramChatId } from '@/lib/telegram-access';
 import { getRequestTenantContext } from '@/lib/tenant-context';
+import { isWeekdayInTimezone } from '@/lib/schedule';
 
 export const dynamic = 'force-dynamic';
 
@@ -228,6 +229,10 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET || '';
   if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
+  }
+
+  if (!isWeekdayInTimezone(new Date(), 'America/Mexico_City')) {
+    return NextResponse.json({ success: true, processed: 0, skipped: 'weekend', results: [] });
   }
 
   try {

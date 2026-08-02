@@ -9,6 +9,48 @@ export const dynamic = 'force-dynamic';
 const confirmationPhrase = 'BORRAR MIS DATOS';
 
 const dataTables = [
+  'financial_goal_contributions',
+  'billing_credit_ledger',
+  'santander_ingest_logs',
+  'market_data_snapshots',
+  'financial_import_rows',
+  'financial_import_batches',
+  'virafia_conversation_messages',
+  'daily_cfo_deliveries',
+  'daily_cfo_briefings',
+  'daily_cfo_preferences',
+  'movement_notification_deliveries',
+  'transaction_splits',
+  'investment_transactions',
+  'investment_positions',
+  'investment_theses',
+  'trade_intents',
+  'paper_trades',
+  'risk_limits',
+  'agent_findings',
+  'agent_tasks',
+  'advisor_disclosures',
+  'business_members',
+  'business_entities',
+  'financial_goals',
+  'financial_personalization_profiles',
+  'fiscal_alerts',
+  'fiscal_compliance_opinions',
+  'fiscal_declaration_drafts',
+  'fiscal_operations',
+  'fiscal_provider_documents',
+  'fiscal_integrations',
+  'fiscal_profiles',
+  'cfdi_reconciliation_events',
+  'cfdi_documents',
+  'cfdi_integrations',
+  'bank_transactions_raw',
+  'bank_sync_runs',
+  'bank_accounts',
+  'bank_connections',
+  'syncfy_users',
+  'gmail_integrations',
+  'telegram_link_codes',
   'abonos_tarjeta_credito',
   'gastos',
   'ingresos',
@@ -46,6 +88,13 @@ async function deleteProfileRows({
   }
 
   return count || 0;
+}
+
+async function deleteProfileStorage(supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>, bucket: string, profileId: string) {
+  const { data: objects, error: listError } = await supabase.storage.from(bucket).list(profileId, { limit: 1000 });
+  if (listError) return;
+  const paths = (objects || []).filter((object) => object.name).map((object) => `${profileId}/${object.name}`);
+  if (paths.length) await supabase.storage.from(bucket).remove(paths);
 }
 
 export async function DELETE(request: Request) {
@@ -90,6 +139,11 @@ export async function DELETE(request: Request) {
     });
 
     const deleted: Record<string, number> = {};
+
+    await Promise.all([
+      deleteProfileStorage(supabase, 'profile-avatars', profileId),
+      deleteProfileStorage(supabase, 'financial-imports', profileId),
+    ]);
 
     for (const table of dataTables) {
       deleted[table] = await deleteProfileRows({ supabase, table, profileId });

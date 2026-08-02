@@ -78,12 +78,16 @@ export async function upsertAuthProfile(user: User, fallbackEmail?: string | nul
       : typeof metadata.name === 'string'
         ? metadata.name
         : null;
+  const countryCode = metadata.country_code === 'US' ? 'US' : metadata.country_code === 'MX' ? 'MX' : null;
+  const locale = metadata.locale === 'en-US' ? 'en-US' : metadata.locale === 'es-MX' ? 'es-MX' : null;
 
   const { error } = await service.from('profiles').upsert(
     {
       id: user.id,
       email: user.email || fallbackEmail || null,
       full_name: fullName,
+      ...(countryCode ? { country_code: countryCode } : {}),
+      ...(locale ? { locale } : {}),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'id' }

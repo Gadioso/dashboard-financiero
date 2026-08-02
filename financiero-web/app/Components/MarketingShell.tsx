@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import MarketingMotionController from '@/app/Components/MarketingMotionController';
 import VirafiBrand from '@/app/Components/VirafiBrand';
+import LanguageSwitcher from '@/app/Components/LanguageSwitcher';
 
 const navigation = [
   { href: '/producto', label: 'Producto' },
@@ -21,6 +22,7 @@ export function MarketingHeader() {
           ))}
         </nav>
         <div className="marketing-nav-actions">
+          <LanguageSwitcher />
           <Link href="/login?next=%2Fdashboard" className="marketing-link-button">Iniciar sesión</Link>
           <Link href="/login?next=%2Fdashboard" className="marketing-button marketing-button-primary">Crear cuenta</Link>
         </div>

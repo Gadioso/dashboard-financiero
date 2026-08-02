@@ -12,6 +12,8 @@ import {
   appendVirafiaConversationMessage,
   readVirafiaConversation,
 } from '@/lib/virafia-conversation';
+import { isWeekdayInTimezone } from '@/lib/schedule';
+export { isWeekdayInTimezone } from '@/lib/schedule';
 
 const DEFAULT_TIMEZONE = 'America/Mexico_City';
 const DEFAULT_WINDOW_START = 8;
@@ -828,6 +830,7 @@ export async function runDailyCfoForProfile({
   const windowEnd = preference?.delivery_window_end ?? DEFAULT_WINDOW_END;
   const due = isDailyCfoDue({ profileId: profile.id, now, timezone, windowStart, windowEnd });
   if (preference?.enabled === false) return { profileId: profile.id, skipped: 'disabled' };
+  if (!isWeekdayInTimezone(now, timezone)) return { profileId: profile.id, skipped: 'weekend', timezone };
   if (!force && !due.due) return { profileId: profile.id, skipped: 'not-due', scheduledMinute: due.scheduledMinute };
 
   const claimed = await claimDailyCfoBriefing({
@@ -923,8 +926,19 @@ export async function retryDailyCfoTelegramDeliveries(supabase: SupabaseClient, 
   if (error && /does not exist|schema cache/i.test(error.message)) return [];
   if (error) throw new Error(`No pude revisar reintentos de Telegram: ${error.message}`);
 
+  const profileIds = [...new Set((deliveries || []).map((delivery) => String(delivery.profile_id)))];
+  const { data: preferenceRows } = profileIds.length
+    ? await supabase.from('daily_cfo_preferences').select('profile_id, timezone').in('profile_id', profileIds)
+    : { data: [] };
+  const timezones = new Map((preferenceRows || []).map((row) => [String(row.profile_id), safeTimezone(row.timezone)]));
+
   const results = [];
   for (const delivery of deliveries || []) {
+    const timezone = timezones.get(String(delivery.profile_id)) || DEFAULT_TIMEZONE;
+    if (!isWeekdayInTimezone(now, timezone)) {
+      results.push({ id: delivery.id, sent: false, skipped: 'weekend' });
+      continue;
+    }
     const { data: claimed } = await supabase
       .from('daily_cfo_deliveries')
       .update({ status: 'sending', updated_at: now.toISOString() })

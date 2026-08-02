@@ -1,0 +1,19 @@
+<div style="margin:0;background:#f7f1e8;padding:40px 16px;font-family:Arial,Helvetica,sans-serif;color:#211f1d;">
+  <div style="max-width:620px;margin:0 auto;border:1px solid #ded6ca;border-top:10px solid #8061d5;border-radius:20px;background:#fffdfa;padding:42px 44px;box-sizing:border-box;">
+    <div style="font-family:Georgia,'Times New Roman',serif;font-size:42px;font-style:italic;font-weight:700;letter-spacing:-2px;">Virafi</div>
+    <div style="margin-top:8px;color:#6f685f;font-family:Georgia,'Times New Roman',serif;font-size:18px;font-style:italic;">{{ if eq .Data.locale "en-US" }}Your money, with clarity and direction.{{ else }}Tu dinero, con claridad y rumbo.{{ end }}</div>
+    <div style="width:80px;height:6px;border-radius:6px;background:#8061d5;margin:70px 0 34px;"></div>
+    {{ if eq .Data.locale "en-US" }}
+      <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:42px;line-height:1.08;font-weight:700;">Confirm your email</h1>
+      <p style="margin:26px 0 0;color:#6f685f;font-size:20px;line-height:1.5;">You're one step away from activating your Virafi account and organizing your financial goals.</p>
+      <p style="margin:34px 0;"><a href="{{ .ConfirmationURL }}" style="display:inline-block;border-radius:14px;background:#8061d5;color:#fff;text-decoration:none;font-size:18px;font-weight:700;padding:18px 28px;">Confirm my email</a></p>
+      <p style="margin:0;color:#6f685f;font-size:16px;line-height:1.5;">This link is personal. If you didn't create this account, you can ignore this message.</p>
+    {{ else }}
+      <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:42px;line-height:1.08;font-weight:700;">Confirma tu correo electrónico</h1>
+      <p style="margin:26px 0 0;color:#6f685f;font-size:20px;line-height:1.5;">Estás a un paso de activar tu cuenta y comenzar a organizar tus metas financieras con Virafi.</p>
+      <p style="margin:34px 0;"><a href="{{ .ConfirmationURL }}" style="display:inline-block;border-radius:14px;background:#8061d5;color:#fff;text-decoration:none;font-size:18px;font-weight:700;padding:18px 28px;">Confirmar mi correo</a></p>
+      <p style="margin:0;color:#6f685f;font-size:16px;line-height:1.5;">Este enlace es personal. Si no creaste esta cuenta, puedes ignorar este mensaje.</p>
+    {{ end }}
+    <p style="margin:52px 0 0;color:#9a9288;font-size:13px;line-height:1.5;">Virafi · virafi.com</p>
+  </div>
+</div>
