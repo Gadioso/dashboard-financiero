@@ -112,10 +112,15 @@ function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-screen bg-[var(--brand-cream)] text-slate-950 lg:grid-cols-[1fr_480px]">
+    <main data-no-translate className="grid min-h-screen bg-[var(--brand-cream)] text-slate-950 lg:grid-cols-[1fr_480px]">
       <section className="hidden border-r border-slate-200 bg-[var(--brand-ink)] p-10 text-[var(--brand-cream)] lg:flex lg:flex-col lg:justify-between">
         <div>
-          <VirafiBrand inverse showTagline />
+          <VirafiBrand
+            inverse
+            showTagline
+            tagline={locale === 'en-US' ? 'Your personal CFO, every day.' : 'Tu CFO personal, todos los días.'}
+            ariaLabel={locale === 'en-US' ? 'Virafi, your money with clarity and direction' : 'Virafi, tu dinero con claridad y rumbo'}
+          />
           <div className="mt-20 max-w-xl">
             <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">{locale === 'en-US' ? 'Virafi helps you see clearly where your wealth is headed.' : 'Virafi te ayuda a ver con claridad hacia dónde va tu patrimonio.'}</h1>
             <p className="mt-5 max-w-lg text-base leading-7 text-white/60">
@@ -187,7 +192,7 @@ function LoginForm() {
                 type="email"
                 autoComplete="email"
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-                placeholder="tu@email.com"
+                placeholder={locale === 'en-US' ? 'you@email.com' : 'tu@email.com'}
               />
             </label>
             <label className="block text-sm font-medium text-slate-600">
@@ -232,7 +237,7 @@ function LoginForm() {
                     className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors focus:border-blue-500"
                   >
                     <option value="MX">{t('mexico')} — {locale === 'en-US' ? 'email in Spanish' : 'correo en español'}</option>
-                    <option value="US">{t('unitedStates')} — email in English</option>
+                    <option value="US">{t('unitedStates')} — {locale === 'en-US' ? 'email in English' : 'correo en inglés'}</option>
                   </select>
                 </label>
               </>

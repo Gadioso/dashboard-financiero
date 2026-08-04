@@ -9,7 +9,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   }, [error]);
 
   return (
-    <html lang="es">
+    <html lang="es" translate="no" className="notranslate">
       <body className="min-h-screen bg-[var(--brand-cream)] text-slate-950">
         <main className="mx-auto flex min-h-screen max-w-xl items-center px-6 py-16">
           <section className="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">

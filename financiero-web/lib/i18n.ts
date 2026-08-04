@@ -1,5 +1,6 @@
 export type AppLocale = 'es-MX' | 'en-US';
 import { legalTranslations } from './legal-translations';
+import { additionalUiTranslations } from './additional-ui-translations';
 
 export function localeFromCountry(country?: string | null): AppLocale | null {
   if (country === 'US') return 'en-US';
@@ -27,7 +28,7 @@ export const messages = {
     account: 'Cuenta',
     backupAccess: 'Acceso de respaldo',
     enter: 'Entrar',
-    email: 'Email',
+    email: 'Correo electrónico',
     password: 'Contraseña',
     fullName: 'Nombre completo',
     country: 'País de residencia',
@@ -289,8 +290,53 @@ const extendedUiTranslations: Record<string, string> = {
 export function translateUiText(locale: AppLocale, value: string) {
   if (locale === 'es-MX') return value;
   const trimmed = value.trim();
-  const translated = legalTranslations[trimmed] ?? extendedUiTranslations[trimmed] ?? uiTranslations[trimmed];
+  const translated = legalTranslations[trimmed] ?? additionalUiTranslations[trimmed] ?? extendedUiTranslations[trimmed] ?? uiTranslations[trimmed];
   if (translated) return value.replace(trimmed, translated);
+  const dynamic = trimmed
+    .replace(/^Abrir perfil de (.+)$/i, 'Open profile for $1')
+    .replace(/^Foto de (.+)$/i, 'Photo of $1')
+    .replace(/^Iniciales (.+)$/i, 'Initials $1')
+    .replace(/^Notificaciones, (\d+) nuevas$/i, 'Notifications, $1 new')
+    .replace(/^(\d+)-(\d+) de (\d+)$/i, '$1–$2 of $3')
+    .replace(/^Gasto registrado: (.+)$/i, 'Expense recorded: $1')
+    .replace(/^Gasto detectado: (.+)$/i, 'Expense detected: $1')
+    .replace(/^Ingreso registrado: (.+)$/i, 'Income recorded: $1')
+    .replace(/^Ingreso detectado: (.+)$/i, 'Income detected: $1')
+    .replace(/^(\d+) movimientos$/i, '$1 transactions')
+    .replace(/^(\d+) movimientos este mes$/i, '$1 transactions this month')
+    .replace(/^([\d.,$]+) asignados$/i, '$1 allocated')
+    .replace(/^Emer\/Inv: (\d+)% emergencia \(([^)]+)\) · (\d+)% inversión \(([^)]+)\)$/i, 'Emergency / investments: $1% emergency ($2) · $3% investment ($4)')
+    .replace(/^(\d+(?:\.\d+)?)% usado · disponible (.+)$/i, '$1% used · $2 available')
+    .replace(/^de (\$[\d.,]+)$/i, 'of $1')
+    .replace(/^Vida: (.+) usados \((\d+(?:\.\d+)?)% del límite\)\.$/i, 'Living: $1 used ($2% of the limit).')
+    .replace(/^Vas en (\d+(?:\.\d+)?)% de uso contra (\d+(?:\.\d+)?)% de avance calendario\.$/i, 'You are at $1% usage versus $2% calendar progress.')
+    .replace(/^Plan actual: (.+)$/i, 'Current plan: $1')
+    .replace(/^El plan (.+) todavía no está disponible para contratar\.$/i, 'The $1 plan is not available for purchase yet.')
+    .replace(/^El plan (.+) todavía no está disponible\.$/i, 'The $1 plan is not available yet.')
+    .replace(/^Elegir plan (.+)$/i, 'Choose $1 plan')
+    .replace(/^([\d.,$]+(?: MXN)?)\/mes$/i, '$1/month')
+    .replace(/^([\d.,$]+)\/mes$/i, '$1/month')
+    .replace(/^Fecha objetivo: (.+)$/i, 'Target date: $1')
+    .replace(/^Reporte mensual · (.+)$/i, 'Monthly report · $1')
+    .replace(/^Reporte mensual - (.+)$/i, 'Monthly report - $1')
+    .replace(/^Reporte de (.+)$/i, 'Report for $1')
+    .replace(/^Periodo: (.+)$/i, 'Period: $1')
+    .replace(/^(\d{1,2}) ene (\d{4})$/i, 'Jan $1, $2')
+    .replace(/^(\d{1,2}) feb (\d{4})$/i, 'Feb $1, $2')
+    .replace(/^(\d{1,2}) mar (\d{4})$/i, 'Mar $1, $2')
+    .replace(/^(\d{1,2}) abr (\d{4})$/i, 'Apr $1, $2')
+    .replace(/^(\d{1,2}) may (\d{4})$/i, 'May $1, $2')
+    .replace(/^(\d{1,2}) jun (\d{4})$/i, 'Jun $1, $2')
+    .replace(/^(\d{1,2}) jul (\d{4})$/i, 'Jul $1, $2')
+    .replace(/^(\d{1,2}) ago (\d{4})$/i, 'Aug $1, $2')
+    .replace(/^(\d{1,2}) sep (\d{4})$/i, 'Sep $1, $2')
+    .replace(/^(\d{1,2}) oct (\d{4})$/i, 'Oct $1, $2')
+    .replace(/^(\d{1,2}) nov (\d{4})$/i, 'Nov $1, $2')
+    .replace(/^(\d{1,2}) dic (\d{4})$/i, 'Dec $1, $2')
+    .replace(/^(\d{1,2}) ago (\d{4}) · (.+)$/i, 'Aug $1, $2 · $3')
+    .replace(/^(\d{1,2}) jul (\d{4}) · (.+)$/i, 'Jul $1, $2 · $3')
+    .replace(/^(\d{1,2}) ene (\d{4}) · (.+)$/i, 'Jan $1, $2 · $3');
+  if (dynamic !== trimmed) return value.replace(trimmed, dynamic);
   return value
     .replace(/\bdel gasto\b/g, 'of spending')
     .replace(/\bpresupuesto\b/g, 'budget')
@@ -300,6 +346,9 @@ export function translateUiText(locale: AppLocale, value: string) {
     .replace(/\bAbrir perfil de\b/g, 'Open profile for')
     .replace(/\bMes del resumen\b/g, 'Overview month')
     .replace(/\bVista de\b/g, 'View for')
+    .replace(/\bPlaceres\b/g, 'Wants')
+    .replace(/\bVida\b/g, 'Living')
+    .replace(/\bEmer\/Inv\b/g, 'Emergency / investments')
     .replace(/\benero\b/gi, 'January')
     .replace(/\bfebrero\b/gi, 'February')
     .replace(/\bmarzo\b/gi, 'March')

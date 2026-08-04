@@ -6,6 +6,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 
 type AnalysisBody = {
+  locale?: 'es-MX' | 'en-US';
   scope?: 'month' | 'year';
   periodKey?: string;
   monthLabel?: string;
@@ -90,6 +91,13 @@ function formatMoney(value: number) {
 
 function formatPercent(value: number) {
   return `${Math.round(value)}%`;
+}
+
+function displayBucketLabel(label: string) {
+  if (label === 'Vida') return 'Living';
+  if (label === 'Placeres') return 'Wants';
+  if (label === 'Futuro' || label === 'Emer/Inv') return 'Emergency / investments';
+  return label;
 }
 
 function getSummary(body: AnalysisBody) {
@@ -189,7 +197,91 @@ function ruleBasedYearAnalysis(monthLabel: string, body: AnalysisBody): Dashboar
   };
 }
 
+function ruleBasedEnglishAnalysis(scope: 'month' | 'year', monthLabel: string, body: AnalysisBody): DashboardAnalysis {
+  const summary = getSummary(body);
+  const months = getMonthlySeries(body).filter((month) => month.ingresos || month.egresos || month.resultado);
+  const buckets = getBuckets(body);
+
+  if (scope === 'year') {
+    const averageIncome = months.length ? summary.ingresosMes / months.length : 0;
+    const averageExpense = months.length ? summary.totalGastadoMes / months.length : 0;
+    const projectedIncome = averageIncome * 12;
+    const projectedFlow = months.length ? (summary.flujoNetoMes / months.length) * 12 : 0;
+    const bestMonth = [...months].sort((a, b) => b.resultado - a.resultado)[0];
+    const worstMonth = [...months].sort((a, b) => a.resultado - b.resultado)[0];
+    const positiveMonths = months.filter((month) => month.resultado >= 0).length;
+    const futureBucket = buckets.find((bucket) => bucket.label === 'Emer/Inv' || bucket.label === 'Futuro');
+
+    return {
+      headline: months.length
+        ? summary.flujoNetoMes < 0
+          ? 'The annual trajectory needs to recover cash flow'
+          : `${positiveMonths} of ${months.length} months maintain positive cash flow`
+        : `The annual review through ${monthLabel} is waiting for data`,
+      diagnosis: months.length
+        ? `Year to date, income totals ${formatMoney(summary.ingresosMes)}, expenses total ${formatMoney(summary.totalGastadoMes)}, and net cash flow is ${formatMoney(summary.flujoNetoMes)}. Monthly averages are ${formatMoney(averageIncome)} of income and ${formatMoney(averageExpense)} of expenses.${bestMonth ? ` ${bestMonth.mes} was the strongest month (${formatMoney(bestMonth.resultado)}).` : ''}${worstMonth ? ` ${worstMonth.mes} was the weakest (${formatMoney(worstMonth.resultado)}).` : ''} At the current pace, projected year-end income is ${formatMoney(projectedIncome)} and projected cash flow is ${formatMoney(projectedFlow)}. This projection is an estimate based on elapsed months.`
+        : 'There are not enough months with transactions to compare trajectory, consistency, or a year-end projection.',
+      actions: [
+        `At each month-end, check whether income exceeds the annual monthly average of ${formatMoney(averageIncome)}.`,
+        worstMonth ? `Identify and correct the pattern that produced ${formatMoney(worstMonth.resultado)} of cash flow in ${worstMonth.mes}.` : 'Complete monthly information before projecting year-end results.',
+        `Protect an annual cash-flow trajectory near ${formatMoney(projectedFlow)} and update the projection every month.`,
+      ],
+      risks: [
+        positiveMonths < Math.ceil(months.length / 2) ? 'Most months are not maintaining positive cash flow.' : '',
+        futureBucket && futureBucket.percent < 75 ? `Emergency / investments has accumulated only ${formatPercent(futureBucket.percent)} of its expected annual pace.` : '',
+      ].filter(Boolean).length
+        ? [
+            positiveMonths < Math.ceil(months.length / 2) ? 'Most months are not maintaining positive cash flow.' : '',
+            futureBucket && futureBucket.percent < 75 ? `Emergency / investments has accumulated only ${formatPercent(futureBucket.percent)} of its expected annual pace.` : '',
+          ].filter(Boolean)
+        : ['The projection may vary if upcoming months differ from the observed average.'],
+    };
+  }
+
+  const goal = getGoal(body);
+  const pressuredBucket = [...buckets].sort((a, b) => b.percent - a.percent)[0];
+  const pressuredLabel = pressuredBucket ? displayBucketLabel(pressuredBucket.label) : '';
+  const hasMoneyData = summary.ingresosMes || summary.totalGastadoMes || summary.flujoNetoMes;
+  const monthTitle = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+  let headline = `${monthTitle} remains orderly`;
+  if (!hasMoneyData) headline = `${monthTitle} review is ready`;
+  else if (summary.flujoNetoMes < 0) headline = `${monthTitle} needs to recover cash flow`;
+  else if (summary.burnRate >= 90 || (pressuredBucket && pressuredBucket.percent >= 90)) headline = `${monthTitle} is putting pressure on the budget`;
+  else if (summary.flujoNetoMes > 0) headline = `${monthTitle} maintains a positive margin`;
+
+  const diagnosisParts: string[] = [];
+  if (hasMoneyData) diagnosisParts.push(`Recorded income: ${formatMoney(summary.ingresosMes)}; expenses: ${formatMoney(summary.totalGastadoMes)}; net cash flow: ${formatMoney(summary.flujoNetoMes)}.`);
+  else diagnosisParts.push('There are still few transactions recorded for this period; keep records current so decisions use complete data.');
+  if (pressuredBucket) diagnosisParts.push(`${pressuredLabel} has the most pressure: ${formatPercent(pressuredBucket.percent)} used with ${formatMoney(pressuredBucket.remaining)} remaining.`);
+  if (summary.tasaFuturo > 0) diagnosisParts.push(`Emergency / investments is at ${formatPercent(summary.tasaFuturo)}, versus an operating target of 25% (10% emergency and 15% goal-directed investing).`);
+  if (goal.monthlyIncomeTarget > 0) {
+    diagnosisParts.unshift(`The monthly target is ${formatMoney(goal.monthlyIncomeTarget)} and current progress is ${formatPercent(goal.progressPct)}; ${formatMoney(goal.monthlyGap)} remains this month.`);
+    diagnosisParts.push(`Against the actual three-month average (${formatMoney(goal.averageIncomeLast3Months)}), the structural gap is ${formatMoney(goal.gapVsThreeMonthAverage)}.`);
+  }
+
+  const actions: string[] = [];
+  if (goal.monthlyIncomeTarget > 0 && goal.gapVsThreeMonthAverage > 0) actions.push(`Create ${formatMoney(goal.gapVsThreeMonthAverage)} of additional recurring monthly income; review progress and pipeline weekly until the gap versus the three-month average closes.`);
+  if (summary.flujoNetoMes < 0) actions.push(`Cut or defer ${formatMoney(Math.abs(summary.flujoNetoMes))} of variable expenses to restore positive cash flow.`);
+  else if (hasMoneyData) actions.push(`Protect the positive margin of ${formatMoney(summary.flujoNetoMes)} before authorizing new expenses.`);
+  else actions.push('Record income, expenses, and pending payments for the period before moving the budget.');
+  if (pressuredBucket && pressuredBucket.percent >= 80) actions.push(`Freeze new charges in ${pressuredLabel} until at least ${formatMoney(Math.max(0, pressuredBucket.limit * 0.15))} of room is restored.`);
+  else if (pressuredBucket) actions.push(`Review ${pressuredLabel} twice a week to prevent it from moving from ${formatPercent(pressuredBucket.percent)} into the critical zone.`);
+  if (summary.tasaFuturo < 25) actions.push(`Set aside up to ${formatMoney(goal.targetPerBucket || summary.ingresosMes * 0.25)} for Emergency / investments as income arrives; the current pace is ${formatPercent(Math.max(0, 25 - summary.tasaFuturo))} points short. Within that amount, use 10% for emergencies and 15% for the investment goal.`);
+  else actions.push('Keep Emergency / investments separate from ordinary payments and direct the 15% investment portion to the priority goal.');
+  actions.push('Close the period by reviewing income, expenses, net cash flow, and allocations outside their ranges.');
+
+  const risks: string[] = [];
+  if (summary.flujoNetoMes < 0) risks.push(`Negative cash flow of ${formatMoney(summary.flujoNetoMes)} may require reserves or credit.`);
+  if (pressuredBucket && pressuredBucket.percent >= 100) risks.push(`${pressuredLabel} has exceeded its limit and needs an immediate adjustment.`);
+  else if (pressuredBucket && pressuredBucket.percent >= 90) risks.push(`${pressuredLabel} is close to saturation at ${formatPercent(pressuredBucket.percent)} used.`);
+  if (summary.tasaFuturo < 25) risks.push('Emergency / investments is below the required pace and may weaken saving goals.');
+  if (!risks.length) risks.push('The main risk is relaxing daily record-keeping and losing visibility into actual cash flow.');
+
+  return { headline, diagnosis: diagnosisParts.join(' '), actions: actions.slice(0, 5), risks: risks.slice(0, 4) };
+}
+
 function ruleBasedAnalysis(scope: 'month' | 'year', monthLabel: string, body: AnalysisBody) {
+  if (body.locale === 'en-US') return ruleBasedEnglishAnalysis(scope, monthLabel, body);
   if (scope === 'year') return ruleBasedYearAnalysis(monthLabel, body);
   const summary = getSummary(body);
   const buckets = getBuckets(body);
@@ -306,8 +398,9 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as AnalysisBody;
   const scope = body.scope === 'year' ? 'year' : 'month';
+  const locale = body.locale === 'en-US' ? 'en-US' : 'es-MX';
   const monthLabel = body.monthLabel || 'MES';
-  const periodKey = String(body.periodKey || monthLabel).slice(0, 40);
+  const periodKey = `${String(body.periodKey || monthLabel)}-${locale}`.slice(0, 40);
   const googleApiKey = getGoogleApiKey();
   const supabase = getSupabaseServiceClient();
 
@@ -329,7 +422,7 @@ export async function POST(request: Request) {
   }
 
   const prompt = `
-Eres un analista financiero personal para Diego. Analiza su dashboard con regla 50/25/25 y responde en español mexicano, concreto y accionable. Vida es 50%, Placeres 25% y Emer/Inv 25%; dentro de Emer/Inv, 10% es emergencia y 15% se dirige a metas de inversión según horizonte y riesgo.
+Eres un analista financiero personal para el usuario autenticado. Analiza su dashboard con regla 50/25/25 y responde en ${locale === 'en-US' ? 'inglés de Estados Unidos' : 'español mexicano'}, de forma concreta y accionable. Vida es 50%, Placeres 25% y Emer/Inv 25%; dentro de Emer/Inv, 10% es emergencia y 15% se dirige a metas de inversión según horizonte y riesgo.
 
 Alcance: ${scope === 'year' ? `acumulado 2026 de ${monthLabel}` : `mes ${monthLabel} 2026`}.
 

@@ -3,6 +3,8 @@ type VirafiBrandProps = {
   compact?: boolean;
   inverse?: boolean;
   showTagline?: boolean;
+  tagline?: string;
+  ariaLabel?: string;
 };
 
 export function VirafiMark({ className = '' }: { className?: string }) {
@@ -30,6 +32,8 @@ export default function VirafiBrand({
   compact = false,
   inverse = false,
   showTagline = false,
+  tagline = 'Tu CFO personal, todos los días.',
+  ariaLabel = 'Virafi, tu dinero con claridad y rumbo',
 }: VirafiBrandProps) {
   const ink = inverse ? 'text-[var(--brand-cream)]' : 'text-[var(--brand-ink)]';
 
@@ -43,14 +47,14 @@ export default function VirafiBrand({
   }
 
   return (
-    <span className={`inline-flex flex-col ${className}`} aria-label="Virafi, tu dinero con claridad y rumbo">
+    <span className={`inline-flex flex-col ${className}`} aria-label={ariaLabel}>
       <span className="inline-flex items-center gap-3">
         <VirafiMark className={`size-10 ${inverse ? 'text-[var(--brand-cream)]' : 'text-[var(--brand-violet)]'}`} />
         <span className={`font-brand text-[2rem] font-medium italic leading-none ${ink}`}>Virafi</span>
       </span>
       {showTagline && (
         <span className={`mt-2 font-brand text-sm italic ${inverse ? 'text-white/65' : 'text-[var(--brand-muted)]'}`}>
-          Tu CFO personal, todos los días.
+          {tagline}
         </span>
       )}
     </span>

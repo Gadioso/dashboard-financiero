@@ -33,6 +33,7 @@ import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview'
 import VirafiBrand, { VirafiMark } from '@/app/Components/VirafiBrand';
 import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
 import { useLocale } from '@/app/Components/LocaleProvider';
+import { translateUiText } from '@/lib/i18n';
 import {
   calcularIngresosMes,
   calcularGastadoPorBolsa,
@@ -45,7 +46,7 @@ import {
   etiquetaBolsa,
   finMesISO,
   formatearEntero,
-  formatearFecha,
+  formatearFecha as formatearFechaEspanol,
   formatearMonto,
   inicioMesISO,
   mesKeyDesdeFecha,
@@ -307,6 +308,7 @@ type DashboardAnalysis = {
 };
 
 type DashboardAnalysisFallbackInput = {
+  locale: 'es-MX' | 'en-US';
   scope: 'month' | 'year';
   monthLabel: string;
   ingresosMes: number;
@@ -425,6 +427,47 @@ function formatoDineroCorto(value: number) {
 }
 
 function crearAnalisisCliente(input: DashboardAnalysisFallbackInput): DashboardAnalysis {
+  if (input.locale === 'en-US') {
+    const months = (input.monthlySeries || []).filter((month) => month.ingresos || month.egresos || month.resultado);
+    const pressuredBucket = [...input.buckets].sort((a, b) => b.percent - a.percent)[0];
+    const label = pressuredBucket?.label === 'Vida' ? 'Living' : pressuredBucket?.label === 'Placeres' ? 'Wants' : pressuredBucket?.label === 'Futuro' || pressuredBucket?.label === 'Emer/Inv' ? 'Emergency / investments' : pressuredBucket?.label;
+
+    if (input.scope === 'year') {
+      const bestMonth = [...months].sort((a, b) => b.resultado - a.resultado)[0];
+      const worstMonth = [...months].sort((a, b) => a.resultado - b.resultado)[0];
+      const averageIncome = months.length ? input.ingresosMes / months.length : 0;
+      const averageExpense = months.length ? input.totalGastadoMes / months.length : 0;
+      const projectedFlow = months.length ? (input.flujoNetoMes / months.length) * 12 : 0;
+      const positiveMonths = months.filter((month) => month.resultado >= 0).length;
+      return {
+        headline: months.length ? `${positiveMonths} of ${months.length} months maintain positive cash flow` : 'The annual review is waiting for data',
+        diagnosis: months.length
+          ? `Year to date, income totals ${formatoDineroCorto(input.ingresosMes)}, expenses total ${formatoDineroCorto(input.totalGastadoMes)}, and net cash flow is ${formatoDineroCorto(input.flujoNetoMes)}. Monthly averages are ${formatoDineroCorto(averageIncome)} of income and ${formatoDineroCorto(averageExpense)} of expenses.${bestMonth ? ` ${bestMonth.mes} was the strongest month.` : ''}${worstMonth ? ` ${worstMonth.mes} was the weakest.` : ''}`
+          : 'There are not enough months with transactions to identify an annual trajectory.',
+        actions: [
+          `Use ${formatoDineroCorto(averageIncome)} as the monthly income reference.`,
+          worstMonth ? `Review what weakened cash flow in ${worstMonth.mes} and prevent that pattern from repeating.` : 'Complete monthly records before projecting year-end results.',
+          `Protect a projected annual cash flow of ${formatoDineroCorto(projectedFlow)} and review it each month.`,
+        ],
+        risks: [input.tasaFuturo < 25 ? 'Emergency / investments is below the desired annual pace.' : 'The projection may change if upcoming months differ from the observed average.'],
+      };
+    }
+
+    const hasData = input.ingresosMes || input.totalGastadoMes || input.flujoNetoMes;
+    return {
+      headline: !hasData ? `${input.monthLabel} review is ready` : input.flujoNetoMes < 0 ? `${input.monthLabel} needs to recover cash flow` : `${input.monthLabel} maintains a positive margin`,
+      diagnosis: hasData
+        ? `Recorded income: ${formatoDineroCorto(input.ingresosMes)}; expenses: ${formatoDineroCorto(input.totalGastadoMes)}; net cash flow: ${formatoDineroCorto(input.flujoNetoMes)}.${pressuredBucket ? ` ${label} has the most pressure at ${Math.round(pressuredBucket.percent)}% used.` : ''}`
+        : 'There are still few transactions recorded for this period; keep records current so decisions use complete data.',
+      actions: [
+        input.flujoNetoMes < 0 ? `Cut or defer ${formatoDineroCorto(Math.abs(input.flujoNetoMes))} of variable expenses to restore positive cash flow.` : `Protect the margin of ${formatoDineroCorto(input.flujoNetoMes)} before authorizing new expenses.`,
+        pressuredBucket && pressuredBucket.percent >= 80 ? `Pause new charges in ${label} until room is restored.` : 'Review income, expenses, and net cash flow against the previous period.',
+        input.tasaFuturo < 25 ? 'Move Emergency / investments toward 25%: 10% for emergencies and 15% for the investment goal.' : 'Keep Emergency / investments separate from ordinary payments.',
+      ],
+      risks: input.tasaFuturo < 25 ? ['Emergency / investments is below the required pace.'] : ['The main risk is losing visibility if transactions are not kept current.'],
+    };
+  }
+
   if (input.scope === 'year') {
     const months = (input.monthlySeries || []).filter((month) => month.ingresos || month.egresos || month.resultado);
     const bestMonth = [...months].sort((a, b) => b.resultado - a.resultado)[0];
@@ -537,6 +580,17 @@ function fondoObjetivo(fondo: FondoAcumulado) {
 
 export default function DashboardFinanciero() {
   const { locale, t } = useLocale();
+  const formatearFecha = useCallback((value: string) => {
+    if (locale === 'es-MX') return formatearFechaEspanol(value);
+    const date = new Date(value);
+    return new Intl.DateTimeFormat('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date);
+  }, [locale]);
+  const uiText = (value: string) => translateUiText(locale, value);
   const monthLabel = (label: string) => {
     if (locale !== 'en-US') return label;
     return ({
@@ -1562,7 +1616,7 @@ export default function DashboardFinanciero() {
       concepto: '',
       monto: '',
       categoria: 'Placeres',
-      subcategoria: 'Otros Placeres',
+      subcategoria: locale === 'en-US' ? 'Other wants' : 'Otros Placeres',
       fecha: toDateTimeLocalValue(new Date().toISOString()),
     });
     setManualExpenseOpen(true);
@@ -1787,8 +1841,10 @@ export default function DashboardFinanciero() {
     : billingStatus?.plan === 'beta'
       ? 'Esencial'
       : 'Gratis';
-  const accountName = accountProfile?.full_name?.trim() || 'Tu perfil';
-  const accountFirstName = accountName === 'Tu perfil' ? '' : accountName.split(/\s+/)[0];
+  const storedAccountName = accountProfile?.full_name?.trim();
+  const hasPersonalAccountName = Boolean(storedAccountName && storedAccountName !== 'Tu perfil');
+  const accountName = hasPersonalAccountName ? storedAccountName! : (locale === 'en-US' ? 'Your profile' : 'Tu perfil');
+  const accountFirstName = hasPersonalAccountName ? accountName.split(/\s+/)[0] : '';
   const accountInitials = accountName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'V';
   const statusTone: StatusTone = mensajeStatus.startsWith('Error') || mensajeStatus.startsWith('No pude') || mensajeStatus.startsWith('Ocurrió')
     ? 'error'
@@ -2061,8 +2117,7 @@ export default function DashboardFinanciero() {
   };
 
   // Analysis requests are intentionally triggered only by the user-facing button.
-  /* eslint-disable react-hooks/preserve-manual-memoization */
-  const generarAnalisis = useCallback(async (scope: 'month' | 'year') => {
+  const generarAnalisis = async (scope: 'month' | 'year') => {
     setAnalysisScope(scope);
     setAnalysisLoading(true);
     setMensajeStatus(scope === 'year' ? 'VirafIA está generando tu análisis anual...' : 'VirafIA está generando tu análisis mensual...');
@@ -2116,6 +2171,7 @@ export default function DashboardFinanciero() {
           percent: bucket.limit > 0 ? (bucket.used / bucket.limit) * 100 : bucket.used > 0 ? 100 : 0,
         }));
     const clientAnalysis = crearAnalisisCliente({
+      locale,
       scope,
       monthLabel: analysisMonthLabel,
       ingresosMes: summary.ingresosMes,
@@ -2131,6 +2187,7 @@ export default function DashboardFinanciero() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          locale,
           scope,
           periodKey: isYearScope ? `${yearToDateMonthKey}-ytd-v3` : mesActivo,
           monthLabel: analysisMonthLabel,
@@ -2178,8 +2235,7 @@ export default function DashboardFinanciero() {
       setAnalysisLoading(false);
       setTimeout(() => setMensajeStatus(''), 4000);
     }
-  }, [avanceMetaMensual, brechaMetaMensual, brechaVsPromedio, budgetBuckets, burnRate, burnRateYearToDate, currentMonthSummary, flujoNetoMes, flujoNetoYearToDate, gastadoYearToDate.Futuro, gastadoYearToDate.Placeres, gastadoYearToDate.Vida, ingresosYearToDate, mesActivo, metaMensualActiva, presupuestoYearToDateFuturo, presupuestoYearToDatePlaceres, presupuestoYearToDateVida, resumen.ingresosMes, resumen.promedioIngresosUltimos3Meses, selectedMonthName, tasaFuturo, tasaFuturoYearToDate, futuroMetaMensual, totalGastadoMes, totalGastadoYearToDate, yearToDateMonthIndex, yearToDateMonthKey, yearToDateMonthName, yearToDateMonths]);
-  /* eslint-enable react-hooks/preserve-manual-memoization */
+  };
 
   const currentAnalysisKey = `${analysisScope}:${analysisScope === 'year' ? yearToDateMonthKey : mesActivo}`;
   const visibleAnalysis = analysisResultKey === currentAnalysisKey ? analysis : null;
@@ -2241,12 +2297,18 @@ export default function DashboardFinanciero() {
   }, []);
   const gastoPorcentajeTexto = gastoPorcentajeEntero.join('/');
   const recomendacionResumen = flujoNetoMes > 0
-    ? `Con tu flujo actual, podrías dirigir ${formatoDineroCorto(Math.max(flujoNetoMes * 0.25, 0))} extra a tu meta prioritaria este mes.`
+    ? locale === 'en-US'
+      ? `With your current cash flow, you could direct an extra ${formatoDineroCorto(Math.max(flujoNetoMes * 0.25, 0))} to your priority goal this month.`
+      : `Con tu flujo actual, podrías dirigir ${formatoDineroCorto(Math.max(flujoNetoMes * 0.25, 0))} extra a tu meta prioritaria este mes.`
     : flujoNetoMes < 0
-      ? `Tu flujo está ${formatoDineroCorto(Math.abs(flujoNetoMes))} por debajo de cero. Conviene ajustar primero la bolsa con más presión.`
+      ? locale === 'en-US'
+        ? `Your cash flow is ${formatoDineroCorto(Math.abs(flujoNetoMes))} below zero. Adjust the most pressured allocation first.`
+        : `Tu flujo está ${formatoDineroCorto(Math.abs(flujoNetoMes))} por debajo de cero. Conviene ajustar primero la bolsa con más presión.`
       : 'Tu flujo está en equilibrio. El siguiente paso es registrar ingresos y gastos para que Virafi pueda recomendarte un movimiento concreto.';
   const recomendacionDetalle = bolsaMasPresionada && calcularPorcentaje(bolsaMasPresionada.used, bolsaMasPresionada.limit) > avanceMes
-    ? `${bolsaMasPresionada.label} va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes; revisa sus movimientos antes de aumentar aportaciones.`
+    ? locale === 'en-US'
+      ? `${uiText(bolsaMasPresionada.label)} is ahead of the ${avanceMes.toFixed(0)}% of the month that has elapsed; review its transactions before increasing contributions.`
+      : `${bolsaMasPresionada.label} va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes; revisa sus movimientos antes de aumentar aportaciones.`
     : 'Tu ritmo de gasto está alineado con el avance del mes. Mantén los límites y revisa de nuevo en una semana.';
   const openAgentTasks = agentTasks.filter((task) => ['open', 'in_progress', 'waiting_user'].includes(task.status));
   const taskNotifications = openAgentTasks.filter((task) => ['movement_monitor', 'daily_cfo_mentor'].includes(task.agent_key));
@@ -2312,7 +2374,7 @@ export default function DashboardFinanciero() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase text-blue-700">Agregar gasto</p>
-            <h2 className="mt-1 text-xl font-black text-slate-950">Captura manual</h2>
+            <h2 className="mt-1 text-xl font-black text-slate-950">{locale === 'en-US' ? 'Manual entry' : 'Captura manual'}</h2>
           </div>
           <button
             type="button"
@@ -2356,15 +2418,15 @@ export default function DashboardFinanciero() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
-              Bolsa
+              {locale === 'en-US' ? 'Allocation' : 'Bolsa'}
               <select
                 value={manualExpenseForm.categoria}
                 onChange={(event) => setManualExpenseForm((current) => ({ ...current, categoria: event.target.value }))}
                 className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500"
               >
-                <option value="Vida">Vida</option>
-                <option value="Placeres">Placeres</option>
-                <option value="Futuro">Emer/Inv</option>
+                <option value="Vida">{locale === 'en-US' ? 'Living' : 'Vida'}</option>
+                <option value="Placeres">{locale === 'en-US' ? 'Wants' : 'Placeres'}</option>
+                <option value="Futuro">{locale === 'en-US' ? 'Emergency / investments' : 'Emer/Inv'}</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
@@ -2457,15 +2519,15 @@ export default function DashboardFinanciero() {
           <div className="grid gap-4 sm:grid-cols-2">
             {editForm.tipo === 'gasto' ? (
               <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Bolsa
+                {locale === 'en-US' ? 'Allocation' : 'Bolsa'}
                 <select
                   value={editForm.categoria}
                   onChange={(event) => setEditForm((current) => current ? { ...current, categoria: event.target.value } : current)}
                   className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500"
                 >
-                  <option value="Vida">Vida</option>
-                  <option value="Placeres">Placeres</option>
-                  <option value="Futuro">Emer/Inv</option>
+                  <option value="Vida">{locale === 'en-US' ? 'Living' : 'Vida'}</option>
+                  <option value="Placeres">{locale === 'en-US' ? 'Wants' : 'Placeres'}</option>
+                  <option value="Futuro">{locale === 'en-US' ? 'Emergency / investments' : 'Emer/Inv'}</option>
                 </select>
               </label>
             ) : (
@@ -2807,7 +2869,11 @@ export default function DashboardFinanciero() {
                 )}
               </div>
               <div className="hidden min-w-0 flex-1 md:block">
-                <p className="font-brand truncate text-2xl text-slate-950">{vistaActiva === 'resumen' ? `Hola${accountFirstName ? `, ${accountFirstName}` : ''}.` : activeNav.label}</p>
+                <p className="font-brand truncate text-2xl text-slate-950">
+                  {vistaActiva === 'resumen'
+                    ? `${locale === 'en-US' ? 'Hello' : 'Hola'}${accountFirstName ? `, ${accountFirstName}` : ''}.`
+                    : activeNav.label}
+                </p>
                 {vistaActiva !== 'resumen' && <p className="mt-0.5 text-xs font-semibold text-slate-400">Virafi · {selectedMonthName} 2026</p>}
               </div>
               <div className="hidden items-center gap-2 md:flex">
@@ -3001,7 +3067,9 @@ export default function DashboardFinanciero() {
                     className="relative mx-auto grid size-40 place-items-center rounded-full"
                     style={{ background: gastoPresupuestadoTotal > 0 ? `conic-gradient(var(--brand-future) 0 ${gastoPorcentajeStops[0]}%, var(--brand-business) ${gastoPorcentajeStops[0]}% ${gastoPorcentajeStops[1]}%, var(--brand-wealth) ${gastoPorcentajeStops[1]}% 100%)` : 'conic-gradient(#e2e8f0 0 100%)' }}
                     role="img"
-                    aria-label={`Distribución del gasto: Vida ${gastoPorcentajeEntero[0]}%, Placeres ${gastoPorcentajeEntero[1]}% y Emer/Inv ${gastoPorcentajeEntero[2]}%`}
+                    aria-label={locale === 'en-US'
+                      ? `Spending allocation: Living ${gastoPorcentajeEntero[0]}%, Wants ${gastoPorcentajeEntero[1]}%, and Emergency / investments ${gastoPorcentajeEntero[2]}%`
+                      : `Distribución del gasto: Vida ${gastoPorcentajeEntero[0]}%, Placeres ${gastoPorcentajeEntero[1]}% y Emer/Inv ${gastoPorcentajeEntero[2]}%`}
                   >
                     <div className="grid size-24 place-items-center rounded-full bg-white text-center">
                       <div>
@@ -3143,7 +3211,11 @@ export default function DashboardFinanciero() {
                   </div>
                   <div className="text-right">
                     <span className="block text-sm font-bold text-blue-700">${formatearMonto(resumen.presupuesto.Vida + resumen.presupuesto.Placeres + resumen.presupuesto.Futuro)} asignados</span>
-                    <span className="text-xs text-slate-500">Emer/Inv: 10% emergencia (${formatearMonto(asignacionFuturo.Emergencia)}) · 15% inversión (${formatearMonto(asignacionFuturo.Inversiones)})</span>
+                    <span className="text-xs text-slate-500">
+                      {locale === 'en-US'
+                        ? `Emergency / investments: 10% emergency (${formatearMonto(asignacionFuturo.Emergencia)}) · 15% investments (${formatearMonto(asignacionFuturo.Inversiones)})`
+                        : `Emer/Inv: 10% emergencia (${formatearMonto(asignacionFuturo.Emergencia)}) · 15% inversión (${formatearMonto(asignacionFuturo.Inversiones)})`}
+                    </span>
                   </div>
                 </div>
                 <div className="grid gap-3">
@@ -3207,12 +3279,16 @@ export default function DashboardFinanciero() {
                   </div>
                   <div className="rounded-lg bg-slate-50 p-3">
                     <p className="font-bold text-slate-900">Ritmo del mes</p>
-                    <p className="mt-1 text-slate-500">Vas en {burnRate.toFixed(1)}% de uso contra {avanceMes.toFixed(1)}% de avance calendario.</p>
+                    <p className="mt-1 text-slate-500">{locale === 'en-US'
+                      ? `You are at ${burnRate.toFixed(1)}% usage versus ${avanceMes.toFixed(1)}% calendar progress.`
+                      : `Vas en ${burnRate.toFixed(1)}% de uso contra ${avanceMes.toFixed(1)}% de avance calendario.`}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 p-3">
                     <p className="font-bold text-slate-900">Siguiente ajuste</p>
                     <p className="mt-1 text-slate-500">{bolsaMasPresionada && calcularPorcentaje(bolsaMasPresionada.used, bolsaMasPresionada.limit) > avanceMes
-                      ? `Pausa gastos opcionales de ${bolsaMasPresionada.label}; su consumo va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes.`
+                      ? locale === 'en-US'
+                        ? `Pause optional spending in ${uiText(bolsaMasPresionada.label)}; its usage is ahead of the ${avanceMes.toFixed(0)}% of the month that has elapsed.`
+                        : `Pausa gastos opcionales de ${bolsaMasPresionada.label}; su consumo va por delante del ${avanceMes.toFixed(0)}% transcurrido del mes.`
                       : 'El gasto va alineado con el avance del mes; mantén los límites actuales y revisa de nuevo en una semana.'}</p>
                   </div>
                 </div>
@@ -3235,13 +3311,13 @@ export default function DashboardFinanciero() {
                 {goalCfoPlan ? (
                   <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
                     <p className="text-sm font-black text-blue-950">Plan mensual recomendado</p>
-                    <p className="mt-1 text-sm leading-6 text-blue-900">{goalCfoPlan.summary}</p>
+                    <p className="mt-1 text-sm leading-6 text-blue-900">{uiText(goalCfoPlan.summary)}</p>
                     <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       {goalCfoPlan.allocations.map((allocation) => (
                         <div key={allocation.key} className="rounded-lg bg-white p-3 shadow-sm">
-                          <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold text-slate-700">{allocation.label}</p><span className="text-xs font-black text-blue-700">{allocation.percent}%</span></div>
-                          <p className="mt-1 text-lg font-black text-slate-950">${formatearMonto(allocation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/mes</span></p>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">{allocation.purpose}</p>
+                          <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold text-slate-700">{uiText(allocation.label)}</p><span className="text-xs font-black text-blue-700">{allocation.percent}%</span></div>
+                          <p className="mt-1 text-lg font-black text-slate-950">${formatearMonto(allocation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/{locale === 'en-US' ? 'month' : 'mes'}</span></p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">{uiText(allocation.purpose)}</p>
                         </div>
                       ))}
                     </div>
@@ -3275,9 +3351,9 @@ export default function DashboardFinanciero() {
                       </div>
                       {recommendation ? (
                         <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 lg:grid-cols-[1fr_1fr_auto]">
-                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Qué significa esta meta</p><p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.rationale}</p>{recommendation.targetIssue ? <p className="mt-2 text-xs font-bold text-amber-700">{recommendation.targetIssue}</p> : null}</div>
-                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Siguiente definición</p><p className="mt-1 text-sm leading-6 text-slate-600">{recommendation.nextQuestion}</p><p className="mt-2 text-xs text-slate-500">Primeros hitos: {recommendation.milestones.join(' · ')}</p></div>
-                          <div className="min-w-44 rounded-lg bg-white p-3"><p className="text-xs font-bold text-slate-500">Apartado sugerido</p><p className="mt-1 text-xl font-black text-slate-950">${formatearMonto(recommendation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/mes</span></p>{recommendation.monthlyAmount > 0 && /^[0-9a-f-]{36}$/i.test(String(meta.id)) ? <button type="button" onClick={() => prepararAportacionRecomendada(String(meta.id), recommendation.monthlyAmount)} className="mt-3 w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white hover:bg-violet-700">Registrar si ya lo aparté</button> : null}</div>
+                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Qué significa esta meta</p><p className="mt-1 text-sm leading-6 text-slate-600">{uiText(recommendation.rationale)}</p>{recommendation.targetIssue ? <p className="mt-2 text-xs font-bold text-amber-700">{uiText(recommendation.targetIssue)}</p> : null}</div>
+                          <div><p className="text-xs font-black uppercase tracking-wide text-violet-700">Siguiente definición</p><p className="mt-1 text-sm leading-6 text-slate-600">{uiText(recommendation.nextQuestion)}</p><p className="mt-2 text-xs text-slate-500">{locale === 'en-US' ? 'First milestones:' : 'Primeros hitos:'} {recommendation.milestones.map(uiText).join(' · ')}</p></div>
+                          <div className="min-w-44 rounded-lg bg-white p-3"><p className="text-xs font-bold text-slate-500">Apartado sugerido</p><p className="mt-1 text-xl font-black text-slate-950">${formatearMonto(recommendation.monthlyAmount)}<span className="text-xs font-medium text-slate-500">/{locale === 'en-US' ? 'month' : 'mes'}</span></p>{recommendation.monthlyAmount > 0 && /^[0-9a-f-]{36}$/i.test(String(meta.id)) ? <button type="button" onClick={() => prepararAportacionRecomendada(String(meta.id), recommendation.monthlyAmount)} className="mt-3 w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white hover:bg-violet-700">Registrar si ya lo aparté</button> : null}</div>
                         </div>
                       ) : null}
                     </div>
@@ -3421,7 +3497,9 @@ export default function DashboardFinanciero() {
                       <Target aria-hidden="true" className="size-6" weight="duotone" />
                     </span>
                     <div>
-                      <p className="font-bold text-blue-700">{metasFinancieras.length > 0 ? `${metasFinancieras.length} meta${metasFinancieras.length === 1 ? '' : 's'} en seguimiento` : 'Define tu primera meta'}</p>
+                      <p className="font-bold text-blue-700">{metasFinancieras.length > 0
+                        ? locale === 'en-US' ? `${metasFinancieras.length} goal${metasFinancieras.length === 1 ? '' : 's'} being tracked` : `${metasFinancieras.length} meta${metasFinancieras.length === 1 ? '' : 's'} en seguimiento`
+                        : 'Define tu primera meta'}</p>
                       <p className="mt-1 text-sm leading-5 text-slate-500">VirafIA relaciona tu flujo, capacidad de aportación y horizonte para proponerte el siguiente paso.</p>
                     </div>
                   </div>
@@ -3768,7 +3846,7 @@ export default function DashboardFinanciero() {
                           </div>
                           {isCurrent && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-bold text-white">Actual</span>}
                         </div>
-                        <p className="mt-5 text-3xl font-black text-slate-950">{option.price}<span className="text-sm font-semibold text-slate-500">/mes</span></p>
+                        <p className="mt-5 text-3xl font-black text-slate-950">{option.price}<span className="text-sm font-semibold text-slate-500">/{locale === 'en-US' ? 'month' : 'mes'}</span></p>
                         <div className="mt-5 space-y-2">
                           {option.features.map((feature) => (
                             <p key={feature} className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{feature}</p>
@@ -4126,7 +4204,7 @@ export default function DashboardFinanciero() {
                         {inlineEdit?.id === movimiento.id && inlineEdit.field === 'monto' ? <input autoFocus type="number" min="0" step="0.01" value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="h-8 w-24 rounded border border-blue-300 px-1 text-right text-sm text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'monto')} className={`shrink-0 text-sm font-black hover:text-blue-700 ${movimiento.tipo === 'ingreso' ? 'text-emerald-600' : movimiento.tipo === 'abono_tarjeta' ? 'text-violet-700' : 'text-slate-950'}`}>{movimiento.tipo === 'ingreso' ? '+' : movimiento.tipo === 'gasto' ? '-' : ''}${formatearMonto(movimiento.monto)}</button>}
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        {inlineEdit?.id === movimiento.id && inlineEdit.field === 'categoria' ? <select autoFocus value={inlineEdit.value} onChange={(event) => void guardarEdicionInline(movimiento, event.target.value)} onBlur={() => setInlineEdit(null)} className="h-8 rounded border border-blue-300 bg-white px-2 text-xs font-bold text-slate-900"><option value="Vida">Vida</option><option value="Placeres">Placeres</option><option value="Futuro">Emer/Inv</option></select> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'categoria')} className={`rounded-md px-2 py-1 text-xs font-bold ${
+                        {inlineEdit?.id === movimiento.id && inlineEdit.field === 'categoria' ? <select autoFocus value={inlineEdit.value} onChange={(event) => void guardarEdicionInline(movimiento, event.target.value)} onBlur={() => setInlineEdit(null)} className="h-8 rounded border border-blue-300 bg-white px-2 text-xs font-bold text-slate-900"><option value="Vida">{locale === 'en-US' ? 'Living' : 'Vida'}</option><option value="Placeres">{locale === 'en-US' ? 'Wants' : 'Placeres'}</option><option value="Futuro">{locale === 'en-US' ? 'Emergency / investments' : 'Emer/Inv'}</option></select> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'categoria')} className={`rounded-md px-2 py-1 text-xs font-bold ${
                           nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
                           nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-amber-50 text-amber-700' :
                           nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'
@@ -4201,7 +4279,7 @@ export default function DashboardFinanciero() {
                             {inlineEdit?.id === movimiento.id && inlineEdit.field === 'subcategoria' ? <input autoFocus value={inlineEdit.value} onChange={(event) => setInlineEdit({ ...inlineEdit, value: event.target.value })} onBlur={() => void guardarEdicionInline(movimiento)} onKeyDown={(event) => { if (event.key === 'Enter') void guardarEdicionInline(movimiento); if (event.key === 'Escape') setInlineEdit(null); }} className="mt-1 h-7 w-full rounded border border-blue-300 px-2 text-xs text-slate-900" /> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'subcategoria')} className="mt-1 block text-left text-xs text-slate-500 hover:text-blue-700">{movimiento.subcategoria || 'Sin subcategoría'}</button>}
                           </td>
                           <td className="px-5 py-3">
-                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'categoria' ? <select autoFocus value={inlineEdit.value} onChange={(event) => void guardarEdicionInline(movimiento, event.target.value)} onBlur={() => setInlineEdit(null)} className="h-8 rounded border border-blue-300 bg-white px-2 text-xs font-bold text-slate-900"><option value="Vida">Vida</option><option value="Placeres">Placeres</option><option value="Futuro">Emer/Inv</option></select> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'categoria')} className={`rounded-md px-2 py-1 text-xs font-bold ${
+                            {inlineEdit?.id === movimiento.id && inlineEdit.field === 'categoria' ? <select autoFocus value={inlineEdit.value} onChange={(event) => void guardarEdicionInline(movimiento, event.target.value)} onBlur={() => setInlineEdit(null)} className="h-8 rounded border border-blue-300 bg-white px-2 text-xs font-bold text-slate-900"><option value="Vida">{locale === 'en-US' ? 'Living' : 'Vida'}</option><option value="Placeres">{locale === 'en-US' ? 'Wants' : 'Placeres'}</option><option value="Futuro">{locale === 'en-US' ? 'Emergency / investments' : 'Emer/Inv'}</option></select> : <button type="button" onClick={() => comenzarEdicionInline(movimiento, 'categoria')} className={`rounded-md px-2 py-1 text-xs font-bold ${
                               nombreBolsa(movimiento.categoria) === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' :
                               nombreBolsa(movimiento.categoria) === 'Placeres' ? 'bg-amber-50 text-amber-700' :
                               nombreBolsa(movimiento.categoria) === 'Vida' ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'

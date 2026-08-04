@@ -40,6 +40,9 @@ export const metadata: Metadata = {
     shortcut: "/icon.svg",
     apple: "/icon.svg",
   },
+  other: {
+    google: "notranslate",
+  },
 };
 
 export default function RootLayout({
@@ -48,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es-MX" className={`h-full antialiased ${figtree.variable} ${newsreader.variable}`}>
+    <html lang="es-MX" translate="no" className={`notranslate h-full antialiased ${figtree.variable} ${newsreader.variable}`}>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <LocaleProvider>{children}</LocaleProvider>
       </body>

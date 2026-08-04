@@ -1131,9 +1131,9 @@ async function responderConversacionAbierta({
   }
 
   const contexto = await obtenerContextoConversacional(supabase, texto, profileId);
+  const english = contexto.identidadPerfil?.locale === 'en-US';
 
   function respuestaLocal() {
-    const english = contexto.identidadPerfil?.locale === 'en-US';
     const gastosTotal = Number(contexto.gastado.Vida || 0) + Number(contexto.gastado.Placeres || 0) + Number(contexto.gastado.Futuro || 0);
     const restantes = Object.entries(contexto.restante || {})
       .map(([bolsa, monto]) => `${bolsa}: $${formatearMonto(Number(monto || 0))}`)
@@ -1194,7 +1194,7 @@ Behavior contract:
   },
   "language_policy": {
     "instructions_language": "English",
-    "response_language": "Spanish Mexican",
+    "response_language": ${JSON.stringify(english ? 'English (United States)' : 'Mexican Spanish')},
     "no_markdown": true,
     "max_lines": 8,
     "style": "direct, intelligent, warm, concrete"
@@ -1224,7 +1224,7 @@ Behavior contract:
   "recent_chat_memory": ${JSON.stringify(memoria.slice(-8), null, 2)},
   "user_message": ${JSON.stringify(texto)},
   "response_requirements": [
-    "Respond in Spanish Mexican.",
+    ${JSON.stringify(english ? 'Respond in English (United States).' : 'Respond in Mexican Spanish.')},
     "Use concrete MXN numbers when available.",
     "Explain reasoning briefly when the user asks about a number.",
     "Prefer short paragraphs over long bullet lists.",
@@ -1245,7 +1245,7 @@ Behavior contract:
     const result = await generateLlmChat({ apiKey, system, messages: llmMessages });
     const message = limpiarFormatoTelegram(result.text);
 
-    return message || 'Estoy aquí. Dime qué quieres entender o hacer con tus finanzas.';
+    return message || (english ? 'I’m here. Tell me what you want to understand or do with your finances.' : 'Estoy aquí. Dime qué quieres entender o hacer con tus finanzas.');
   } catch {
     try {
       return limpiarFormatoTelegram(await generateGeminiText(apiKey, legacyPrompt));
