@@ -1,35 +1,78 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import React from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppLocale, detectBrowserLocale, localeFromCountry, MessageKey, translate, translateUiText } from '@/lib/i18n';
 
 type LocaleContextValue = { locale: AppLocale; setLocale: (locale: AppLocale) => void; t: (key: MessageKey) => string };
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 const STORAGE_KEY = 'virafi-locale';
 
-function LocalizedContent({ children, locale }: { children: React.ReactNode; locale: AppLocale }) {
-  if (locale === 'es-MX') return <>{children}</>;
-  function visit(node: React.ReactNode): React.ReactNode {
-    if (typeof node === 'string') return translateUiText(locale, node);
-    if (!React.isValidElement(node)) return node;
-    if (['input', 'textarea', 'select', 'option', 'script', 'style', 'code', 'pre'].includes(String(node.type))) return node;
-    const props = node.props as { children?: React.ReactNode };
-    return React.cloneElement(node, undefined, React.Children.map(props.children, visit));
-  }
-  return <>{React.Children.map(children, visit)}</>;
+const translatableAttributes = ['aria-label', 'placeholder', 'title', 'alt'] as const;
+
+function useDocumentLocalization(locale: AppLocale) {
+  const originalText = useRef(new WeakMap<Text, string>());
+  const originalAttributes = useRef(new WeakMap<Element, Map<string, string>>());
+
+  useEffect(() => {
+    const shouldSkip = (node: Node) => {
+      const parent = node.parentElement;
+      return Boolean(parent?.closest('script, style, code, pre, textarea, select, option, [data-no-translate]'));
+    };
+    const localizeText = (node: Text) => {
+      if (shouldSkip(node)) return;
+      const source = originalText.current.get(node) ?? node.data;
+      originalText.current.set(node, source);
+      const next = locale === 'en-US' ? translateUiText(locale, source) : source;
+      if (node.data !== next) node.data = next;
+    };
+    const localizeElement = (element: Element) => {
+      if (element.matches('script, style, code, pre, textarea, select, option, [data-no-translate]')) return;
+      let attributes = originalAttributes.current.get(element);
+      for (const attribute of translatableAttributes) {
+        const current = element.getAttribute(attribute);
+        if (!current) continue;
+        if (!attributes) {
+          attributes = new Map();
+          originalAttributes.current.set(element, attributes);
+        }
+        const source = attributes.get(attribute) ?? current;
+        attributes.set(attribute, source);
+        const next = locale === 'en-US' ? translateUiText(locale, source) : source;
+        if (current !== next) element.setAttribute(attribute, next);
+      }
+    };
+    const localizeTree = (root: Node) => {
+      if (root.nodeType === Node.TEXT_NODE) localizeText(root as Text);
+      if (root.nodeType === Node.ELEMENT_NODE) localizeElement(root as Element);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        if (node.nodeType === Node.TEXT_NODE) localizeText(node as Text);
+        else localizeElement(node as Element);
+        node = walker.nextNode();
+      }
+    };
+    localizeTree(document.body);
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'characterData') localizeText(mutation.target as Text);
+        if (mutation.type === 'childList') mutation.addedNodes.forEach(localizeTree);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [locale]);
 }
 
 export default function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<AppLocale>(() => {
-    if (typeof window === 'undefined') return 'es-MX';
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === 'en-US' || stored === 'es-MX' ? stored : detectBrowserLocale();
-  });
+  // Keep the first client render aligned with the server. The saved preference
+  // is applied immediately after hydration, avoiding a hydration mismatch.
+  const [locale, setLocaleState] = useState<AppLocale>('es-MX');
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     const initial = stored === 'en-US' || stored === 'es-MX' ? stored : detectBrowserLocale();
+    queueMicrotask(() => setLocaleState(initial));
     document.documentElement.lang = initial;
 
     void fetch('/api/account/status', { cache: 'no-store' })
@@ -65,14 +108,19 @@ export default function LocaleProvider({ children }: { children: React.ReactNode
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ locale: next }),
+      keepalive: true,
     }).catch(() => undefined);
     window.dispatchEvent(new CustomEvent('virafi-locale-change', { detail: next }));
+    // A clean render prevents React from reintroducing the previous language
+    // into asynchronously rendered dashboard and settings sections.
+    window.setTimeout(() => window.location.reload(), 0);
   }, []);
 
   const value = useMemo(() => ({ locale, setLocale, t: (key: MessageKey) => translate(locale, key) }), [locale, setLocale]);
+  useDocumentLocalization(locale);
   return (
     <LocaleContext.Provider value={value}>
-      <LocalizedContent locale={locale}>{children}</LocalizedContent>
+      {children}
     </LocaleContext.Provider>
   );
 }

@@ -24,36 +24,18 @@ export async function consumeAiCredit({
   const periodStart = new Date();
   periodStart.setUTCDate(1);
   const periodKey = periodStart.toISOString().slice(0, 10);
-  const { data: periodCredit } = await supabase
-    .from('billing_credit_ledger')
-    .select('id')
-    .eq('profile_id', profileId)
-    .eq('source', 'monthly_plan')
-    .eq('period_start', periodKey)
-    .maybeSingle();
   const allowance = billingPlanLimits[plan]?.monthlyCredits || billingPlanLimits.free.monthlyCredits;
-  if (!periodCredit) {
-    const { error: seedError } = await supabase.from('billing_credit_ledger').insert({
-      profile_id: profileId,
-      credits: allowance,
-      source: 'monthly_plan',
-      period_start: periodKey,
-    });
-    if (seedError) throw new Error(`No pude activar créditos: ${seedError.message}`);
-  }
-
-  const { data, error } = await supabase
-    .from('billing_credit_ledger')
-    .select('credits')
-    .eq('profile_id', profileId);
-  if (error) throw new Error(`No pude consultar créditos: ${error.message}`);
-  const balance = (data || []).reduce((sum, row) => sum + Number(row.credits || 0), 0);
-  if (balance < credits) throw new AiCreditsError('Se agotaron tus créditos de VirafIA. Compra un paquete o mejora tu plan.');
-  const { error: debitError } = await supabase.from('billing_credit_ledger').insert({
-    profile_id: profileId,
-    credits: -credits,
-    source: 'ai_usage',
+  const { data, error } = await supabase.rpc('consume_ai_credits', {
+    p_profile_id: profileId,
+    p_period_start: periodKey,
+    p_allowance: allowance,
+    p_credits: credits,
   });
-  if (debitError) throw new Error(`No pude descontar créditos: ${debitError.message}`);
-  return { balance: balance - credits };
+  if (error) {
+    if (error.message.includes('AI_CREDITS_EXHAUSTED')) {
+      throw new AiCreditsError('Se agotaron tus créditos de VirafIA. Compra un paquete o mejora tu plan.');
+    }
+    throw new Error(`No pude descontar créditos: ${error.message}`);
+  }
+  return { balance: Number(data) };
 }

@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { MovementInputError } from '@/lib/ai-classifier';
-import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { esAbonoTarjetaCredito, extraerMontoAbonoTarjeta } from '@/lib/card-payment-intent';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto, resolverFechaMovimiento } from '@/lib/financial-core';
+import { extraerFechaMovimiento, formatearMonto, resolverFechaMovimiento } from '@/lib/financial-core';
 import { extraerJson, generateGeminiText, getConfiguredLlmKey } from '@/lib/gemini';
-import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
+import { logErrorEvent } from '@/lib/operational-events';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
-import { getRequestTenantContext, withProfile } from '@/lib/tenant-context';
-import { notifyDetectedMovement } from '@/lib/movement-notifications';
-import { analyzeFinancialAttachments, extractFinancialAttachmentMovements, validateFinancialAttachments } from '@/lib/financial-attachment-analysis';
+import { getRequestTenantContext } from '@/lib/tenant-context';
+import { analyzeFinancialAttachments, extractFinancialAttachmentMovements, validateFinancialAttachments, type ExtractedFinancialMovement } from '@/lib/financial-attachment-analysis';
 import { buildFinancialImportRow } from '@/lib/financial-import';
+import { createFinancialMovementPreview } from '@/lib/financial-movement-preview';
 import { appendVirafiaExchange } from '@/lib/virafia-conversation';
+import { consumeAiCredit } from '@/lib/ai-credits';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -202,6 +203,10 @@ export async function POST(request: Request) {
     if (!tenant.profileId) {
       return NextResponse.json({ success: false, error: 'No autorizado.' }, { status: 401 });
     }
+    const rateLimit = checkRateLimit({ key: `dashboard-chat:${tenant.profileId}:${getClientIp(request)}`, limit: 30, windowMs: 60_000 });
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Hiciste muchas solicitudes. Intenta nuevamente en un minuto.' }, { status: 429 });
+    }
 
     const parsed = await parseChatRequest(request);
     const { text, screenContext, attachments } = parsed;
@@ -215,9 +220,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: attachmentError }, { status: 400 });
     }
 
-    const attachmentAnalysis = attachments.length
-      ? await analyzeFinancialAttachments({ files: attachments, userPrompt: text })
-      : '';
+    let attachmentAnalysis = '';
 
     const shouldUseScreenContext = screenContext && /\b(?:pantalla|vista|dashboard|tablero|aqui|aqu[ií]|esto|este|esta|ese|esa|cambia|corrige|edita|arregla|ayuda|explica)\b/i.test(text);
     const textoBase = text || 'Analiza los archivos adjuntos y explícame lo importante.';
@@ -227,10 +230,14 @@ export async function POST(request: Request) {
     const memoria = parsed.messages;
 
     if (attachments.length) {
+      await consumeAiCredit({ supabase, profileId: tenant.profileId });
       const extractedMovements = await extractFinancialAttachmentMovements({ files: attachments, userPrompt: texto }).catch(() => []);
-      const rows = extractedMovements.map((movement, index) => buildFinancialImportRow({
+      // Credit-card payments are intentionally excluded from the generic
+      // expense/import writer. They must use the dedicated card-payment flow
+      // so they never inflate spending.
+      const rows = extractedMovements.filter((movement): movement is Omit<ExtractedFinancialMovement, 'movementType'> & { movementType: 'gasto' | 'ingreso' } => movement.movementType !== 'abono_tarjeta').map((movement, index) => buildFinancialImportRow({
         rowIndex: index + 1,
-        movementType: movement.movementType,
+        movementType: movement.movementType as 'gasto' | 'ingreso',
         occurredAt: movement.occurredAt,
         description: movement.description,
         amount: movement.amount,
@@ -240,26 +247,13 @@ export async function POST(request: Request) {
         sourceData: { files: attachments.map((file) => file.name) },
       })).filter((row) => row.status === 'ready');
       if (rows.length) {
-        const fingerprints = rows.map((row) => row.fingerprint);
-        const existing = new Set<string>();
-        const [expenses, income] = await Promise.all([
-          supabase.from('gastos').select('import_fingerprint').eq('profile_id', tenant.profileId).in('import_fingerprint', fingerprints),
-          supabase.from('ingresos').select('import_fingerprint').eq('profile_id', tenant.profileId).in('import_fingerprint', fingerprints),
-        ]);
-        [...(expenses.data || []), ...(income.data || [])].forEach((item) => { if (item.import_fingerprint) existing.add(item.import_fingerprint); });
-        const freshRows = rows.filter((row) => !existing.has(row.fingerprint));
-        const expenseRows = freshRows.filter((row) => row.movementType === 'gasto').map((row) => withProfile({ concepto: row.description, monto: row.amount, categoria: categoriaParaGastos(row.category), subcategoria: row.subcategory, origen: 'Archivo', fecha: row.occurredAt, import_fingerprint: row.fingerprint }, tenant.profileId));
-        const incomeRows = freshRows.filter((row) => row.movementType === 'ingreso').map((row) => withProfile({ concepto: row.description, monto: row.amount, tipo: 'Extra', origen: 'Archivo', fecha: row.occurredAt, import_fingerprint: row.fingerprint }, tenant.profileId));
-        const [expenseInsert, incomeInsert] = await Promise.all([
-          expenseRows.length ? supabase.from('gastos').insert(expenseRows).select('id, concepto, monto, categoria, subcategoria, fecha') : Promise.resolve({ data: [], error: null }),
-          incomeRows.length ? supabase.from('ingresos').insert(incomeRows).select('id, concepto, monto, tipo, fecha') : Promise.resolve({ data: [], error: null }),
-        ]);
-        if (expenseInsert.error || incomeInsert.error) throw new Error(`No pude guardar todos los movimientos del lote: ${expenseInsert.error?.message || incomeInsert.error?.message}`);
-        const imported = [...(expenseInsert.data || []), ...(incomeInsert.data || [])];
-        await logAuditEvent({ supabase, request, profileId: tenant.profileId, actorEmail: tenant.email, action: 'dashboard_chat.batch_movement_create', resourceType: 'financial_movements', metadata: { extracted: rows.length, imported: imported.length, duplicates: rows.length - imported.length, attachments: attachments.map((file) => file.name) } });
-        const total = imported.reduce((sum, row) => sum + Number(row.monto || 0), 0);
-        return virafiaResponse({ supabase, profileId: tenant.profileId, userText: textoBase, payload: { success: true, action: 'movement', data: imported, message: `Procesé ${rows.length} movimientos de ${attachments.length} archivo${attachments.length === 1 ? '' : 's'} y registré ${imported.length} por $${formatearMonto(total)}${rows.length - imported.length ? `; omití ${rows.length - imported.length} duplicados` : ''}.` } });
+        const preview = await createFinancialMovementPreview({ supabase, profileId: tenant.profileId, channel: 'web', movements: rows.map((row) => ({ movementType: row.movementType, occurredAt: row.occurredAt!, description: row.description!, amount: row.amount!, category: row.category!, subcategory: row.subcategory || '', currency: row.currency })) });
+        return virafiaResponse({ supabase, profileId: tenant.profileId, userText: textoBase, payload: { success: true, action: 'movement_preview', previewId: preview.id, data: preview.movements, message: `Encontré ${preview.movements.length} movimientos. Revísalos y confirma para registrarlos.` } });
       }
+      // Non-movement document analysis is a separate AI action and is charged
+      // only when extraction did not yield a reviewable movement preview.
+      await consumeAiCredit({ supabase, profileId: tenant.profileId });
+      attachmentAnalysis = await analyzeFinancialAttachments({ files: attachments, userPrompt: text });
     }
 
     if (attachmentAnalysis) {
@@ -292,87 +286,26 @@ export async function POST(request: Request) {
       }
 
       const fechaMovimiento = extraerFechaMovimiento(text) || new Date();
-      const payload = withProfile({
-        concepto: 'Abono tarjeta de crédito',
-        monto,
-        tarjeta: 'Tarjeta de crédito',
-        origen: 'Web',
-        fecha: fechaMovimiento.toISOString(),
-      }, tenant.profileId);
-      const { data, error } = await supabase
-        .from('abonos_tarjeta_credito')
-        .insert([payload])
-        .select('id, concepto, monto, tarjeta, origen, fecha')
-        .single();
-
-      if (error) {
-        throw new Error(`No pude guardar el abono de tarjeta: ${error.message}`);
-      }
-
-      await logAuditEvent({
-        supabase,
-        request,
-        profileId: tenant.profileId,
-        actorEmail: tenant.email,
-        action: 'dashboard_chat.card_payment',
-        resourceType: 'abonos_tarjeta_credito',
-        resourceId: data.id,
-        metadata: { amount: monto },
-      });
-      await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'abono', concept: data.concepto, amount: Number(data.monto), category: 'Abono a tarjeta · no es gasto', source: 'Web', resourceId: data.id }).catch(console.error);
-
-      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
-        success: true,
-        action: 'card-payment',
-        data,
-        message: `Abono registrado. $${formatearMonto(monto)} a tarjeta de crédito. Esto reduce deuda y no cuenta como gasto nuevo.`,
-      } });
+      const preview = await createFinancialMovementPreview({ supabase, profileId: tenant.profileId, channel: 'web', movements: [{ movementType: 'abono_tarjeta', occurredAt: fechaMovimiento.toISOString(), description: 'Abono tarjeta de crédito', amount: monto, category: 'Futuro', subcategory: 'Abono a tarjeta' }] });
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: { success: true, action: 'movement_preview', previewId: preview.id, data: preview.movements, message: `Preparé el abono de $${formatearMonto(monto)}. Confírmalo para registrarlo; no cuenta como gasto nuevo.` } });
     }
 
     const multipleExpenses = await classifyMultipleExpenses(text, aiApiKey).catch(() => []);
 
     if (multipleExpenses.length > 1) {
-      const rows = multipleExpenses.map((expense) => {
-        const date = resolverFechaMovimiento(text, expense.fechaMovimiento, new Date(), false);
-
-        return withProfile({
-          concepto: expense.concepto,
-          monto: expense.monto,
-          categoria: categoriaParaGastos(expense.categoria),
-          subcategoria: expense.subcategoria,
-          origen: 'Web',
-          fecha: date.toISOString(),
-        }, tenant.profileId);
-      });
-      const { data, error } = await supabase
-        .from('gastos')
-        .insert(rows)
-        .select('id, concepto, monto, categoria, subcategoria, origen, fecha');
-
-      if (error) {
-        throw new Error(`No pude guardar los gastos: ${error.message}`);
-      }
-
-      await logAuditEvent({
-        supabase,
-        request,
-        profileId: tenant.profileId,
-        actorEmail: tenant.email,
-        action: 'dashboard_chat.multi_expense_create',
-        resourceType: 'gastos',
-        metadata: { count: data.length, total: data.reduce((sum, row) => sum + Number(row.monto || 0), 0) },
-      });
-      await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'gasto', concept: `${data.length} gastos registrados`, amount: data.reduce((sum, row) => sum + Number(row.monto || 0), 0), category: 'Movimientos múltiples', source: 'Web' }).catch(console.error);
-
-      const total = data.reduce((sum, row) => sum + Number(row.monto || 0), 0);
-      const summary = data.map((row) => `${row.concepto}: $${formatearMonto(row.monto)}`).join(' · ');
-
-      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
-        success: true,
-        action: 'movement',
-        data,
-        message: `Registré ${data.length} gastos por $${formatearMonto(total)}. ${summary}`,
-      } });
+      const extractedRows = multipleExpenses.map((expense, index) => buildFinancialImportRow({
+        rowIndex: index + 1,
+        movementType: 'gasto',
+        occurredAt: resolverFechaMovimiento(text, expense.fechaMovimiento, new Date(), false).toISOString(),
+        description: expense.concepto,
+        amount: expense.monto,
+        category: expense.categoria,
+        subcategory: expense.subcategoria,
+        currency: 'MXN',
+        sourceData: { channel: 'in_app', input: 'text-or-voice' },
+      }));
+      const preview = await createFinancialMovementPreview({ supabase, profileId: tenant.profileId, channel: 'web', movements: extractedRows.map((row) => ({ movementType: row.movementType, occurredAt: row.occurredAt!, description: row.description!, amount: row.amount!, category: row.category!, subcategory: row.subcategory || '', currency: row.currency })) });
+      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: { success: true, action: 'movement_preview', previewId: preview.id, data: preview.movements, message: `Preparé ${preview.movements.length} gastos para tu revisión. Confírmalos para registrarlos.` } });
     }
 
     const respuesta = await responderConversacionFinanciera({
@@ -390,77 +323,8 @@ export async function POST(request: Request) {
     const clasificacion = respuesta.movement;
     const fechaMovimiento = fechaMovimientoDesdeClasificacion(clasificacion.fechaMovimiento, text);
 
-    if (clasificacion.tipo === 'ingreso') {
-      const ingresoPayload = withProfile({
-        concepto: clasificacion.concepto,
-        monto: clasificacion.monto,
-        tipo: 'Extra',
-        fecha: fechaMovimiento.toISOString(),
-      }, tenant.profileId);
-      const { data, error } = await supabase
-        .from('ingresos')
-        .insert([ingresoPayload])
-        .select('id, concepto, monto, tipo, fecha')
-        .single();
-
-      if (error) {
-        throw new Error(`No pude guardar el ingreso: ${error.message}`);
-      }
-
-      await sincronizarPresupuestoMensual(supabase, fechaMovimiento, tenant.profileId);
-      await logAuditEvent({
-        supabase,
-        request,
-        profileId: tenant.profileId,
-        actorEmail: tenant.email,
-        action: 'dashboard_chat.movement_create',
-        resourceType: 'ingresos',
-        resourceId: data.id,
-        metadata: { amount: clasificacion.monto, tipo: clasificacion.tipo },
-      });
-      await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'ingreso', concept: data.concepto, amount: Number(data.monto), source: 'Web', resourceId: data.id }).catch(console.error);
-
-      return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: { success: true, action: 'movement', data, message: `Registrado. ${respuesta.message} Ya recalculé tus bolsas.` } });
-    }
-
-    const categoriaFinal = categoriaParaGastos(clasificacion.categoria);
-    const gastoPayload = withProfile({
-      concepto: clasificacion.concepto,
-      monto: clasificacion.monto,
-      categoria: categoriaFinal,
-      subcategoria: clasificacion.subcategoria,
-      origen: 'Web',
-      fecha: fechaMovimiento.toISOString(),
-    }, tenant.profileId);
-    const { data, error } = await supabase
-      .from('gastos')
-      .insert([gastoPayload])
-      .select('id, concepto, monto, categoria, subcategoria, origen, fecha')
-      .single();
-
-    if (error) {
-      throw new Error(`No pude guardar el gasto: ${error.message}`);
-    }
-
-    await logAuditEvent({
-      supabase,
-      request,
-      profileId: tenant.profileId,
-      actorEmail: tenant.email,
-      action: 'dashboard_chat.movement_create',
-      resourceType: 'gastos',
-      resourceId: data.id,
-      metadata: { amount: clasificacion.monto, categoria: clasificacion.categoria, subcategoria: clasificacion.subcategoria },
-    });
-    await notifyDetectedMovement(supabase, { profileId: tenant.profileId, type: 'gasto', concept: data.concepto, amount: Number(data.monto), category: `${clasificacion.categoria}/${clasificacion.subcategoria}`, source: 'Web', resourceId: data.id }).catch(console.error);
-
-    return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: {
-      success: true,
-      action: 'movement',
-      data,
-      lastExpenseId: data.id,
-      message: `Registrado. ${respuesta.message}`,
-    } });
+    const preview = await createFinancialMovementPreview({ supabase, profileId: tenant.profileId, channel: 'web', movements: [{ movementType: clasificacion.tipo === 'ingreso' ? 'ingreso' : 'gasto', occurredAt: fechaMovimiento.toISOString(), description: clasificacion.concepto, amount: clasificacion.monto, category: clasificacion.categoria, subcategory: clasificacion.subcategoria }] });
+    return virafiaResponse({ supabase, profileId: tenant.profileId, userText: text, payload: { success: true, action: 'movement_preview', previewId: preview.id, data: preview.movements, message: `${respuesta.message} Revísalo y confírmalo para registrarlo.` } });
   } catch (error: unknown) {
     if (error instanceof MovementInputError) {
       return NextResponse.json({

@@ -11,6 +11,9 @@ export async function GET(request: Request) {
 
   const profile = await supabase.from('profiles').select('avatar_path').eq('id', tenant.profileId).maybeSingle();
   if (profile.error || !profile.data?.avatar_path) return NextResponse.json({ error: 'Foto no encontrada.' }, { status: 404 });
+  if (!profile.data.avatar_path.startsWith(`${tenant.profileId}/`)) {
+    return NextResponse.json({ error: 'Foto no encontrada.' }, { status: 404 });
+  }
 
   const download = await supabase.storage.from('profile-avatars').download(profile.data.avatar_path);
   if (download.error || !download.data) return NextResponse.json({ error: 'Foto no encontrada.' }, { status: 404 });

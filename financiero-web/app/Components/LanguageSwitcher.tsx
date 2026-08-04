@@ -6,7 +6,7 @@ import { useLocale } from './LocaleProvider';
 export default function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale, t } = useLocale();
   return (
-    <label className={`inline-flex items-center gap-2 text-xs font-bold text-slate-500 ${compact ? '' : 'rounded-lg border border-slate-200 bg-white px-3 py-2'}`}>
+    <label data-no-translate className={`inline-flex items-center gap-2 text-xs font-bold text-slate-500 ${compact ? '' : 'rounded-lg border border-slate-200 bg-white px-3 py-2'}`}>
       <span>{t('language')}</span>
       <select
         aria-label={t('language')}

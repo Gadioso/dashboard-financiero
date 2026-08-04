@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { transcribirAudioFinanciero } from '@/lib/audio-transcription';
-import { esAbonoTarjetaCredito, extraerMontoAbonoTarjeta } from '@/lib/card-payment-intent';
 import { responderConversacionFinanciera } from '@/lib/conversation-agent';
-import { categoriaParaGastos, extraerFechaMovimiento, formatearMonto, resolverFechaMovimiento } from '@/lib/financial-core';
+import { resolverFechaMovimiento } from '@/lib/financial-core';
 import { logErrorEvent } from '@/lib/operational-events';
-import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { getSupabaseServiceClient } from '@/lib/supabase-server';
 import { getAppMembershipStatus, revokeTelegramAccess } from '@/lib/telegram-access';
-import { applyProfileFilter, getTelegramTenantContext, withProfile } from '@/lib/tenant-context';
+import { applyProfileFilter, getTelegramTenantContext } from '@/lib/tenant-context';
 import { appendVirafiaExchange } from '@/lib/virafia-conversation';
+import { extractFinancialAttachmentMovements, validateFinancialAttachments } from '@/lib/financial-attachment-analysis';
+import { createFinancialMovementPreview } from '@/lib/financial-movement-preview';
+import { isExplicitNonMovementCorrection, isVoiceRetranscriptionRequest } from '@/lib/telegram-financial-safety';
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
@@ -39,6 +40,8 @@ type TelegramMessage = {
     mime_type?: string;
     file_size?: number;
   };
+  photo?: Array<{ file_id: string; file_size?: number }>;
+  document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
   reply_to_message?: TelegramMessage;
 };
 
@@ -108,6 +111,10 @@ function esComandoDesconexionTelegram(texto?: string | null) {
 
   return /^\/?(desconectar|desvincular|revocar|disconnect|unlink)(?:\s+telegram)?$/i.test(texto.trim()) ||
     /\b(?:desconecta|desvincula|revoca)\s+(?:este\s+)?telegram\b/i.test(texto);
+}
+
+function requiresMovementConfirmation(texto?: string | null) {
+  return Boolean(texto && /(?:\$|\b(?:pesos?|mxn|gasto|gast[ée]|pag[ué]|ingreso|recib[íi]|abono|tarjeta)\b)/i.test(texto));
 }
 
 async function claimTelegramLinkCode({
@@ -296,6 +303,18 @@ function normalizarTextoTelegram(texto: string) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function fechaActualMexicoIso() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), 12)).toISOString();
+}
+
 function extraerIdGastoDeMensajeTelegram(texto?: string | null) {
   const match = texto?.match(/\bID:\s*([a-z0-9-]{1,})\b/i);
 
@@ -378,6 +397,30 @@ async function transcribirAudioTelegram(message?: TelegramMessage) {
     audio: audioBuffer,
     mimeType: audio.mimeType,
   });
+}
+
+async function descargarArchivoTelegram(fileId: string, name: string, mimeType: string) {
+  const file = await telegramApi<{ file_path?: string }>('getFile', { file_id: fileId });
+  if (!file.file_path) throw new Error('Telegram no devolvió la ruta del archivo.');
+  const response = await fetch(`https://api.telegram.org/file/bot${telegramBotToken}/${file.file_path}`);
+  if (!response.ok) throw new Error('No pude descargar el archivo de Telegram.');
+  return new File([await response.arrayBuffer()], name, { type: mimeType });
+}
+
+async function extraerAdjuntosTelegram(message?: TelegramMessage) {
+  const photo = message?.photo?.at(-1);
+  if (photo) {
+    if ((photo.file_size || 0) > 10 * 1024 * 1024) throw new Error('La imagen supera el límite de 10 MB por archivo.');
+    return [await descargarArchivoTelegram(photo.file_id, `telegram-${message?.message_id || Date.now()}.jpg`, 'image/jpeg')];
+  }
+  const document = message?.document;
+  if (!document) return [];
+  const mimeType = document.mime_type || 'application/octet-stream';
+  if ((document.file_size || 0) > 10 * 1024 * 1024) throw new Error('El documento supera el límite de 10 MB por archivo.');
+  if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf' && mimeType !== 'text/csv' && mimeType !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+    throw new Error('Ese documento no es compatible. Envía una imagen, PDF, CSV o Excel.');
+  }
+  return [await descargarArchivoTelegram(document.file_id, document.file_name || `telegram-${message?.message_id || Date.now()}`, mimeType)];
 }
 
 async function desconectarTelegram({
@@ -567,6 +610,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, action: 'telegram-access-status' });
     }
 
+    // Until Telegram renders the same editable preview UI as the web client,
+    // never treat a conversational message as authorization to write money.
+    // Attachments receive a persisted preview below; text proposals are routed
+    // to the dashboard confirmation surface as well.
+    if (requiresMovementConfirmation(texto)) {
+      const message = 'Por seguridad no registraré movimientos desde este mensaje. Abre Virafi para revisar y confirmar los datos antes de guardarlos.';
+      await responderTelegram(chatId, message);
+      return NextResponse.json({ success: true, action: 'movement-confirmation-required' });
+    }
+
+    const attachmentFiles = await extraerAdjuntosTelegram(update.message);
+    if (attachmentFiles.length) {
+      const attachmentError = validateFinancialAttachments(attachmentFiles);
+      if (attachmentError) {
+        await responderTelegram(chatId, attachmentError);
+        return NextResponse.json({ success: true, ignored: true, action: 'attachment-rejected' });
+      }
+      await responderTelegram(chatId, 'Recibí el archivo. Estoy leyendo los movimientos para separarlos y clasificarlos...');
+      const movements = await conTelegramEscribiendo(chatId, () => extractFinancialAttachmentMovements({
+        files: attachmentFiles,
+        userPrompt: texto || 'Extrae todos los movimientos visibles.',
+        defaultOccurredAt: fechaActualMexicoIso(),
+      }));
+      if (!movements.length) {
+        await responderTelegram(chatId, 'No pude identificar movimientos completos en ese archivo. Mándame una captura más nítida donde se vean fecha, concepto y monto.');
+        return NextResponse.json({ success: true, ignored: true, action: 'attachment-no-movements' });
+      }
+      const preview = await createFinancialMovementPreview({ supabase, profileId: tenant.profileId, channel: 'telegram', movements });
+      const message = `Encontré ${preview.movements.length} movimientos. No registré nada todavía. Revísalos y confírmalos desde tu dashboard de Virafi.`;
+      await responderTelegram(chatId, message);
+      return NextResponse.json({ success: true, action: 'movement-preview', previewId: preview.id });
+    }
+
     if (!texto) {
       const audioTelegram = telegramAudioFromMessage(update.message);
 
@@ -639,8 +715,56 @@ export async function POST(request: Request) {
     }
 
     texto = aplicarContextoDeRespuestaTelegram(texto, update.message);
+    if (requiresMovementConfirmation(texto)) {
+      const message = 'Por seguridad no registraré movimientos desde este mensaje. Abre Virafi para revisar y confirmar los datos antes de guardarlos.';
+      await responderTelegram(chatId, message);
+      return NextResponse.json({ success: true, action: 'movement-confirmation-required' });
+    }
     const memoria = await leerMemoriaChat(supabase, chatId, tenant.profileId);
 
+    if (isExplicitNonMovementCorrection(texto)) {
+      const message = 'Entendido: es una corrección, no registraré un gasto ni duplicaré ese abono. Para corregir un movimiento ya guardado, respóndeme con su ID o pídeme que lo busque.';
+      await responderTelegram(chatId, message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
+      return NextResponse.json({ success: true, ignored: true, action: 'non-movement-correction' });
+    }
+
+    if (isVoiceRetranscriptionRequest(texto)) {
+      const message = 'Puedo volver a transcribir una nota de voz nueva con el modelo de mayor precisión. Por privacidad no conservo el audio anterior; reenvíamelo y revisaré literalmente cantidades, negaciones y correcciones antes de proponer cualquier registro.';
+      await responderTelegram(chatId, message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
+      return NextResponse.json({ success: true, ignored: true, action: 'voice-retranscription-request' });
+    }
+
+    // This is the only conversational path for Telegram. It intentionally
+    // returns either a read-only answer or a persisted preview; no legacy
+    // branch below is allowed to use classifier output as write consent.
+    const safeResponse = await conTelegramEscribiendo(chatId, () => responderConversacionFinanciera({
+      texto,
+      apiKey: conversationApiKey,
+      supabase,
+      memoria,
+      profileId: tenant.profileId,
+    }));
+    if (safeResponse.action === 'reply') {
+      await responderTelegram(chatId, safeResponse.message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: safeResponse.message, profileId: tenant.profileId });
+      return NextResponse.json({ success: true, ignored: true, message: safeResponse.message });
+    }
+    const safeMovement = safeResponse.movement;
+    const preview = await createFinancialMovementPreview({
+      supabase,
+      profileId: tenant.profileId,
+      channel: 'telegram',
+      movements: [{ movementType: safeMovement.tipo === 'ingreso' ? 'ingreso' : 'gasto', occurredAt: fechaMovimientoDesdeClasificacion(safeMovement.fechaMovimiento, texto).toISOString(), description: safeMovement.concepto, amount: safeMovement.monto, category: safeMovement.categoria, subcategory: safeMovement.subcategoria }],
+    });
+    const previewMessage = `${safeResponse.message} No registré nada todavía. Revísalo y confírmalo desde tu dashboard de Virafi.`;
+    await responderTelegram(chatId, previewMessage);
+    await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: previewMessage, profileId: tenant.profileId });
+    return NextResponse.json({ success: true, action: 'movement-preview', previewId: preview.id });
+
+    /* Retired direct-write implementation. Financial writes must only occur
+       through confirm_financial_movement_preview.
     if (esAbonoTarjetaCredito(texto)) {
       const monto = extraerMontoAbonoTarjeta(texto);
 
@@ -675,6 +799,20 @@ export async function POST(request: Request) {
       await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
 
       return NextResponse.json({ success: true, action: 'card-payment', data, message });
+    }
+
+    const multipleExpenses = await extractMultipleExpenses(texto).catch(() => []);
+    if (multipleExpenses.length > 1) {
+      const extractedRows = multipleExpenses.map((expense, index) => buildFinancialImportRow({ rowIndex: index + 1, movementType: 'gasto', occurredAt: resolverFechaMovimiento(texto, expense.fechaMovimiento, new Date(), false).toISOString(), description: expense.concepto, amount: expense.monto, category: expense.categoria, subcategory: expense.subcategoria, currency: 'MXN', sourceData: { channel: 'telegram', input: 'text-or-voice' } }));
+      const { accepted, duplicates } = await excludeDuplicateFinancialRows({ supabase, profileId: tenant.profileId, rows: extractedRows });
+      const rows = accepted.map((row) => withProfile({ concepto: row.description, monto: row.amount, categoria: categoriaParaGastos(row.category), subcategoria: row.subcategory, origen: 'Telegram', fecha: row.occurredAt, import_fingerprint: row.fingerprint }, tenant.profileId));
+      const { data, error } = await supabase.from('gastos').insert(rows).select('id, concepto, monto, categoria, subcategoria, fecha');
+      if (error) throw new Error(`No pude guardar los movimientos: ${error.message}`);
+      const total = (data || []).reduce((sum, row) => sum + Number(row.monto || 0), 0);
+      const message = `Registré ${data?.length || 0} gastos por $${formatearMonto(total)}${duplicates.length ? `; omití ${duplicates.length} duplicado${duplicates.length === 1 ? '' : 's'}` : ''}: ${(data || []).map((row) => `${row.concepto} $${formatearMonto(Number(row.monto))}`).join(' · ')}`;
+      await responderTelegram(chatId, message);
+      await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, profileId: tenant.profileId });
+      return NextResponse.json({ success: true, action: 'multiple-expenses', data, message });
     }
 
     const respuesta = await conTelegramEscribiendo(chatId, () => responderConversacionFinanciera({
@@ -744,7 +882,7 @@ export async function POST(request: Request) {
     await responderTelegram(chatId, message);
     await guardarMemoriaChat({ supabase, chatId, memoria, userText: texto, assistantText: message, lastExpenseId: data.id, profileId: tenant.profileId });
 
-    return NextResponse.json({ success: true, data, message });
+    return NextResponse.json({ success: true, data, message }); */
   } catch (error: unknown) {
     console.error('Error en webhook de Telegram:', error);
     if (authorizedToReply) await responderTelegram(chatId, mensajeErrorTelegram(error));

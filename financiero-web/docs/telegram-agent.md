@@ -124,7 +124,8 @@ Variables requeridas:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` recomendado para evitar bloqueos por RLS.
 - `GEMINI_API_KEY` para conversación y transcripción de notas de voz.
-- `GEMINI_STRUCTURED_MODEL` permite elegir el modelo económico usado para audio y extracción estructurada.
+- `GEMINI_STRUCTURED_MODEL` permite elegir el modelo económico usado para extracción estructurada.
+- `GEMINI_AUDIO_TRANSCRIPTION_MODEL` permite cambiar el modelo de transcripción. Por defecto se usa `gemini-2.5-flash` para conservar con mayor fidelidad montos y correcciones habladas.
 - `GOOGLE_API_KEY` o `GEMINI_API_KEY` para clasificación con IA cuando las reglas locales no alcanzan.
 - `GOOGLE_API_KEY` o `GEMINI_API_KEY` para conversación abierta con contexto financiero.
 - Para voz se usa Gemini; si falla, el bot debe responder y pedir el movimiento por texto.

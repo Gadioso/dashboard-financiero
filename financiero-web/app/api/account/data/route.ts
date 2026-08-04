@@ -65,36 +65,27 @@ const dataTables = [
   'error_events',
 ] as const;
 
-function canIgnoreDeleteError(error: { code?: string; message?: string } | null) {
-  return error?.code === '42P01' || error?.code === '42703' || /does not exist|schema cache|Could not find/i.test(error?.message || '');
-}
-
-async function deleteProfileRows({
-  supabase,
-  table,
-  profileId,
-}: {
-  supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>;
-  table: string;
-  profileId: string;
-}) {
-  const { error, count } = await supabase
-    .from(table)
-    .delete({ count: 'exact' })
-    .eq('profile_id', profileId);
-
-  if (error && !canIgnoreDeleteError(error)) {
-    throw new Error(`${table}: ${error.message}`);
-  }
-
-  return count || 0;
-}
-
 async function deleteProfileStorage(supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>, bucket: string, profileId: string) {
-  const { data: objects, error: listError } = await supabase.storage.from(bucket).list(profileId, { limit: 1000 });
-  if (listError) return;
-  const paths = (objects || []).filter((object) => object.name).map((object) => `${profileId}/${object.name}`);
-  if (paths.length) await supabase.storage.from(bucket).remove(paths);
+  const storage = supabase.storage.from(bucket);
+  const paths: string[] = [];
+  const walk = async (prefix: string) => {
+    for (let offset = 0; ; offset += 1_000) {
+      const { data, error } = await storage.list(prefix, { limit: 1_000, offset, sortBy: { column: 'name', order: 'asc' } });
+      if (error) throw new Error(`${bucket}: no pude listar ${prefix}: ${error.message}`);
+      for (const object of data || []) {
+        const path = `${prefix}/${object.name}`;
+        if (object.id === null) await walk(path);
+        else paths.push(path);
+      }
+      if (!data || data.length < 1_000) break;
+    }
+  };
+
+  await walk(profileId);
+  for (let index = 0; index < paths.length; index += 1_000) {
+    const { error } = await storage.remove(paths.slice(index, index + 1_000));
+    if (error) throw new Error(`${bucket}: no pude borrar archivos: ${error.message}`);
+  }
 }
 
 export async function DELETE(request: Request) {
@@ -145,24 +136,20 @@ export async function DELETE(request: Request) {
       deleteProfileStorage(supabase, 'financial-imports', profileId),
     ]);
 
-    for (const table of dataTables) {
-      deleted[table] = await deleteProfileRows({ supabase, table, profileId });
-    }
-
-    const profileDelete = await supabase
-      .from('profiles')
-      .delete({ count: 'exact' })
-      .eq('id', profileId);
-
-    if (profileDelete.error && !canIgnoreDeleteError(profileDelete.error)) {
-      throw new Error(`profiles: ${profileDelete.error.message}`);
-    }
-
-    deleted.profiles = profileDelete.count || 0;
+    // The database mutation is a single transaction. Storage is intentionally
+    // completed first because it cannot participate in a Postgres transaction.
+    const { data: purgeResult, error: purgeError } = await supabase.rpc('purge_profile_data', {
+      p_profile_id: profileId,
+      p_tables: [...dataTables],
+    });
+    if (purgeError) throw new Error(`No pude borrar los datos de cuenta: ${purgeError.message}`);
+    Object.assign(deleted, (purgeResult as Record<string, number> | null) || {});
 
     let authUserDeleted = false;
 
     if (body.deleteAuthUser) {
+      const { error: signOutError } = await supabase.auth.admin.signOut(profileId, 'global');
+      if (signOutError) throw new Error(`auth.sessions: ${signOutError.message}`);
       const { error } = await supabase.auth.admin.deleteUser(profileId);
 
       if (error) {

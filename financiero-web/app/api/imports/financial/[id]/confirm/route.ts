@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { sincronizarPresupuestoMensual } from '@/lib/budget-sync';
 import { categoriaParaGastos } from '@/lib/financial-core';
 import { buildFinancialImportRow } from '@/lib/financial-import';
 import { logAuditEvent, logErrorEvent } from '@/lib/operational-events';
@@ -29,20 +28,6 @@ type StoredRow = {
   source_data: Record<string, unknown> | null;
   status: string;
 };
-
-async function updateImportRows(
-  supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
-  profileId: string,
-  batchId: string,
-  ids: number[],
-  payload: Record<string, unknown>,
-) {
-  for (let index = 0; index < ids.length; index += 400) {
-    const result = await supabase.from('financial_import_rows').update(payload)
-      .eq('profile_id', profileId).eq('batch_id', batchId).in('id', ids.slice(index, index + 400));
-    if (result.error) throw result.error;
-  }
-}
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const supabase = getSupabaseServiceClient();
@@ -110,6 +95,27 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const duplicateFingerprint = normalized.find((item, index) => normalized.findIndex((other) => other.row.fingerprint === item.row.fingerprint) !== index);
     if (duplicateFingerprint) throw new Error(`La fila ${duplicateFingerprint.row.rowIndex} está repetida en la selección.`);
 
+    const normalizedById = new Map(normalized.map((item) => [String(item.id), item.row]));
+    const rpcRows = body.data.rows.map((input) => {
+      const row = normalizedById.get(String(input.id));
+      return row
+        ? { id: Number(input.id), include: true, movement_type: row.movementType, occurred_at: row.occurredAt, description: row.description, amount: row.amount, category: categoriaParaGastos(row.category), subcategory: row.subcategory, currency: row.currency, fingerprint: row.fingerprint }
+        : { id: Number(input.id), include: false };
+    });
+    const { data: atomicResult, error: atomicError } = await supabase.rpc('confirm_financial_import', {
+      p_profile_id: profileId,
+      p_batch_id: batchId,
+      p_rows: rpcRows,
+    });
+    if (atomicError) throw atomicError;
+    const summary = atomicResult as { imported: number; expenses: number; income: number; duplicates: number; skipped: number; already_confirmed?: boolean };
+    await logAuditEvent({
+      supabase, request, profileId, actorEmail: tenant.email, action: 'financial_import.confirm', resourceType: 'financial_import_batches', resourceId: batchId,
+      metadata: { imported: summary.imported || 0, expenses: summary.expenses || 0, income: summary.income || 0, duplicates: summary.duplicates || 0, skipped: summary.skipped || 0, atomic: true },
+    });
+    return NextResponse.json({ success: true, ...summary });
+
+    /* Legacy multi-request implementation retained only in git history.
     const fingerprints = normalized.map((item) => item.row.fingerprint);
     const existing = new Set<string>();
     for (let index = 0; index < fingerprints.length; index += 400) {
@@ -192,10 +198,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       resourceId: batchId,
       metadata: { imported: importedCount, expenses: expenses.length, income: income.length, duplicates: skippedDuplicateIds.length, skipped: unselectedIds.length },
     });
-    return NextResponse.json({ success: true, imported: importedCount, expenses: expenses.length, income: income.length, duplicates: skippedDuplicateIds.length, skipped: unselectedIds.length });
+    return NextResponse.json({ success: true, imported: importedCount, expenses: expenses.length, income: income.length, duplicates: skippedDuplicateIds.length, skipped: unselectedIds.length }); */
   } catch (error) {
     if (supabase && claimed && profileId && batchId) {
-      await supabase.from('financial_import_batches').update({ status: 'preview', updated_at: new Date().toISOString() })
+      // Preserve a truthful terminal state. A failure after any write must not
+      // masquerade as an untouched preview, which could be retried blindly.
+      await supabase.from('financial_import_batches').update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('id', batchId).eq('profile_id', profileId).eq('status', 'processing');
     }
     await logErrorEvent({ supabase, request, profileId, action: 'financial_import.confirm', error });

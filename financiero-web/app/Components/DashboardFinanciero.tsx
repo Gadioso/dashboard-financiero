@@ -32,7 +32,6 @@ import {
 import PersonalizationInterview from '@/app/onboarding/PersonalizationInterview';
 import VirafiBrand, { VirafiMark } from '@/app/Components/VirafiBrand';
 import { fetchWithSessionRefresh as fetchWithSharedSessionRefresh } from '@/lib/authenticated-fetch';
-import LanguageSwitcher from '@/app/Components/LanguageSwitcher';
 import { useLocale } from '@/app/Components/LocaleProvider';
 import {
   calcularIngresosMes,
@@ -280,7 +279,7 @@ type AccountStatus = {
     content: string;
     channel?: string;
     createdAt: string;
-    metadata?: { lastExpenseId?: string };
+    metadata?: { lastExpenseId?: string; previewId?: string };
   }>;
   error?: string;
 };
@@ -330,6 +329,7 @@ type DashboardChatMessage = {
   createdAt: string;
   metadata?: {
     lastExpenseId?: string;
+    previewId?: string;
   };
 };
 
@@ -537,6 +537,14 @@ function fondoObjetivo(fondo: FondoAcumulado) {
 
 export default function DashboardFinanciero() {
   const { locale, t } = useLocale();
+  const monthLabel = (label: string) => {
+    if (locale !== 'en-US') return label;
+    return ({
+      ENERO: 'JANUARY', FEBRERO: 'FEBRUARY', MARZO: 'MARCH', ABRIL: 'APRIL',
+      MAYO: 'MAY', JUNIO: 'JUNE', JULIO: 'JULY', AGOSTO: 'AUGUST',
+      SEPTIEMBRE: 'SEPTEMBER', OCTUBRE: 'OCTOBER', NOVIEMBRE: 'NOVEMBER', DICIEMBRE: 'DECEMBER',
+    } as Record<string, string>)[label] ?? label;
+  };
   const [loading, setLoading] = useState(false);
   const [inputIA, setInputIA] = useState('');
   const [procesando, setProcesando] = useState(false);
@@ -617,6 +625,8 @@ export default function DashboardFinanciero() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [reportScope, setReportScope] = useState<'month' | 'year'>('month');
   const [reportDownloading, setReportDownloading] = useState(false);
+  const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -627,8 +637,13 @@ export default function DashboardFinanciero() {
   const accountProfileIdRef = useRef<string | null>(null);
 
   async function logoutFromDashboard() {
-    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-    window.location.assign('/login');
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+      window.location.assign('/login');
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   useEffect(() => {
@@ -2014,7 +2029,7 @@ export default function DashboardFinanciero() {
         role: 'assistant',
         content: reply,
         createdAt: new Date().toISOString(),
-        metadata: data.lastExpenseId ? { lastExpenseId: String(data.lastExpenseId) } : undefined,
+        metadata: data.previewId ? { previewId: String(data.previewId) } : data.lastExpenseId ? { lastExpenseId: String(data.lastExpenseId) } : undefined,
       };
 
       setChatMessages((current) => ([...current, assistantMessage].slice(-14)));
@@ -2569,6 +2584,25 @@ export default function DashboardFinanciero() {
                     message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700'
                   }`}>
                     {message.content}
+                    {message.role === 'assistant' && message.metadata?.previewId ? (
+                      <button
+                        type="button"
+                        className="mt-3 block rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onClick={async () => {
+                          const response = await fetchWithSessionRefresh(`/api/dashboard/movement-previews/${encodeURIComponent(message.metadata!.previewId!)}/confirm`, { method: 'POST' });
+                          const result = await readJsonResponse<{ success?: boolean; imported?: number; error?: string }>(response);
+                          if (!response.ok || !result?.success) {
+                            setMensajeStatus(formatActionError(result, 'No pude confirmar los movimientos.'));
+                            return;
+                          }
+                          setChatMessages((current) => current.map((item) => item.id === message.id ? { ...item, content: `Movimientos confirmados: ${result.imported || 0} registrados.`, metadata: undefined } : item));
+                          setMensajeStatus('Movimientos confirmados. Datos actualizados.');
+                          await fetchData();
+                        }}
+                      >
+                        Confirmar movimientos
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))
@@ -2674,6 +2708,19 @@ export default function DashboardFinanciero() {
 
   return (
     <div className="min-h-screen bg-[var(--brand-cream)] text-slate-950">
+      {logoutConfirmationOpen && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="grid size-11 place-items-center rounded-xl bg-rose-50 text-rose-700"><SignOutIcon className="size-6" weight="duotone" /></div>
+            <h2 id="logout-title" className="mt-4 text-xl font-black text-slate-950">{locale === 'en-US' ? 'Sign out?' : '¿Quieres cerrar tu sesión?'}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">{locale === 'en-US' ? 'Your session will be closed on this device.' : 'Tu sesión se cerrará en este dispositivo.'}</p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setLogoutConfirmationOpen(false)} disabled={loggingOut} className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{locale === 'en-US' ? 'Stay signed in' : 'Mantener sesión'}</button>
+              <button type="button" onClick={() => void logoutFromDashboard()} disabled={loggingOut} className="min-h-11 rounded-lg bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">{loggingOut ? (locale === 'en-US' ? 'Signing out…' : 'Cerrando sesión...') : (locale === 'en-US' ? 'Yes, sign out' : 'Sí, cerrar sesión')}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {billingAction && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-5 text-center shadow-xl">
@@ -2716,11 +2763,11 @@ export default function DashboardFinanciero() {
             })}
           </nav>
           <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-            <div className="flex items-center gap-2"><LanguageSwitcher compact /><Link href="/onboarding" aria-label={t('settings')} className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            <Link href="/onboarding" aria-label={t('settings')} className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <GearIcon />
               <span>{t('settings')}</span>
-            </Link></div>
-            <button type="button" onClick={() => void logoutFromDashboard()} className="mt-2 flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700">
+            </Link>
+            <button type="button" onClick={() => setLogoutConfirmationOpen(true)} className="mt-1 flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700">
               <SignOutIcon />
               <span>{t('logout')}</span>
             </button>
@@ -2749,8 +2796,8 @@ export default function DashboardFinanciero() {
                     <Bell className="size-5" weight="regular" aria-hidden="true" />
                     {unreadNotifications.length > 0 && <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-black leading-5 text-white">{Math.min(unreadNotifications.length, 99)}</span>}
                   </button>
-                  <Link href="/onboarding" aria-label="Configuración" className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm"><GearIcon /></Link>
-                  <button type="button" onClick={() => void logoutFromDashboard()} aria-label={t('logout')} className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"><SignOutIcon /></button>
+                  <Link href="/onboarding" aria-label={t('settings')} className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm"><GearIcon /></Link>
+                  <button type="button" onClick={() => setLogoutConfirmationOpen(true)} aria-label={t('logout')} className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"><SignOutIcon /></button>
                 </div>
                 {notificationTrayOpen && (
                   <div className="absolute right-0 top-12 z-50 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
@@ -2863,7 +2910,7 @@ export default function DashboardFinanciero() {
                     >
                       {meses2026.map((mes) => (
                         <option key={mes.etiqueta} value={`2026-${String(mes.indice + 1).padStart(2, '0')}`}>
-                          {mes.etiqueta} 2026
+                          {monthLabel(mes.etiqueta)} 2026
                         </option>
                       ))}
                     </select>
@@ -2910,7 +2957,7 @@ export default function DashboardFinanciero() {
                   </div>
                   <select aria-label="Mes del resumen" value={mesActivo} onChange={(event) => changeMesActivo(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500">
                     {meses2026.map((mes) => (
-                      <option key={mes.etiqueta} value={'2026-' + String(mes.indice + 1).padStart(2, '0')}>{mes.etiqueta} 2026</option>
+                      <option key={mes.etiqueta} value={'2026-' + String(mes.indice + 1).padStart(2, '0')}>{monthLabel(mes.etiqueta)} 2026</option>
                     ))}
                   </select>
                 </div>

@@ -10,7 +10,7 @@ export function getConfiguredLlmKey() {
 
 export function getGeminiModelName(feature: AiFeature = 'financial-chat') {
   const featureVariable = `GEMINI_${feature.replaceAll('-', '_').toUpperCase()}_MODEL`;
-  const economicalDefault = ['structured', 'financial-attachment', 'financial-import', 'audio-transcription'].includes(feature)
+  const economicalDefault = ['structured', 'financial-attachment', 'financial-import'].includes(feature)
     ? 'gemini-2.5-flash-lite'
     : 'gemini-2.5-flash';
 

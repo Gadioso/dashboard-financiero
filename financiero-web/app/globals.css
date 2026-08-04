@@ -137,9 +137,9 @@ h2 {
 .marketing-nav-links a:hover, .marketing-link-button:hover { color: var(--brand-violet); }
 .marketing-nav-actions { display: flex; justify-content: flex-end; align-items: center; gap: 24px; }
 .marketing-mobile-menu { display: none; position: relative; }
-.marketing-mobile-menu summary { width: 42px; height: 42px; display: grid; align-content: center; gap: 4px; padding: 10px; border: 1px solid var(--brand-border); cursor: pointer; list-style: none; }
-.marketing-mobile-menu summary::-webkit-details-marker { display: none; }
-.marketing-mobile-menu summary span { display: block; height: 1px; background: var(--brand-ink); }
+.marketing-mobile-menu-trigger { width: 42px; height: 42px; display: grid; align-content: center; gap: 4px; padding: 10px; border: 1px solid var(--brand-border); background: var(--brand-surface); cursor: pointer; }
+.marketing-mobile-menu-trigger span { display: block; height: 1px; background: var(--brand-ink); }
+.marketing-mobile-menu-trigger:focus-visible { outline: 2px solid var(--brand-violet); outline-offset: 3px; }
 .marketing-mobile-menu nav { position: absolute; top: 50px; right: 0; width: 210px; display: grid; padding: 10px; border: 1px solid var(--brand-border); background: var(--brand-surface); box-shadow: 0 18px 50px color-mix(in oklab, var(--brand-ink) 12%, transparent); }
 .marketing-mobile-menu nav a { padding: 12px; color: var(--brand-ink); font-size: 14px; font-weight: 650; text-decoration: none; }
 .marketing-button { min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid transparent; border-radius: 2px; padding: 0 26px; font-size: 15px; font-weight: 700; text-decoration: none; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
@@ -306,20 +306,21 @@ h2 {
 .immersive-dashboard {
   position: absolute;
   z-index: 4;
-  top: 16px;
-  right: -1%;
-  width: 57%;
+  top: -10px;
+  right: 5%;
+  width: min(55%, 820px);
   transform:
-    perspective(1400px)
+    perspective(900px)
     translate3d(
       calc(var(--pointer-x) * -13px),
       calc(var(--hero-scroll) * -52px + var(--pointer-y) * -10px),
       0
     )
-    rotateX(calc(-1.5deg + var(--pointer-y) * -2deg))
-    rotateY(calc(-1.8deg + var(--pointer-x) * 3deg))
-    rotateZ(calc(-1.2deg + var(--hero-scroll) * .35deg));
-  transform-origin: 50% 50%;
+    rotateX(calc(-7deg + var(--pointer-y) * -2deg))
+    rotateY(calc(-14deg + var(--pointer-x) * 3deg))
+    rotateZ(calc(1.25deg + var(--hero-scroll) * .35deg))
+    scale(.97);
+  transform-origin: 55% 52%;
   will-change: transform;
 }
 .immersive-dashboard .product-preview { min-height: 490px; border-color: color-mix(in oklab, var(--brand-ink) 16%, transparent); border-radius: 14px; box-shadow: 0 36px 90px color-mix(in oklab, var(--brand-ink) 17%, transparent); }

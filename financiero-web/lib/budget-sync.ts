@@ -41,26 +41,21 @@ export async function sincronizarPresupuestoMensual(supabase: SupabaseClient, fe
     techo_futuro: presupuesto.Futuro,
     fase_ahorro: 'Regla 50/25/25 activa',
   }, profileId);
-  const existenteQuery = supabase
+  const conflictTarget = profileId ? 'profile_id,mes_anio' : 'mes_anio';
+  let resultado = await supabase
     .from('presupuestos_mensuales')
-    .select('id')
-    .eq('mes_anio', mesAnio);
-  const { data: existente, error: existenteError } = await applyProfileFilter(existenteQuery, profileId).maybeSingle();
-
-  if (existenteError) {
-    throw new Error(`No pude consultar presupuesto mensual: ${existenteError.message}`);
-  }
-
-  let resultado = existente
-    ? await supabase.from('presupuestos_mensuales').update(payload).eq('id', existente.id).select('*').single()
-    : await supabase.from('presupuestos_mensuales').insert([payload]).select('*').single();
+    .upsert(payload, { onConflict: conflictTarget })
+    .select('*')
+    .single();
 
   if (resultado.error && resultado.error.message.includes('fase_ahorro_check')) {
     const fallbackPayload = { ...payload, fase_ahorro: 'Fase 1: Escudo' };
 
-    resultado = existente
-      ? await supabase.from('presupuestos_mensuales').update(fallbackPayload).eq('id', existente.id).select('*').single()
-      : await supabase.from('presupuestos_mensuales').insert([fallbackPayload]).select('*').single();
+    resultado = await supabase
+      .from('presupuestos_mensuales')
+      .upsert(fallbackPayload, { onConflict: conflictTarget })
+      .select('*')
+      .single();
   }
 
   if (resultado.error) {

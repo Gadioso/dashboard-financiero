@@ -89,20 +89,7 @@ export async function POST(request: Request) {
     const mesAnio = currentMonthKey();
 
     if (body.initializeBudget) {
-      const { data: existingBudget, error: budgetReadError } = await supabase
-        .from('presupuestos_mensuales')
-        .select('id, mes_anio, techo_vida, techo_placeres, techo_futuro, fase_ahorro')
-        .eq('profile_id', tenant.profileId)
-        .eq('mes_anio', mesAnio)
-        .maybeSingle();
-
-      if (budgetReadError) {
-        throw new Error(`No pude revisar tu presupuesto inicial: ${budgetReadError.message}`);
-      }
-
-      if (existingBudget) {
-        initialBudget = existingBudget;
-      } else {
+      {
         const presupuesto = calcularPresupuestoTresTercios(monthlyIncomeTarget);
         const budgetPayload = withProfile({
           mes_anio: mesAnio,
@@ -113,7 +100,7 @@ export async function POST(request: Request) {
         }, tenant.profileId);
         const { data: insertedBudget, error: budgetInsertError } = await supabase
           .from('presupuestos_mensuales')
-          .insert([budgetPayload])
+          .upsert(budgetPayload, { onConflict: 'profile_id,mes_anio' })
           .select('id, mes_anio, techo_vida, techo_placeres, techo_futuro, fase_ahorro')
           .single();
 

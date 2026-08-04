@@ -61,13 +61,13 @@ function LoginForm() {
       }
 
       if (result.needsEmailConfirmation) {
-        setMessage(result.message || 'Cuenta creada. Revisa tu correo para confirmar el acceso.');
+        setMessage(result.message || (locale === 'en-US' ? 'Account created. Check your email to confirm access.' : 'Cuenta creada. Revisa tu correo para confirmar el acceso.'));
         return;
       }
 
       window.location.href = result.next || '/dashboard';
     } catch {
-      setError('No pude conectar con el servidor.');
+      setError(locale === 'en-US' ? 'Could not connect to the server.' : 'No pude conectar con el servidor.');
     } finally {
       setLoading(false);
     }
@@ -93,13 +93,13 @@ function LoginForm() {
       const result = await response.json().catch(() => null) as { message?: string; error?: string } | null;
 
       if (!response.ok) {
-        setError(result?.error || 'No pudimos iniciar la recuperación.');
+        setError(result?.error || (locale === 'en-US' ? 'We could not start account recovery.' : 'No pudimos iniciar la recuperación.'));
         return;
       }
 
-      setMessage(result?.message || 'Si la cuenta existe, recibirás instrucciones para recuperar el acceso.');
+      setMessage(result?.message || (locale === 'en-US' ? 'If the account exists, you will receive recovery instructions.' : 'Si la cuenta existe, recibirás instrucciones para recuperar el acceso.'));
     } catch {
-      setError('No pude conectar con el servidor.');
+      setError(locale === 'en-US' ? 'Could not connect to the server.' : 'No pude conectar con el servidor.');
     } finally {
       setLoading(false);
     }
@@ -117,17 +117,17 @@ function LoginForm() {
         <div>
           <VirafiBrand inverse showTagline />
           <div className="mt-20 max-w-xl">
-            <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">Virafi te ayuda a ver con claridad hacia dónde va tu patrimonio.</h1>
+            <h1 className="text-5xl leading-[1.08] text-[var(--brand-cream)]">{locale === 'en-US' ? 'Virafi helps you see clearly where your wealth is headed.' : 'Virafi te ayuda a ver con claridad hacia dónde va tu patrimonio.'}</h1>
             <p className="mt-5 max-w-lg text-base leading-7 text-white/60">
-              Conecta cuentas, movimientos, metas, ahorro e inversión en un solo rumbo.
+              {locale === 'en-US' ? 'Bring together accounts, transactions, goals, savings, and investments in one direction.' : 'Conecta cuentas, movimientos, metas, ahorro e inversión en un solo rumbo.'}
             </p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {['Claridad', 'Rumbo', 'Progreso'].map((item) => (
+          {(locale === 'en-US' ? ['Clarity', 'Direction', 'Progress'] : ['Claridad', 'Rumbo', 'Progreso']).map((item) => (
             <div key={item} className="rounded-lg border border-white/10 bg-white/5 p-4">
               <p className="text-sm font-semibold text-[var(--brand-cream)]">{item}</p>
-              <p className="mt-1 text-xs text-white/45">A tu ritmo</p>
+              <p className="mt-1 text-xs text-white/45">{locale === 'en-US' ? 'At your pace' : 'A tu ritmo'}</p>
             </div>
           ))}
         </div>
@@ -198,7 +198,7 @@ function LoginForm() {
                 type="password"
                 autoComplete="current-password"
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-                placeholder="Mínimo 8 caracteres"
+                placeholder={locale === 'en-US' ? 'At least 8 characters' : 'Mínimo 8 caracteres'}
               />
             </label>
             {accountAction === 'login' ? (
@@ -221,7 +221,7 @@ function LoginForm() {
                     type="text"
                     autoComplete="name"
                     className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-                    placeholder="Tu nombre"
+                    placeholder={locale === 'en-US' ? 'Your name' : 'Tu nombre'}
                   />
                 </label>
                 <label className="block text-sm font-medium text-slate-600">
@@ -247,7 +247,7 @@ function LoginForm() {
               type="password"
               autoComplete="current-password"
               className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500"
-              placeholder="Código de acceso"
+              placeholder={locale === 'en-US' ? 'Access code' : 'Código de acceso'}
             />
           </label>
         )}
@@ -267,7 +267,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => startOAuth('google')}
                 disabled={loading}
-                aria-label="Continuar con Google"
+                aria-label={locale === 'en-US' ? 'Continue with Google' : 'Continuar con Google'}
                 className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FcGoogle aria-hidden="true" className="size-5 shrink-0" />
@@ -277,7 +277,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => startOAuth('apple')}
                 disabled={loading}
-                aria-label="Continuar con Apple"
+                aria-label={locale === 'en-US' ? 'Continue with Apple' : 'Continuar con Apple'}
                 className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-slate-950 bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaApple aria-hidden="true" className="size-5 shrink-0" />
@@ -292,11 +292,11 @@ function LoginForm() {
           disabled={loading || (mode === 'private' ? !token.trim() : !email.trim() || password.length < 8)}
           className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? 'Entrando...' : mode === 'account' && accountAction === 'signup' ? 'Crear cuenta' : 'Entrar'}
+          {loading ? (locale === 'en-US' ? 'Signing in…' : 'Entrando...') : mode === 'account' && accountAction === 'signup' ? t('signUp') : t('enter')}
         </button>
         <div className="mt-5 flex justify-center gap-4 text-xs text-slate-500">
-          <a href="/privacy" className="hover:text-blue-700">Privacidad</a>
-          <a href="/terms" className="hover:text-blue-700">Términos</a>
+          <a href="/privacy" className="hover:text-blue-700">{locale === 'en-US' ? 'Privacy' : 'Privacidad'}</a>
+          <a href="/terms" className="hover:text-blue-700">{locale === 'en-US' ? 'Terms' : 'Términos'}</a>
         </div>
       </form>
       </section>

@@ -262,7 +262,7 @@ export default function OnboardingClient() {
         {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
         {message && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
 
-        <nav aria-label="Secciones de configuración" className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        <nav aria-label={locale === 'en-US' ? 'Settings sections' : 'Secciones de configuración'} className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           <button type="button" onClick={() => setActiveTab('profile')} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors ${activeTab === 'profile' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
             <UserCircle aria-hidden="true" className="size-5" weight="duotone" /> {t('profile')}
           </button>
@@ -297,9 +297,9 @@ export default function OnboardingClient() {
                   {loading ? 'Estamos preparando tu configuración.' : completed === checklist.length ? 'Todo está conectado. Puedes actualizar cualquier parte cuando cambien tus planes.' : 'Completa lo que te resulte útil ahora; puedes volver y ajustar todo después.'}
                 </p>
               </div>
-              <div className="rounded-lg bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">{progressPct}% preparado</div>
+              <div className="rounded-lg bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700">{progressPct}% {locale === 'en-US' ? 'ready' : 'preparado'}</div>
             </div>
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`${progressPct}% de configuración completada`}>
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100" aria-label={locale === 'en-US' ? `${progressPct}% of settings completed` : `${progressPct}% de configuración completada`}>
               <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} />
             </div>
           </div>
@@ -358,7 +358,11 @@ export default function OnboardingClient() {
                       </span>
                       <div>
                         <p className="font-bold text-emerald-950">Telegram conectado</p>
-                        <p className="mt-1 text-sm text-emerald-800">Virafi ya reconoce esta cuenta{activeTelegramAccount?.username ? ` en el Telegram de ${activeTelegramAccount.username.replace(/^@/, '')}` : ''}.</p>
+                        <p className="mt-1 text-sm text-emerald-800">
+                          {locale === 'en-US'
+                            ? `Virafi already recognizes this account${activeTelegramAccount?.username ? ` in ${activeTelegramAccount.username.replace(/^@/, '')}'s Telegram` : ''}.`
+                            : `Virafi ya reconoce esta cuenta${activeTelegramAccount?.username ? ` en el Telegram de ${activeTelegramAccount.username.replace(/^@/, '')}` : ''}.`}
+                        </p>
                       </div>
                     </div>
                     {effectiveTelegramBotUsername ? (

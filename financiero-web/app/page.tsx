@@ -15,6 +15,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import MarketingHeroExperience from '@/app/Components/MarketingHeroExperience';
 import MarketingShell from '@/app/Components/MarketingShell';
+import MarketingGoalJourneys from '@/app/Components/MarketingGoalJourneys';
 
 export const metadata: Metadata = {
   title: 'Tu CFO personal para cumplir tus metas financieras',
@@ -25,19 +26,6 @@ const dailySteps = [
   { icon: ClipboardText, number: '1', title: 'Revisa', text: 'Ingresos, gastos, aportaciones y pendientes.' },
   { icon: Scales, number: '2', title: 'Decide', text: 'Prioriza el movimiento que más cambia tu rumbo.' },
   { icon: UserFocus, number: '3', title: 'Te acompaña', text: 'Da seguimiento, ajusta el plan y vuelve a insistir.' },
-];
-
-const goalJourneys = [
-  {
-    number: '01', title: 'Independizarme y viajar', amount: '$2,750 al mes',
-    stages: ['Mudanza', 'Colchón de transición', 'Primer viaje'],
-    question: '¿En qué ciudad quieres vivir y cuánto pagarías de renta?',
-  },
-  {
-    number: '02', title: 'Comprar una propiedad', amount: '$1,650 al mes',
-    stages: ['Precio y ciudad', 'Enganche y gastos', 'Mensualidad sostenible'],
-    question: '¿Sería para vivir o invertir?',
-  },
 ];
 
 const safeguards = [
@@ -84,31 +72,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="marketing-section cfo-goals" id="metas-financieras" data-motion-section>
-          <div className="marketing-container">
-            <div className="cfo-section-intro centered">
-              <h2>Tus metas dejan de ser deseos.</h2>
-              <p>Virafi convierte lo que quieres vivir en un plan con prioridades, etapas y una cantidad concreta para hoy.</p>
-            </div>
-            <div className="goal-journey-list">
-              {goalJourneys.map((goal) => (
-                <article key={goal.number}>
-                  <span className="goal-journey-number">{goal.number}</span>
-                  <div className="goal-journey-content">
-                    <h3>{goal.title}</h3>
-                    <div className="goal-stage-line">
-                      {goal.stages.map((stage, index) => <span key={stage}><i>{index + 1}</i>{stage}</span>)}
-                    </div>
-                    <div className="goal-journey-detail">
-                      <p><Wallet weight="duotone" /> Apartado sugerido: <strong>{goal.amount}</strong></p>
-                      <p><ChatCircleDots weight="duotone" /> {goal.question}</p>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
+        <MarketingGoalJourneys />
 
         <section className="marketing-security-band" data-motion-section>
           <div className="marketing-container">

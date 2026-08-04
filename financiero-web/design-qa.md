@@ -1,5 +1,125 @@
 # Virafi dashboard design QA
 
+## Cierre de pendientes — 2026-08-04
+
+- **Duplicados OpenAI — resuelto.** Se conservaron sólo los datos canónicos: se eliminaron los dos cargos idénticos adicionales y la auditoría posterior no detecta duplicados dentro de ningún perfil.
+- **Auditoría Santander — resuelto.** `santander_ingest_logs` no es una tabla inaccesible: fue eliminada de forma intencional junto con la ingestión por correo. El auditor la declara ahora como origen retirado (`freshness: not_applicable`) y no como una falla de acceso.
+- **Perspectiva del hero — resuelto.** `.immersive-dashboard` ajusta perspectiva, rotación X/Y/Z, escala, origen y colocación para recuperar la inclinación y el encuadre de la captura aprobada.
+- **Datos — pasa.** La corrida posterior reporta 122 gastos, 16 presupuestos y cero duplicados, presupuestos faltantes o presupuestos desfasados.
+- **Calidad — pasa.** `npm test` (25/25), lint, TypeScript, build de producción y `git diff --check` finalizaron correctamente.
+
+final result: passed
+
+---
+
+## Verificación posterior a correcciones — 2026-08-04
+
+### Artefactos y normalización
+
+- Fuente visual aprobada: `.design-captures/virafi-hybrid-approved.jpg` (1487 × 1058 px, español, estado inicial).
+- Implementación renderizada: `/tmp/virafi-closure-2-desktop-es.png` (1487 × 1058 px, viewport CSS 1487 × 1058, densidad 1, español, estado inicial).
+- Comparación de vista completa: `/tmp/virafi-closure-2-comparison.png`, fuente a la izquierda e implementación a la derecha; no se aplicó recorte, marco ni reescalado.
+- Estado inglés: `/tmp/virafi-closure-2-desktop-en.png` (mismo viewport), después de seleccionar `en-US` en el control de idioma real.
+- Estado móvil: `/tmp/virafi-closure-2-mobile-menu.png` (390 × 844 CSS px, densidad 1, menú abierto).
+
+### Verificaciones
+
+- **Copy/localización — resuelto.** En el DOM renderizado con `html[lang="en-US"]` están `$2,750 per month` y `$1,650 per month`; no queda `al mes` en la sección de metas. El aislamiento con `data-no-translate` funciona.
+- **Menú móvil — pasa.** Hay un botón semántico único, abrió con `aria-expanded="true"` y Escape lo cerró con `aria-expanded="false"`.
+- **Salud web — pasa.** La página tiene título y contenido significativo, no muestra overlay de framework y no produjo errores ni warnings de consola durante las interacciones probadas.
+
+### Hallazgo accionable
+
+1. **P2 — La perspectiva del panel hero aún es menor que en la fuente.**
+   - Ubicación: `app/Components/MarketingHeroExperience.tsx` y `.immersive-dashboard` en `app/globals.css`.
+   - Evidencia: en la comparación normalizada la fuente conserva laterales claramente convergentes y mayor inclinación; la implementación ya es más contenida que la iteración anterior, pero el panel todavía se lee casi frontal.
+   - Impacto: es la única desviación visual P2 restante frente a la captura aprobada.
+   - Corrección: aumentar la rotación visible (especialmente el eje Y/Z) hasta que los laterales y el plano superior se perciban con la inclinación de la fuente; repetir la captura a 1487 × 1058.
+
+### Superficies de fidelidad
+
+- Tipografía, espaciado del hero, colores, paisaje/activos, iconografía y copy español coinciden con la dirección de la referencia.
+- La revisión focalizada del panel es necesaria porque su orientación no se decide con precisión en la vista completa; es la única superficie que sigue fuera de tolerancia.
+
+### Historial
+
+- Copy inglés anterior: bloqueado porque el proveedor global lo reescribía. Corrección observada: `data-no-translate`; evidencia posterior: aprobado en navegador.
+- Hero anterior: recto y grande. Corrección observada: reducción/rotación. Evidencia posterior: la escala mejora, pero la inclinación todavía no alcanza la referencia.
+
+final result: blocked
+
+---
+
+## Cierre de verificación — 2026-08-04
+
+### Artefactos y normalización
+
+- Fuente visual aprobada: `.design-captures/virafi-hybrid-approved.jpg` (1487 × 1058 px, español, estado inicial).
+- Implementación renderizada: `/tmp/virafi-closure-desktop-es.png` (1487 × 1058 px, viewport CSS 1487 × 1058, densidad 1, español, estado inicial).
+- Comparación de vista completa: `/tmp/virafi-closure-comparison.png`; fuente a la izquierda e implementación a la derecha, sin marco, recorte ni reescalado.
+- Estado de idioma inglés: `/tmp/virafi-closure-desktop-en.png` (mismo viewport); se seleccionó `en-US` desde el selector real.
+- Estado móvil: `/tmp/virafi-closure-mobile-menu.png` (390 × 844 CSS px, densidad 1, menú abierto).
+
+### Comparación y evidencia
+
+- La comparación compuesta vuelve a confirmar el P2 del panel: la fuente presenta el dashboard más compacto e inclinado; el render actual permanece prácticamente recto y de mayor tamaño. El CSS de `.immersive-dashboard` contiene un `transform`, pero el resultado visible no reproduce la inclinación/escala de la fuente.
+- El componente declarativo contiene los dos importes correctos en inglés, pero la prueba en navegador no los muestra: con `html[lang="en-US"]` ambos siguen siendo `$2,750 al mes` y `$1,650 al mes`; ninguno de los dos textos `per month` existe en el DOM visible. `LocaleProvider` recorre y reescribe nodos de texto con `TreeWalker`/`MutationObserver`, por lo que invalida el render declarativo.
+- Tipografía, colores, paisaje, iconografía y la estructura general coinciden con la dirección de la fuente. No se identificó una sustitución de activos ni una regresión de contraste visible en el estado comparado.
+- Menú móvil: hay un único botón semántico; abrió (`aria-expanded="true"`) y Escape lo cerró (`aria-expanded="false"`).
+
+### Hallazgos accionables
+
+1. **P2 — El copy inglés aún no queda resuelto en ejecución.**
+   - Ubicación: `app/Components/LocaleProvider.tsx`, especialmente la localización imperativa del DOM.
+   - Evidencia: el estado inglés real conserva los dos textos españoles, aunque `MarketingGoalJourneys.tsx` declare los literales correctos.
+   - Corrección: retirar o acotar la mutación global de nodos de texto y mantener el contenido de marketing renderizado declarativamente por locale; repetir esta misma prueba en navegador.
+2. **P2 — El dashboard del hero no replica la perspectiva ni la escala aprobadas.**
+   - Ubicación: `app/Components/MarketingHeroExperience.tsx` y reglas de `.immersive-dashboard` en `app/globals.css`.
+   - Evidencia: comparación compuesta normalizada. La fuente muestra más perspectiva y un panel menor; el render actual es recto/grande.
+   - Corrección: aumentar de forma visible la rotación/perspectiva, reducir ancho/escala y ajustar la posición hasta coincidir visualmente con la referencia; recapturar a 1487 × 1058.
+
+### Historial de iteración
+
+- Hallazgo previo: los importes ingleses usaban `al mes`.
+- Cambio observado: se añadió `MarketingGoalJourneys.tsx` con copy ES/EN declarativo.
+- Evidencia posterior: el DOM global todavía sobrescribe esos valores en inglés, por lo que el hallazgo no está cerrado.
+- Hallazgo previo: el panel hero recto y grande.
+- Evidencia posterior: sigue presente en la comparación compuesta actual.
+
+final result: blocked
+
+---
+
+> Actualización de auditoría 2026-08-04: la ejecución actual encontró una desviación P1 de i18n y no contó con una referencia visual del mismo estado/viewport para hacer la comparación compuesta requerida. La auditoría actual queda bloqueada; ver `AUDITORIA_CORRECCIONES_2026-08-04.md`.
+
+## QA visual actual — 2026-08-04
+
+- Source visual truth: `docs/design/virafi-site-concept-top.png` (932 × 1688) y `docs/design/virafi-site-concept-bottom.png` (1536 × 1024).
+- Implementation screenshots: `/tmp/virafi-audit-home-desktop.png` (1280 × 720, CSS 1280 × 720, density 1); `/tmp/virafi-audit-home-mobile.png` y `/tmp/virafi-audit-mobile-menu.png` (390 × 844, CSS 390 × 844, density 1); `/tmp/virafi-audit-login-mobile.png` (390 × 844, CSS 390 × 844, density 1).
+- State: sitio público sin autenticación; hero, menú móvil y acceso. No se usó un device frame.
+- Full-view comparison: no válido para aprobación porque las referencias existentes no son el mismo estado/crop que las capturas actuales; no hubo artefacto compuesto normalizado.
+- Focused comparison: no procede hasta recibir/capturar una referencia que corresponda al estado actual.
+
+**Findings**
+- [P1] Idioma incoherente tras hidratación/interacción.
+  Location: `app/Components/LocaleProvider.tsx` y páginas marketing.
+  Evidence: la captura móvil muestra español al entrar y el menú abierto expone inglés con contenido parcialmente español; el proveedor muta el DOM fuera de React.
+  Impact: la interfaz, `lang` y el árbol accesible pueden discrepar.
+  Fix: render declarativo desde catálogos tipados, sin `TreeWalker`/`MutationObserver`, con locale decidido antes del render inicial.
+
+**Open Questions**
+- Falta un mockup/screenshot aprobado del mismo hero/menú/login y viewport para evaluar fidelidad, no sólo calidad y coherencia.
+- El dashboard autenticado requiere una cuenta de QA aislada para capturar los estados financieros sin exponer datos reales.
+
+**Implementation Checklist**
+- Corregir i18n y repetir capturas desktop/móvil.
+- Proveer referencia visual equivalente y construir comparación normalizada.
+- Repetir QA visual hasta que no haya P0/P1/P2.
+
+final result: blocked
+
+---
+
 ## Evidence
 
 - Source reference: `/var/folders/jv/9dlx6_gx68b8v1vnsj3m1frr0000gn/T/TemporaryItems/NSIRD_screencaptureui_YyFcX6/Captura de pantalla 2026-07-16 a la(s) 4.16.54 p.m..png` (2296 × 1424)
@@ -30,6 +150,67 @@
 - Production build and TypeScript: passed.
 
 final result: passed
+
+---
+
+# QA visual residual — 2026-08-04
+
+## Artefactos y normalización
+
+- Fuente visual: `.design-captures/virafi-hybrid-approved.jpg` (1487 × 1058 px, español, estado inicial).
+- Implementación: `/tmp/virafi-residual-reference-viewport.png` (1487 × 1058 px, viewport CSS 1487 × 1058, densidad 1, español, estado inicial).
+- Comparación de vista completa: `/tmp/virafi-residual-comparison.png`, fuente a la izquierda e implementación a la derecha, sin marco de dispositivo ni reescalado.
+- Estado móvil revisado: `/tmp/virafi-residual-mobile-menu.png` (390 × 844 CSS px, densidad 1, menú abierto).
+
+## Evidencia funcional
+
+- Inicio `http://localhost:3000/` carga contenido significativo con el título esperado y sin overlay de framework.
+- Consola del navegador: sin warnings ni errores de aplicación.
+- Menú móvil: el botón `Abrir navegación` abre la navegación, expone `aria-expanded`, y Escape lo cierra.
+
+## Hallazgos
+
+1. **P2 — Perspectiva y escala del dashboard del hero.** En la fuente el dashboard está levemente inclinado y ocupa un área más compacta; en la implementación se renderiza recto, más ancho y con distinta relación respecto de la ruta/landmarks. Es evidente en la comparación normalizada. Ajustar el transform, ancho máximo y posición del panel sólo si la captura aprobada continúa siendo la fuente de verdad.
+2. **P2 — Localización inglesa incompleta.** Al cambiar a inglés, las cantidades de las tarjetas siguen terminando en `al mes`. La fuente española no cubre este estado, pero el render inglés lo confirma; completar la composición declarativa de copy antes de aprobar ambos locales.
+
+## Superficies revisadas
+
+- Tipografía: familia editorial, peso y jerarquía del hero conservan la dirección de la fuente; la diferencia visible proviene principalmente de escala/composición del panel.
+- Espaciado y layout: header, CTAs, artwork y franja de prueba conservan la estructura; el panel de dashboard es la desviación accionable.
+- Color/tokens: fondo marfil, violeta, negro editorial y la paleta de distribución coinciden visualmente.
+- Imagen/activos: paisaje, ruta, landmarks, logo e iconografía se corresponden con la referencia, sin sustitutos visibles de baja fidelidad.
+- Copy: el estado español coincide; el estado inglés conserva la inconsistencia anterior.
+
+## Resultado
+
+final result: blocked
+
+---
+
+# Auditoría visual independiente — 2026-08-04 (v2)
+
+## Resultado
+
+**blocked — no hay fuente visual vigente comparable.** La única fuente versionada, `docs/design/virafi-site-concept-top.png` (932 × 1688), muestra el producto anterior (“Tu dinero, con claridad y rumbo” y dashboard patrimonial). La implementación actual comunica “Your personal CFO”. Compararlas como si fueran el mismo estado produciría conclusiones de fidelidad falsas.
+
+## Evidencia de implementación
+
+- Inicio de escritorio: `http://localhost:3000/`, 1280 × 720 CSS px, densidad 1, idioma inglés; revisado en navegador integrado sin errores o warnings de la aplicación.
+- Inicio móvil y menú abierto: 390 × 844 CSS px, densidad 1; el menú se abre y expone Producto, Nosotros, Seguridad e Iniciar sesión.
+- Acceso: `http://localhost:3000/login?next=%2Fdashboard`, 1280 × 720 CSS px; sin errores o warnings de la aplicación.
+- Capturas transitorias de la pasada: `/tmp/virafi-audit-v2-desktop-home.png`, `/tmp/virafi-audit-v2-mobile-menu.png`, `/tmp/virafi-audit-v2-mobile-menu-open.png`, `/tmp/virafi-audit-v2-login.png`.
+
+## Comparación y hallazgos
+
+No se emite aprobación de layout, tipografía, color, iconografía, imágenes o superficies frente a la referencia desactualizada. Sí se inspeccionó la implementación para defectos internos:
+
+1. **P2, contenido/localización:** en inglés permanecen fragmentos españoles, incluido “$2,750 al mes” en el inicio y una mezcla amplia en la pantalla de acceso.
+2. **P2, accesibilidad/interacción:** el control hamburguesa móvil se publica como `generic`, no `button`; faltan semántica y estados accesibles verificables.
+3. **P3, proceso de diseño:** el resultado “passed” de secciones anteriores de este archivo no es aplicable a la implementación actual porque su fuente visual y copy pertenecen a otra dirección de producto.
+
+## Condición para desbloquear
+
+Proveer un diseño aprobado de la página actual para escritorio y móvil (Figma o capturas), con locale y estado definidos. La siguiente pasada hará comparación de vista completa y zonas focalizadas al mismo viewport, documentará diferencias y sustituirá este resultado por `passed` o `failed`.
 
 ---
 

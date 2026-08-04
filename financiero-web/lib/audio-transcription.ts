@@ -32,6 +32,7 @@ export async function transcribirAudioFinanciero({
         'Transcribe este audio en español para un asistente financiero.',
         'Devuelve solamente el texto que dijo la persona.',
         'No clasifiques, no expliques y no agregues formato.',
+        'Conserva literalmente negaciones, correcciones y cantidades; no cambies 23,500 por 23.',
         'Si hay cantidades, conserva los números y la moneda cuando sea clara.',
       ].join(' '),
     },

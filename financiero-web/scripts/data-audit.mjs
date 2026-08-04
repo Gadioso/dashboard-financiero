@@ -84,20 +84,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
   const gastosMes = gastos.filter((row) => monthKey(row.fecha) === key);
   const abonosMes = abonos.filter((row) => monthKey(row.fecha) === key);
   const presupuestosMes = presupuestos.filter((row) => String(row.mes_anio || '').startsWith(key));
-  const presupuesto = presupuestosMes[0];
-  const totalIngresos = money(ingresosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
-  const totalGastos = money(gastosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
-  const totalAbonosTdc = money(abonosMes.reduce((sum, row) => sum + Number(row.monto || 0), 0));
-  const expectedBudget = { Vida: money(totalIngresos * 0.50), Placeres: money(totalIngresos * 0.25), Futuro: money(totalIngresos * 0.25) };
-  const presupuestoActual = presupuesto
-    ? {
-        Vida: money(presupuesto.techo_vida),
-        Placeres: money(presupuesto.techo_placeres),
-        Futuro: money(presupuesto.techo_futuro),
-      }
-    : null;
-
-  const profileKeys = [...new Set(ingresosMes.map((row) => row.profile_id || ''))];
+  const profileKeys = [...new Set([...ingresosMes, ...gastosMes, ...abonosMes, ...presupuestosMes].map((row) => row.profile_id || ''))];
   const budgetIssues = profileKeys.flatMap((profileId) => {
     const ingresosPerfil = ingresosMes.filter((row) => (row.profile_id || '') === profileId);
     const totalPerfil = money(ingresosPerfil.reduce((sum, row) => sum + Number(row.monto || 0), 0));
@@ -106,7 +93,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
 
     if (!presupuestoPerfil) {
       return [{
-        profileId: profileId || null,
+        profile: `perfil-${profileKeys.indexOf(profileId) + 1}`,
         issue: 'missing_budget',
         totalIngresos: totalPerfil,
         expected: expectedProfileBudget,
@@ -125,7 +112,7 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
 
     return outOfSync
       ? [{
-          profileId: profileId || null,
+          profile: `perfil-${profileKeys.indexOf(profileId) + 1}`,
           issue: 'out_of_sync_budget',
           totalIngresos: totalPerfil,
           expected: expectedProfileBudget,
@@ -134,25 +121,24 @@ function summarizeMonth({ ingresos, gastos, abonos, presupuestos }, monthIndex) 
       : [];
   });
 
-  return {
-    mes: key,
-    ingresos: totalIngresos,
-    gastos: totalGastos,
-    resultado: money(totalIngresos - totalGastos),
-    abonosTdc: totalAbonosTdc,
-    presupuestoEsperado: expectedBudget,
-    presupuestoActual,
-    budgetIssues,
-    presupuestoDesfasado: budgetIssues.length > 0,
-  };
-}
-
-async function selectAll(supabase, table, columns) {
-  const { data, error } = await supabase.from(table).select(columns);
-
-  if (error) throw new Error(`No pude leer ${table}: ${error.message}`);
-
-  return data || [];
+  const profiles = profileKeys.map((profileId, index) => {
+    const ingresosPerfil = ingresosMes.filter((row) => (row.profile_id || '') === profileId);
+    const gastosPerfil = gastosMes.filter((row) => (row.profile_id || '') === profileId);
+    const abonosPerfil = abonosMes.filter((row) => (row.profile_id || '') === profileId);
+    const presupuesto = presupuestosMes.find((row) => (row.profile_id || '') === profileId);
+    const ingresosTotal = money(ingresosPerfil.reduce((sum, row) => sum + Number(row.monto || 0), 0));
+    const gastosTotal = money(gastosPerfil.reduce((sum, row) => sum + Number(row.monto || 0), 0));
+    return {
+      profile: `perfil-${index + 1}`,
+      ingresos: ingresosTotal,
+      gastos: gastosTotal,
+      resultado: money(ingresosTotal - gastosTotal),
+      abonosTdc: money(abonosPerfil.reduce((sum, row) => sum + Number(row.monto || 0), 0)),
+      presupuestoEsperado: { Vida: money(ingresosTotal * 0.50), Placeres: money(ingresosTotal * 0.25), Futuro: money(ingresosTotal * 0.25) },
+      presupuestoActual: presupuesto ? { Vida: money(presupuesto.techo_vida), Placeres: money(presupuesto.techo_placeres), Futuro: money(presupuesto.techo_futuro) } : null,
+    };
+  });
+  return { mes: key, profiles, budgetIssues, presupuestoDesfasado: budgetIssues.length > 0 };
 }
 
 async function main() {
@@ -170,8 +156,8 @@ async function main() {
     { data: presupuestos, error: presupuestosError },
   ] = await Promise.all([
     supabase.from('ingresos').select('id, concepto, monto, tipo, fecha, profile_id').gte('fecha', start).lt('fecha', end),
-    supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha').gte('fecha', start).lt('fecha', end),
-    supabase.from('abonos_tarjeta_credito').select('id, concepto, monto, tarjeta, origen, fecha').gte('fecha', start).lt('fecha', end),
+    supabase.from('gastos').select('id, concepto, monto, categoria, subcategoria, origen, fecha, profile_id').gte('fecha', start).lt('fecha', end),
+    supabase.from('abonos_tarjeta_credito').select('id, concepto, monto, tarjeta, origen, fecha, profile_id').gte('fecha', start).lt('fecha', end),
     supabase.from('presupuestos_mensuales').select('id, mes_anio, profile_id, techo_vida, techo_placeres, techo_futuro, fase_ahorro'),
   ]);
 
@@ -181,18 +167,24 @@ async function main() {
 
   const suspectIncomes = (ingresos || []).filter(looksLikeInformationalIncome);
   const suspectCardPayments = (abonos || []).filter(looksLikeSuspiciousCardPayment);
-  const duplicateIncomes = groupDuplicates(ingresos || [], ['concepto', 'monto', 'fecha_dia']);
-  const duplicateExpenses = groupDuplicates(gastos || [], ['concepto', 'monto', 'fecha_dia']);
-  const duplicateCardPayments = groupDuplicates(abonos || [], ['concepto', 'monto', 'fecha_dia']);
+  // Duplicate detection is only meaningful inside one tenant. Never use this
+  // audit output as a deletion signal across profiles.
+  const duplicateIncomes = groupDuplicates(ingresos || [], ['profile_id', 'concepto', 'monto', 'fecha_dia']);
+  const duplicateExpenses = groupDuplicates(gastos || [], ['profile_id', 'concepto', 'monto', 'fecha_dia']);
+  const duplicateCardPayments = groupDuplicates(abonos || [], ['profile_id', 'concepto', 'monto', 'fecha_dia']);
   const monthly = Array.from({ length: 12 }, (_, monthIndex) =>
     summarizeMonth({ ingresos: ingresos || [], gastos: gastos || [], abonos: abonos || [], presupuestos: presupuestos || [] }, monthIndex)
   );
   const missingBudgetMonths = monthly.filter((month) => month.presupuestoDesfasado);
-  const santanderHealth = await selectAll(
-    supabase,
-    'santander_ingest_logs',
-    'id, created_at, status, reason, movimiento_tipo, concepto, monto, telegram_notified, error'
-  ).catch((error) => ({ unavailable: true, error: error.message }));
+  // Santander email ingestion was intentionally retired in migration
+  // 20260722201720_remove_fiscal_and_email_ingest.sql, which drops this
+  // table. Treating its absence as an access failure made audit reports imply
+  // that a live data source lacked freshness evidence.
+  const santanderIngestion = {
+    status: 'retired',
+    reason: 'Santander email ingestion and its logs were deliberately removed from the product.',
+    freshness: 'not_applicable',
+  };
 
   const report = {
     year,
@@ -202,7 +194,7 @@ async function main() {
       gastos: gastos?.length || 0,
       abonosTarjetaCredito: abonos?.length || 0,
       presupuestos: presupuestos?.length || 0,
-      santanderLogs: Array.isArray(santanderHealth) ? santanderHealth.length : 0,
+      santanderIngestion: santanderIngestion.status,
     },
     monthly,
     findings: {
@@ -212,12 +204,7 @@ async function main() {
       duplicateExpenses,
       duplicateCardPayments,
       missingOrOutOfSyncBudgets: missingBudgetMonths,
-      santanderLogs: Array.isArray(santanderHealth)
-        ? {
-            recentErrors: santanderHealth.filter((row) => row.status === 'error').slice(0, 10),
-            recentUnnotified: santanderHealth.filter((row) => row.status === 'inserted' && !row.telegram_notified).slice(0, 10),
-          }
-        : santanderHealth,
+      santanderIngestion,
     },
     recommendedActions: [
       suspectIncomes.length ? 'Revisar y borrar ingresos informativos con `npm run data:cleanup-suspects -- --apply`.' : null,

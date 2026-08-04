@@ -42,7 +42,7 @@ export function validateFinancialAttachments(files: File[]) {
 }
 
 export type ExtractedFinancialMovement = {
-  movementType: 'gasto' | 'ingreso';
+  movementType: 'gasto' | 'ingreso' | 'abono_tarjeta';
   occurredAt: string;
   description: string;
   amount: number;
@@ -59,7 +59,7 @@ const movementSchema: ResponseSchema = {
       items: {
         type: SchemaType.OBJECT,
         properties: {
-          movementType: { type: SchemaType.STRING, format: 'enum', enum: ['gasto', 'ingreso'] },
+          movementType: { type: SchemaType.STRING, format: 'enum', enum: ['gasto', 'ingreso', 'abono_tarjeta'] },
           occurredAt: { type: SchemaType.STRING },
           description: { type: SchemaType.STRING },
           amount: { type: SchemaType.NUMBER },
@@ -74,13 +74,22 @@ const movementSchema: ResponseSchema = {
   required: ['movements'],
 };
 
-export async function extractFinancialAttachmentMovements({ files, userPrompt }: { files: File[]; userPrompt: string }): Promise<ExtractedFinancialMovement[]> {
+export async function extractFinancialAttachmentMovements({
+  files,
+  userPrompt,
+  defaultOccurredAt,
+}: {
+  files: File[];
+  userPrompt: string;
+  /** The Telegram receipt date, used only when the document does not show one. */
+  defaultOccurredAt?: string;
+}): Promise<ExtractedFinancialMovement[]> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
   if (!apiKey) throw new Error('El análisis de archivos todavía no está configurado.');
   const parts: GeminiPart[] = [{
     text: `Extrae movimientos financieros de las imágenes/documentos adjuntos para Virafi.
-Devuelve únicamente JSON con la clave movements. Incluye TODOS los movimientos visibles (hasta 120), no sólo un resumen.
-Cada movimiento debe tener fecha ISO YYYY-MM-DD (si no se puede leer, usa cadena vacía), concepto, monto positivo, tipo gasto o ingreso, categoría Vida/Placeres/Futuro, subcategoría y moneda.
+Devuelve únicamente JSON con la clave movements. Incluye TODOS los movimientos visibles (hasta 120), no sólo un resumen. Recorre cada renglón, incluso si la captura contiene más de una sección o día.
+Cada movimiento debe tener fecha ISO YYYY-MM-DD, concepto, monto positivo, tipo gasto, ingreso o abono_tarjeta, categoría Vida/Placeres/Futuro, subcategoría y moneda. Para un pago/abono a una tarjeta de crédito, usa exactamente abono_tarjeta: reduce deuda y no es un gasto nuevo. Si la fecha no se alcanza a leer, usa ${defaultOccurredAt ? `"${defaultOccurredAt.slice(0, 10)}"` : 'la fecha de recepción indicada por la aplicación'}; no omitas un movimiento sólo por no tener fecha visible.
 Clasifica Oxxo, restaurantes, comidas, cenas, gasolina y transporte según corresponda; no inventes datos ilegibles. Ignora saldos, encabezados, comisiones ya incluidas y totales que no sean movimientos.
 Solicitud de la persona: ${userPrompt || 'Registra todos los movimientos de estos archivos.'}`
   }];
@@ -91,8 +100,8 @@ Solicitud de la persona: ${userPrompt || 'Registra todos los movimientos de esto
   const raw = await generateGeminiJsonParts(apiKey, parts, movementSchema, 'financial-import');
   const parsed = JSON.parse(raw) as { movements?: Array<Partial<ExtractedFinancialMovement>> };
   return (parsed.movements || []).map((movement): ExtractedFinancialMovement => ({
-    movementType: movement.movementType === 'ingreso' ? 'ingreso' : 'gasto',
-    occurredAt: String(movement.occurredAt || '').trim(),
+    movementType: movement.movementType === 'ingreso' || movement.movementType === 'abono_tarjeta' ? movement.movementType : 'gasto',
+    occurredAt: String(movement.occurredAt || '').trim() || defaultOccurredAt || '',
     description: String(movement.description || '').trim().slice(0, 160),
     amount: Number(movement.amount),
     category: movement.category === 'Vida' || movement.category === 'Futuro' ? movement.category : 'Placeres',

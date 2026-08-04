@@ -11,6 +11,7 @@ const profileId = '11111111-1111-4111-8111-111111111111';
 
 test('normalizes valid UUID profile identifiers', () => {
   assert.equal(normalizeProfileId(` ${profileId} `), profileId);
+  assert.equal(normalizeProfileId(`"${profileId}"`), profileId);
   assert.equal(normalizeProfileId('invalid'), null);
 });
 

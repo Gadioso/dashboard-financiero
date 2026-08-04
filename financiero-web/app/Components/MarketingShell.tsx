@@ -2,6 +2,7 @@ import Link from 'next/link';
 import MarketingMotionController from '@/app/Components/MarketingMotionController';
 import VirafiBrand from '@/app/Components/VirafiBrand';
 import LanguageSwitcher from '@/app/Components/LanguageSwitcher';
+import MarketingMobileMenu from '@/app/Components/MarketingMobileMenu';
 
 const navigation = [
   { href: '/producto', label: 'Producto' },
@@ -26,13 +27,7 @@ export function MarketingHeader() {
           <Link href="/login?next=%2Fdashboard" className="marketing-link-button">Iniciar sesión</Link>
           <Link href="/login?next=%2Fdashboard" className="marketing-button marketing-button-primary">Crear cuenta</Link>
         </div>
-        <details className="marketing-mobile-menu">
-          <summary aria-label="Abrir navegación"><span /><span /><span /></summary>
-          <nav aria-label="Navegación móvil">
-            {navigation.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
-            <Link href="/login?next=%2Fdashboard">Iniciar sesión</Link>
-          </nav>
-        </details>
+        <MarketingMobileMenu />
       </div>
     </header>
   );
